@@ -1,0 +1,26 @@
+{
+  "name": "proot-engine",
+  "version": "1.0.0",
+  "description": "Embedded Alpine Linux & PRoot Engine for React Native Android",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "proot",
+    "alpine",
+    "linux",
+    "embedded"
+  ],
+  "author": "Developer",
+  "license": "MIT",
+  "dependencies": {
+    "expo-modules-core": "~1.12.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

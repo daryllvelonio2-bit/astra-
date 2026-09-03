@@ -1,0 +1,166 @@
+export type IDEActionType =
+  | "OPEN_FILE"
+  | "OPEN_BROWSER"
+  | "OPEN_TERMINAL"
+  | "SWITCH_TAB"
+  | "SWITCH_WORKSPACE"
+  | "SHOW_TOAST";
+
+export interface OpenFilePayload {
+  filePath: string;
+  line?: number;
+  workspaceId?: string;
+}
+
+export interface OpenBrowserPayload {
+  url: string;
+  port?: number;
+}
+
+export interface OpenTerminalPayload {
+  sessionId?: string;
+  workspaceId?: string;
+}
+
+export interface SwitchTabPayload {
+  tab: "editor" | "terminal" | "browser";
+}
+
+export interface SwitchWorkspacePayload {
+  workspaceId: string;
+}
+
+export interface ShowToastPayload {
+  message: string;
+  type?: "info" | "success" | "warning";
+}
+
+export type IDEActionPayloadMap = {
+  OPEN_FILE: OpenFilePayload;
+  OPEN_BROWSER: OpenBrowserPayload;
+  OPEN_TERMINAL: OpenTerminalPayload;
+  SWITCH_TAB: SwitchTabPayload;
+  SWITCH_WORKSPACE: SwitchWorkspacePayload;
+  SHOW_TOAST: ShowToastPayload;
+};
+
+export interface IDEActionEvent<T extends IDEActionType = IDEActionType> {
+  type: T;
+  payload: IDEActionPayloadMap[T];
+  timestamp: number;
+}
+
+type ActionListener<T extends IDEActionType = IDEActionType> = (
+  payload: IDEActionPayloadMap[T]
+) => void;
+type GlobalActionListener = (event: IDEActionEvent) => void;
+
+class IDEActionServiceImpl {
+  private listeners: Map<IDEActionType, Set<ActionListener<any>>> = new Map();
+  private globalListeners: Set<GlobalActionListener> = new Set();
+
+  /**
+   * Subscribe to a specific IDE action event.
+   */
+  subscribe<T extends IDEActionType>(
+    actionType: T,
+    listener: ActionListener<T>
+  ): () => void {
+    if (!this.listeners.has(actionType)) {
+      this.listeners.set(actionType, new Set());
+    }
+    const set = this.listeners.get(actionType)!;
+    set.add(listener);
+
+    return () => {
+      set.delete(listener);
+      if (set.size === 0) {
+        this.listeners.delete(actionType);
+      }
+    };
+  }
+
+  /**
+   * Subscribe to all IDE action events.
+   */
+  subscribeAll(listener: GlobalActionListener): () => void {
+    this.globalListeners.add(listener);
+    return () => {
+      this.globalListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Emit an IDE action event to all subscribers.
+   */
+  emit<T extends IDEActionType>(type: T, payload: IDEActionPayloadMap[T]) {
+    const event: IDEActionEvent<T> = {
+      type,
+      payload,
+      timestamp: Date.now(),
+    };
+
+    const specificSet = this.listeners.get(type);
+    if (specificSet) {
+      specificSet.forEach((listener) => {
+        try {
+          listener(payload);
+        } catch (e) {
+          console.error(`Error in IDE action listener for ${type}:`, e);
+        }
+      });
+    }
+
+    this.globalListeners.forEach((listener) => {
+      try {
+        listener(event);
+      } catch (e) {
+        console.error("Error in global IDE action listener:", e);
+      }
+    });
+  }
+
+  /**
+   * Helper: Instruct the IDE to open and display a file in the editor.
+   */
+  openFile(filePath: string, line?: number, workspaceId?: string) {
+    this.emit("OPEN_FILE", { filePath, line, workspaceId });
+  }
+
+  /**
+   * Helper: Instruct the IDE to navigate the Web Browser preview.
+   */
+  openBrowser(url: string, port?: number) {
+    this.emit("OPEN_BROWSER", { url, port });
+  }
+
+  /**
+   * Helper: Instruct the IDE to switch to the terminal.
+   */
+  openTerminal(sessionId?: string, workspaceId?: string) {
+    this.emit("OPEN_TERMINAL", { sessionId, workspaceId });
+  }
+
+  /**
+   * Helper: Instruct the IDE to switch bottom tabs.
+   */
+  switchTab(tab: "editor" | "terminal" | "browser") {
+    this.emit("SWITCH_TAB", { tab });
+  }
+
+  /**
+   * Helper: Instruct the app to switch active workspace.
+   */
+  switchWorkspace(workspaceId: string) {
+    this.emit("SWITCH_WORKSPACE", { workspaceId });
+  }
+
+  /**
+   * Helper: Show a toast notification in the UI.
+   */
+  showToast(message: string, type: "info" | "success" | "warning" = "info") {
+    this.emit("SHOW_TOAST", { message, type });
+  }
+}
+
+export const ideActionService = new IDEActionServiceImpl();

@@ -1,0 +1,192 @@
+import React from "react";
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { FileNode } from "../types";
+import { useTheme } from "../../theme/themeContext";
+
+interface FileActionModalProps {
+  modalMode: "none" | "options" | "rename" | "add";
+  selectedNode: FileNode | null;
+  menuPosition: { x: number; y: number };
+  modalInput: string;
+  onChangeInput: (val: string) => void;
+  onClose: () => void;
+  onSelectRename: () => void;
+  onSelectAdd: () => void;
+  onDeleteConfirm: () => void;
+  onRenameSubmit: () => void;
+  onAddSubmit: () => void;
+  onBackToOptions: () => void;
+}
+
+export function FileActionModal({
+  modalMode,
+  selectedNode,
+  menuPosition,
+  modalInput,
+  onChangeInput,
+  onClose,
+  onSelectRename,
+  onSelectAdd,
+  onDeleteConfirm,
+  onRenameSubmit,
+  onAddSubmit,
+  onBackToOptions,
+}: FileActionModalProps) {
+  const { theme } = useTheme();
+  if (modalMode === "none") return null;
+
+  return (
+    <View style={styles.modalOverlay}>
+      <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+      <View style={[styles.modalCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border, top: menuPosition.y, left: menuPosition.x }]}>
+          {modalMode === "options" && (
+            <>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]} numberOfLines={1}>
+                {selectedNode?.name}
+              </Text>
+              <TouchableOpacity style={styles.modalOption} onPress={onSelectRename}>
+                <Text style={[styles.modalOptionText, { color: theme.accent }]}>Rename</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalOption} onPress={onSelectAdd}>
+                <Text style={[styles.modalOptionText, { color: theme.accent }]}>Add New File</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalOption, styles.deleteOption, { borderTopColor: theme.border }]} onPress={onDeleteConfirm}>
+                <Text style={[styles.modalOptionText, styles.deleteText, { color: theme.accentRed }]}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {modalMode === "rename" && (
+            <>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]}>Rename</Text>
+              <TextInput
+                style={[styles.modalInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
+                value={modalInput}
+                onChangeText={onChangeInput}
+                placeholder="New name..."
+                placeholderTextColor={theme.textMuted}
+                autoFocus
+                autoCapitalize="none"
+              />
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onBackToOptions}>
+                  <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Back</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onRenameSubmit}>
+                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText]}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {modalMode === "add" && (
+            <>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]}>New File</Text>
+              <TextInput
+                style={[styles.modalInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
+                value={modalInput}
+                onChangeText={onChangeInput}
+                placeholder="Component.tsx"
+                placeholderTextColor={theme.textMuted}
+                autoFocus
+                autoCapitalize="none"
+              />
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onClose}>
+                  <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onAddSubmit}>
+                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText]}>Create</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
+    elevation: 999,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalCard: {
+    position: "absolute",
+    backgroundColor: "#252526",
+    borderRadius: 8,
+    padding: 12,
+    width: 170,
+    borderWidth: 1,
+    borderColor: "#3c3c3c",
+    zIndex: 100,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  modalTitle: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    paddingBottom: 4,
+  },
+  modalOption: {
+    paddingVertical: 7,
+    paddingHorizontal: 4,
+  },
+  modalOptionText: {
+    color: "#9cdcfe",
+    fontSize: 13,
+  },
+  deleteOption: {
+    borderTopWidth: 1,
+    borderTopColor: "#333",
+    marginTop: 4,
+  },
+  deleteText: {
+    color: "#f48771",
+  },
+  modalInput: {
+    backgroundColor: "#1e1e1e",
+    color: "#ffffff",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 4,
+    fontSize: 13,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  modalBtnRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 6,
+  },
+  modalBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 4,
+    backgroundColor: "#333",
+  },
+  modalBtnText: {
+    color: "#ccc",
+    fontSize: 12,
+  },
+  modalBtnPrimary: {
+    backgroundColor: "#0e639c",
+  },
+  modalBtnPrimaryText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+});
