@@ -2,8 +2,9 @@
 # Dependencies & Package Managers
 # -----------------------------------------------------------------------------
 node_modules/
-*/node_modules/
-modules/**/node_modules/
+node_modules
+**/node_modules
+**/node_modules/
 .pnp
 .pnp.js
 npm-debug.log*
@@ -119,6 +120,6 @@ Thumbs.db
 # -----------------------------------------------------------------------------
 # Project Specific
 # -----------------------------------------------------------------------------
-# Astra CLI development directory (packaged assets live in android/.../assets/)
-astra-cli/
+# Standalone CLI binary exceeds GitHub's 100 MB file limit (packaged in assets tarball)
+astra-cli/cli-binary/
 app-release.apk

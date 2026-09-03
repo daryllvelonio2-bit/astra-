@@ -1,0 +1,266 @@
+#!/bin/bash
+# Astra CLI - Autonomous Agentic AI Coding Engine
+# Base Engine: Antigravity CLI (agy) / Astra JS Engine (gemini.js)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+export CI=1
+export EXPO_NO_TELEMETRY=1
+export EXPO_USE_LOCAL_CLI=1
+export NODE_OPTIONS="--dns-result-order=ipv4first"
+export PATH="$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin:/root/.npm-global/bin"
+export NODE_PATH="$SCRIPT_DIR/node_modules:$SCRIPT_DIR/gemini-cli-source/node_modules:/usr/local/share/astra-cli/node_modules:/usr/local/share/astra-cli/gemini-cli-source/node_modules:/usr/local/lib/node_modules:/usr/lib/node_modules"
+
+if [ -z "$GEMINI_API_KEY" ] && [ -z "$GEMINI_API_KEYS" ] && [ -f "$SCRIPT_DIR/.env" ]; then
+  export $(grep -v '^#' "$SCRIPT_DIR/.env" | xargs 2>/dev/null)
+elif [ -z "$GEMINI_API_KEY" ] && [ -z "$GEMINI_API_KEYS" ] && [ -f "/usr/local/share/astra-cli/.env" ]; then
+  export $(grep -v '^#' "/usr/local/share/astra-cli/.env" | xargs 2>/dev/null)
+fi
+
+if [ -n "$GEMINI_API_KEYS" ] && [ -z "$GEMINI_API_KEY" ]; then
+  export GEMINI_API_KEY="$(echo "$GEMINI_API_KEYS" | cut -d',' -f1 | tr -d '[:space:]')"
+fi
+
+IS_NODE_BUNDLE=false
+if [ -f "$SCRIPT_DIR/cli-binary/agy" ] && [ -x "$SCRIPT_DIR/cli-binary/agy" ] && [ "$(uname -m)" = "x86_64" ]; then
+  AGY_BIN=("$SCRIPT_DIR/cli-binary/agy")
+elif [ -f "$SCRIPT_DIR/bundle/gemini.js" ]; then
+  NODE_BIN="$(command -v node || command -v nodejs || echo /usr/bin/node)"
+  AGY_BIN=("$NODE_BIN" "$SCRIPT_DIR/bundle/gemini.js")
+  IS_NODE_BUNDLE=true
+elif [ -f "/usr/local/share/astra-cli/bundle/gemini.js" ]; then
+  NODE_BIN="$(command -v node || command -v nodejs || echo /usr/bin/node)"
+  AGY_BIN=("$NODE_BIN" "/usr/local/share/astra-cli/bundle/gemini.js")
+  IS_NODE_BUNDLE=true
+elif command -v agy >/dev/null 2>&1; then
+  AGY_BIN=("$(command -v agy)")
+elif [ -f "$HOME/.local/bin/agy" ]; then
+  AGY_BIN=("$HOME/.local/bin/agy")
+else
+  echo "Error: Astra engine runtime not found." >&2
+  exit 1
+fi
+
+PROMPT=""
+PROMPT_INTERACTIVE=""
+EFFORT=""
+YOLO=false
+SKIP_TRUST=false
+SESSION_ID=""
+MODEL=""
+OUTPUT_FORMAT=""
+COGNITIVE_MODE=""
+GODOT_MODE=""
+EXTRA_ARGS=()
+
+# Process arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p|--prompt|--print)
+      PROMPT="$2"
+      shift 2
+      ;;
+    -i|--prompt-interactive)
+      PROMPT_INTERACTIVE="$2"
+      shift 2
+      ;;
+    -y|--yolo|--dangerously-skip-permissions)
+      YOLO=true
+      shift
+      ;;
+    --session-id|--conversation)
+      SESSION_ID="$2"
+      shift 2
+      ;;
+    -m|--model)
+      MODEL="$2"
+      shift 2
+      ;;
+    -o|--output-format)
+      OUTPUT_FORMAT="$2"
+      shift 2
+      ;;
+    --effort)
+      EFFORT="$2"
+      shift 2
+      ;;
+    --fast)
+      COGNITIVE_MODE="fast"
+      shift
+      ;;
+    --medium)
+      COGNITIVE_MODE="medium"
+      shift
+      ;;
+    --slow)
+      COGNITIVE_MODE="slow"
+      shift
+      ;;
+    --superdeep|--spec|--kiro)
+      COGNITIVE_MODE="spec"
+      shift
+      ;;
+    --godot)
+      GODOT_MODE="godot"
+      shift
+      ;;
+    --godot-mobile)
+      GODOT_MODE="godot-mobile"
+      shift
+      ;;
+    --godot-desktop)
+      GODOT_MODE="godot-desktop"
+      shift
+      ;;
+    --skip-trust)
+      SKIP_TRUST=true
+      shift
+      ;;
+    *)
+      EXTRA_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Build prompt injection
+TARGET_PROMPT="${PROMPT:-$PROMPT_INTERACTIVE}"
+
+if [ -n "$TARGET_PROMPT" ]; then
+  # Detect tags in prompt if not set via flags
+  if [ -z "$COGNITIVE_MODE" ]; then
+    if [[ "$TARGET_PROMPT" =~ ^\[fast\] ]]; then
+      COGNITIVE_MODE="fast"
+      TARGET_PROMPT="${TARGET_PROMPT#\[fast\] }"
+    elif [[ "$TARGET_PROMPT" =~ ^\[medium\] ]]; then
+      COGNITIVE_MODE="medium"
+      TARGET_PROMPT="${TARGET_PROMPT#\[medium\] }"
+    elif [[ "$TARGET_PROMPT" =~ ^\[slow\] ]]; then
+      COGNITIVE_MODE="slow"
+      TARGET_PROMPT="${TARGET_PROMPT#\[slow\] }"
+    elif [[ "$TARGET_PROMPT" =~ ^\[(super deep|superdeep|spec|kiro)\] ]]; then
+      COGNITIVE_MODE="spec"
+      TARGET_PROMPT=$(echo "$TARGET_PROMPT" | sed -E 's/^\[(super deep|superdeep|spec|kiro)\] //')
+    fi
+  fi
+
+  if [ -z "$GODOT_MODE" ]; then
+    if [[ "$TARGET_PROMPT" =~ ^\[godot\] ]]; then
+      GODOT_MODE="godot"
+      TARGET_PROMPT="${TARGET_PROMPT#\[godot\] }"
+    elif [[ "$TARGET_PROMPT" =~ ^\[godot-mobile\] ]]; then
+      GODOT_MODE="godot-mobile"
+      TARGET_PROMPT="${TARGET_PROMPT#\[godot-mobile\] }"
+    elif [[ "$TARGET_PROMPT" =~ ^\[godot-desktop\] ]]; then
+      GODOT_MODE="godot-desktop"
+      TARGET_PROMPT="${TARGET_PROMPT#\[godot-desktop\] }"
+    fi
+  fi
+
+  INJECTION=""
+  case "$COGNITIVE_MODE" in
+    fast)
+      [ -z "$EFFORT" ] && EFFORT="low"
+      INJECTION="[SYSTEM COGNITIVE DIRECTIVE: FAST MODE]\nPrioritize immediate response speed. Be concise, direct, and zero-filler. Provide production-ready code with minimal surrounding fluff.\n\n"
+      ;;
+    medium)
+      [ -z "$EFFORT" ] && EFFORT="medium"
+      INJECTION="[SYSTEM COGNITIVE DIRECTIVE: MEDIUM MODE]\nProvide clean, idiomatic, well-structured code with necessary context and standard code explanations.\n\n"
+      ;;
+    slow)
+      [ -z "$EFFORT" ] && EFFORT="high"
+      INJECTION="[SYSTEM COGNITIVE DIRECTIVE: SLOW MODE (DEEP REASONING & VERIFICATION)]\nEngage deep analytical reasoning. Write complete, robust implementations with comprehensive docstrings, explicit edge-case handling, and thorough unit tests. Run shell/test commands where applicable to verify.\n\n"
+      ;;
+    spec)
+      [ -z "$EFFORT" ] && EFFORT="high"
+      INJECTION="[SYSTEM COGNITIVE DIRECTIVE: 10X SUPER DEEP - KIRO SPEC-DRIVEN DEVELOPMENT (SDD)]\nExecute with the Kiro Spec-Driven Planning methodology:\n1. Requirements Analysis: Define functional and non-functional requirements with strict acceptance criteria.\n2. Architecture & Design: Detail architecture, data structures, invariants, and failure recovery modes.\n3. Task Decomposition: Create a structured, step-by-step task list and execute each systematically.\n4. Verification: Author comprehensive property-based/unit test suites and verify via terminal commands.\n\n"
+      ;;
+  esac
+
+  case "$GODOT_MODE" in
+    godot)
+      INJECTION="${INJECTION}[SYSTEM COGNITIVE DIRECTIVE: GODOT 4.X GAME ENGINE MODE]\nTarget Godot 4.x using clean, statically-typed GDScript 2.0 or C#. Adhere to the Godot node lifecycle, composition over inheritance, signal decoupling, Custom Resources (@export var data: CustomResource), and caching node references with @onready. Avoid web/enterprise frameworks and adhere to game loop performance.\n\n"
+      ;;
+    godot-mobile)
+      INJECTION="${INJECTION}[SYSTEM COGNITIVE DIRECTIVE: GODOT 4.X MOBILE OPTIMIZATION MODE]\nTarget lightweight mobile rendering (gl_compatibility / mobile). Optimize for low draw calls, zero allocations in _process/_physics_process, object pooling, and battery efficiency. Implement touch controls (InputEventScreenTouch), virtual joysticks, responsive UI anchors, and safe area handling (DisplayServer.get_display_safe_area()).\n\n"
+      ;;
+    godot-desktop)
+      INJECTION="${INJECTION}[SYSTEM COGNITIVE DIRECTIVE: GODOT 4.X DESKTOP OPTIMIZATION MODE]\nTarget high-fidelity desktop rendering (Forward+ / Mobile). Support windowing modes (exclusive/borderless fullscreen, VSync, ultrawide). Provide simultaneous Keyboard/Mouse and Gamepad input mapping with runtime rebinding. Ensure save data and settings persistence via ConfigFile to user://.\n\n"
+      ;;
+  esac
+
+  CURRENT_CWD="$(pwd)"
+  ENV_INJECTION="[ENVIRONMENT CONTEXT: Current Working Directory = \"$CURRENT_CWD\"]\n[GLOBAL ACCESS: You have full root execution permissions inside Alpine Linux. You can install system-wide packages globally ('apk add <pkg>', 'npm install -g <pkg>', 'pip install <pkg>') or install project dependencies directly in \"$CURRENT_CWD\" ('npm install', 'composer require', etc.). Always verify and operate in the correct working directory ($CURRENT_CWD).]\n[RUNNING APPS & SERVERS: When asked to run an app, start a dev server, or preview a project ('npx expo start', 'npm start', 'npm run dev', 'vite', 'php artisan serve', 'python -m http.server'), ALWAYS run the server in the background using is_background: true or append '&'. For React Native / Expo, run 'npx expo start --lan' or 'npx expo start --localhost --port 8081' with is_background: true and immediately provide the Expo Go exp:// URL (e.g. exp://127.0.0.1:8081). For web, provide the http://127.0.0.1:<port> URL. Never run persistent servers synchronously in the foreground!]\n\n"
+  FINAL_PROMPT="${ENV_INJECTION}${INJECTION}${TARGET_PROMPT}"
+fi
+
+# Assemble arguments based on engine runtime
+CMD_ARGS=()
+
+if [ "$IS_NODE_BUNDLE" = true ]; then
+  if [ "$YOLO" = true ]; then
+    CMD_ARGS+=("-y")
+  fi
+  if [ "$SKIP_TRUST" = true ]; then
+    CMD_ARGS+=("--skip-trust")
+  fi
+  if [ -n "$SESSION_ID" ]; then
+    CMD_ARGS+=("--session-id" "$SESSION_ID")
+  fi
+  if [ -n "$MODEL" ]; then
+    CMD_ARGS+=("-m" "$MODEL")
+  fi
+  if [ -n "$OUTPUT_FORMAT" ]; then
+    CMD_ARGS+=("-o" "$OUTPUT_FORMAT")
+  fi
+  if [ -n "$COGNITIVE_MODE" ]; then
+    case "$COGNITIVE_MODE" in
+      fast) CMD_ARGS+=("--fast") ;;
+      medium) CMD_ARGS+=("--medium") ;;
+      slow) CMD_ARGS+=("--slow") ;;
+      spec) CMD_ARGS+=("--spec") ;;
+    esac
+  fi
+  if [ -n "$GODOT_MODE" ]; then
+    case "$GODOT_MODE" in
+      godot) CMD_ARGS+=("--godot") ;;
+      godot-mobile) CMD_ARGS+=("--godot-mobile") ;;
+      godot-desktop) CMD_ARGS+=("--godot-desktop") ;;
+    esac
+  fi
+  if [ -n "$PROMPT" ]; then
+    CMD_ARGS+=("-p" "$FINAL_PROMPT")
+  elif [ -n "$PROMPT_INTERACTIVE" ]; then
+    CMD_ARGS+=("-i" "$FINAL_PROMPT")
+  fi
+else
+  # Native agy binary
+  if [ "$YOLO" = true ]; then
+    CMD_ARGS+=("--dangerously-skip-permissions")
+  fi
+  if [ -n "$SESSION_ID" ]; then
+    CMD_ARGS+=("--conversation" "$SESSION_ID")
+  fi
+  if [ -n "$MODEL" ]; then
+    CMD_ARGS+=("--model" "$MODEL")
+  fi
+  if [ -n "$OUTPUT_FORMAT" ]; then
+    CMD_ARGS+=("--output-format" "$OUTPUT_FORMAT")
+  fi
+  if [ -n "$EFFORT" ]; then
+    CMD_ARGS+=("--effort" "$EFFORT")
+  fi
+  if [ -n "$PROMPT" ]; then
+    CMD_ARGS+=("--print" "$FINAL_PROMPT")
+  elif [ -n "$PROMPT_INTERACTIVE" ]; then
+    CMD_ARGS+=("-i" "$FINAL_PROMPT")
+  fi
+fi
+
+if [ ${#EXTRA_ARGS[@]} -gt 0 ]; then
+  CMD_ARGS+=("${EXTRA_ARGS[@]}")
+fi
+
+exec "${AGY_BIN[@]}" "${CMD_ARGS[@]}"
