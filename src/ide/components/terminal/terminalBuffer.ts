@@ -16,9 +16,11 @@ export const TERMINAL_BUFFER_KEEP = 80000;
 // rather than "native buffer trimmed".
 const RESTART_CEILING = 4096;
 
+import { TERMINAL_BUILD_TAG } from "./ptyConfig";
+
 export function getBannerTitle(workspaceId?: string): string {
   const dir = workspaceId ? `/workspaces/${workspaceId}` : "/workspace";
-  return "\u001b[1;34m\u26a1 Astra Embedded Alpine Linux & PRoot Terminal \u2014 " + dir + "\u001b[0m\r\n";
+  return "\u001b[1;34m\u26a1 Astra Embedded Alpine Linux & PRoot Terminal \u2014 " + dir + ` [${TERMINAL_BUILD_TAG}]` + "\u001b[0m\r\n";
 }
 export function appendCapped(current: string, chunk: string): string {
   if (!chunk) return current;

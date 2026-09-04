@@ -12,6 +12,7 @@ import { AnsiRenderer } from "./terminal/AnsiRenderer";
 import { TerminalHeader } from "./terminal/TerminalHeader";
 import { ExtraKeysBar } from "./terminal/ExtraKeysBar";
 import { XtermView, XtermViewHandle } from "./terminal/XtermView";
+import { getBannerTitle } from "./terminal/terminalBuffer";
 import { PTY_XTERM_ENABLED } from "./terminal/ptyConfig";
 import { ThemePickerModal } from "./terminal/ThemePickerModal";
 import {
@@ -91,6 +92,14 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     sentinelIdxRef.current = (sentinelIdxRef.current + 1) % SENTINELS.length;
     const s = SENTINELS[sentinelIdxRef.current];
     lastNativeRef.current = s;
+    // Land the reset natively first: at burst speed React's controlled-value
+    // round-trip lags behind the IME, commits pile onto stale text, and the
+    // differ then re-sends already-sent bytes (shell receives duplicated
+    // input). setNativeProps applies immediately; the state sync below keeps
+    // React's recorded value consistent so later renders don't fight it.
+    try {
+      inputRef.current?.setNativeProps({ text: s });
+    } catch (_) {}
     setRawInputValue(s);
   };
 
@@ -122,15 +131,15 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   }, [isCtrlActive, isAltActive, setIsCtrlActive, setIsAltActive]);
 
   // Stable identity so the memoized XtermView doesn't re-render with us.
+  // Focus is synchronous: any deferred window drops taps (e.g. send) that
+  // land between the terminal tap and the keyboard catching up.
   const handleFocusTerminal = useCallback(() => {
     setIsFocused(true);
     // The soft keyboard always lives on the RN catcher — in xterm mode too
     // (xterm's textarea is disabled). Never blur a focused input: the old
     // blur+refocus cycle opened a ~40ms window that ate keystrokes.
     if (inputRef.current?.isFocused()) return;
-    setTimeout(() => {
-      if (!inputRef.current?.isFocused()) inputRef.current?.focus();
-    }, 40);
+    inputRef.current?.focus();
   }, []);
 
   const handleDoubleTap = () => {
@@ -216,7 +225,7 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   const handleXtermInput = (text: string) => {
     const { removed, added } = diffNativeText(text);
     if (__DEV__ && (removed > 0 || added)) {
-      console.log(`[xterm-in] removed=${removed} added=${JSON.stringify(added)}`);
+      console.log(`[xterm-in] removed=${removed} added=${JSON.stringify(added)} t=${Date.now()}`);
     }
     if (removed > 0) {
       sendInput("\x7f".repeat(Math.min(removed, 256)));
@@ -337,6 +346,7 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
           background={theme.background}
           foreground={theme.foreground}
           cursor={theme.cursor}
+          banner={getBannerTitle(workspaceId)}
           onRequestKeyboard={handleFocusTerminal}
         />
       ) : (

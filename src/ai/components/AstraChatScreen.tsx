@@ -255,10 +255,13 @@ export function AstraChatScreen({
                 ? { backgroundColor: theme.sendButtonBg, borderColor: theme.sendButtonBg }
                 : { backgroundColor: theme.bgTertiary, borderColor: theme.border },
             ]}
-            disabled={!input.trim()}
+            // Never disabled: a state-lagging `disabled` gate eats fast
+            // type+send taps (input looks empty for one frame). Empty sends
+            // still no-op inside handleSend; grey styling is cosmetic only.
             onPress={() => handleSend()}
             activeOpacity={0.8}
             accessibilityLabel="Send message"
+            accessibilityState={{ disabled: !input.trim() }}
           >
             <Ionicons
               name={isMidnight ? "navigate" : "arrow-up"}

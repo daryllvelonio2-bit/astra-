@@ -273,8 +273,9 @@ export function FloatingChatOverlay({
                     : { backgroundColor: theme.bgTertiary },
                 ]}
                 onPress={() => handleSend()}
-                disabled={!input.trim()}
                 activeOpacity={0.8}
+                accessibilityLabel="Send message"
+                accessibilityState={{ disabled: !input.trim() }}
               >
                 <Ionicons
                   name={isMidnight ? "navigate" : "arrow-up"}

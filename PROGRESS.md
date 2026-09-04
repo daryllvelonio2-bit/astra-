@@ -22,6 +22,37 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - Terminal Declared Healthy by User
+- User confirmed `[b9]` live on fresh tab and reports no remaining bugs after the immediate-flush fix. Terminal workstream closed; timing probes already removed.
+
+### [2026-09-04] - Kill Timer-Gated Paints (Immediate Flush)
+- **Finding:** flusher `setInterval(80ms)` stretched to ~600-1250ms under JS load (measured) — every screen update inherited that lag.
+- **Fix (JS-only):** paint synchronously on each data event; interval kept as safety net. Removes up to ~1s of display lag and immunizes paints against timer starvation.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - "UI Doesn't Update While Typing" Investigation
+- **Measured on-device (adb typing, fresh launch):** key→echo→paint ≈ 100-200ms end-to-end, no hard freeze in the pipeline; banner `[b9]` confirmed rendering in xterm (handshake works, Metro serving current JS).
+- **Real bug found in logs:** at burst speed the RN controlled-value round-trip lags the IME — commits pile onto stale catcher text and the differ re-sends the whole accumulated word per keystroke (10 fast chars → ~50 bytes to the shell, incl. stray DELs). Looks like duplicated/garbled typing, and the extra flood of echo traffic makes the screen feel stuck.
+- **Fix (JS-only):** `resetCatcher` now lands the sentinel via `setNativeProps` immediately (no render round-trip) plus the state sync; timing probes removed after diagnosis.
+- **Observed but unattributed:** 80ms flusher interval occasionally stretched to ~1s (JS-thread pressure), and the app sat on the Editor tab mid-test — likely live user interaction colliding with adb input; stopped device driving, needs thumb-typing confirmation.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Missing xterm Banner (Handshake Never Reached PTY Sessions)
+- **Symptom:** screenshot showed working prompt/keys but no banner line and no `[b9]` tag.
+- **Root cause:** banner only written into legacy `sessionOutputs`; xterm replays *native* history which never contains it. stderr verified correctly duped to slave in `pty_session.c` (missing `hi: not found` error likely chunk timing).
+- **Fix (JS-only):** `XtermView` takes `banner` prop, `replaySession` paints banner+history atomically after reset (exactly once per mount/switch); `TerminalView` passes `getBannerTitle(workspaceId)`.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Rebuild + Install (Send Fixes, Tag b9)
+- `BUILD SUCCESSFUL in 1m 46s`, 349MB `app-debug.apk`, streamed install **Success**, launched, process alive (pid 7626), no fatal crashes on start.
+- Contains: chat/overlay send-button fix, input ref-mirror, sync terminal focus, banner staleness tag `[b9]`.
+
+### [2026-09-04] - Flaky Send Button (State-Lag Disabled Gate + Focus Gap)
+- **Symptom:** send sometimes dead, retap fixes — in chat and terminal alike.
+- **Root causes:** (1) chat/overlay send buttons used `disabled={!input.trim()}` — a fast type+send tap lands while state still shows empty, tap swallowed; (2) terminal tap-to-focus deferred 40ms, swallowing sends in the gap. Also verified `-ixon` live on device (XOFF freeze class dead).
+- **Fix (JS-only):** chat input ref-mirror, `handleSend` reads the ref (dropped `input` dep); send buttons never disabled (grey styling cosmetic, empty still no-ops, a11y state kept) in `AstraChatScreen` + `FloatingChatOverlay`; terminal focuses synchronously; terminal banner carries build tag `[b9]` as a staleness handshake.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.
+
 ### [2026-09-04] - Stuck Terminal: XOFF Freeze + Squeezed Keys (Termios, Layout)
 - **Confirmed by user:** sent command never runs + dead input = output freeze; ExtraKeysBar hidden behind keyboard when open.
 - **Root causes:** (1) armed CTRL + typed `s` emits XOFF; slave had IXON on, so all output froze (typed chars invisible with echo off) — no visible cause, persists until Ctrl+Q; (2) WebView content minimum squeezed the keys row out of the shrunk keyboard layout (Yoga content-minimum); (3) stray CTRL/ALT taps stayed armed indefinitely.

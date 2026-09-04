@@ -50,7 +50,14 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
   const [renderLimit, setRenderLimit] = useState(100);
-  const [input, setInput] = useState("");
+  const [input, setInputState] = useState("");
+  // Synchronous mirror: state lags a render, so a fast type+send tap could
+  // read stale (even empty) input and silently drop the send. The ref never lags.
+  const inputRef = useRef("");
+  const setInput = useCallback((text: string) => {
+    inputRef.current = text;
+    setInputState(text);
+  }, []);
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("idle");
   const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash-lite");
   const [selectedCognitiveMode, setSelectedCognitiveMode] = useState<AstraCognitiveMode>("default");
@@ -212,7 +219,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
 
   const handleSend = useCallback(
     async (overrideText?: string) => {
-      const query = (overrideText || input).trim();
+      const query = (overrideText || inputRef.current).trim();
       if (!query || agentStatus !== "idle") return;
 
       setInput("");
@@ -334,7 +341,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
       }
     },
-    [input, agentStatus, messages, selectedCognitiveMode, selectedEffort, interactiveApproval, workspace, activeFileName, activeFileContent, startTimer, stopTimer, onRefreshWorkspace]
+    [agentStatus, messages, selectedCognitiveMode, selectedEffort, interactiveApproval, workspace, activeFileName, activeFileContent, startTimer, stopTimer, onRefreshWorkspace]
   );
 
   const handleSelectSession = useCallback((session: ConversationSession) => {

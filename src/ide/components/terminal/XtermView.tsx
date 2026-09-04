@@ -31,6 +31,8 @@ interface XtermViewProps {
   foreground: string;
   cursor: string;
   onRemoteResize?: (cols: number, rows: number) => void;
+  /** Banner (title + build tag) painted above the replayed history. */
+  banner?: string;
   /** WebView tapped: the soft keyboard lives on the RN catcher — raise it. */
   onRequestKeyboard?: () => void;
 }
@@ -51,10 +53,12 @@ const MAX_QUEUE = 512;
 
 export const XtermView = memo(
   forwardRef<XtermViewHandle, XtermViewProps>(function XtermView(
-    { sessionId, fontSize, background, foreground, cursor, onRemoteResize, onRequestKeyboard },
+    { sessionId, fontSize, background, foreground, cursor, banner, onRemoteResize, onRequestKeyboard },
     ref
   ) {
   const webRef = useRef<WebView>(null);
+  const bannerRef = useRef(banner || "");
+  bannerRef.current = banner || "";
   const readyRef = useRef(false);
   const pageLoadedRef = useRef(false);
   const queueRef = useRef<string[]>([]);
@@ -127,7 +131,9 @@ export const XtermView = memo(
       webRef.current?.injectJavaScript("window.__astraReset&&window.__astraReset();true;");
       const hist = await getSessionHistory(id);
       if (sessionRef.current !== id) return; // switched away mid-flight
-      if (hist) injectWrite(utf8ToB64(hist));
+      // Banner first: native history never contains it (legacy renderer kept
+      // its own copy), and reset wiped the grid so it paints exactly once.
+      injectWrite(utf8ToB64(bannerRef.current + (hist || "")));
       webRef.current?.injectJavaScript("window.__astraFit&&window.__astraFit();true;");
     } catch (_) {}
   };
@@ -141,6 +147,10 @@ export const XtermView = memo(
     const dataSub = addTerminalDataListener(sessionId, (chunk: string) => {
       if (!readyRef.current) return;
       enqueue(utf8ToB64(chunk));
+      // Paint immediately: the 80ms interval below is only a safety net.
+      // Gating every update on a timer added up to ~1s of visible lag when
+      // the JS thread was busy (measured on-device).
+      flushQueue();
     });
 
     const exitSub = addTerminalExitListener(sessionId, (code: number) => {
