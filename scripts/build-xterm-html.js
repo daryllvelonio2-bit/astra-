@@ -57,10 +57,31 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
   termEl.addEventListener('click', function () { post({ type: 'tap' }); });
   var post = function (m) { window.ReactNativeWebView.postMessage(JSON.stringify(m)); };
   var resizeTimer = null;
+  var fitAttempts = 0;
+  var lastC = 0, lastR = 0;
   var reportSize = function () {
     try {
+      // Never measure before layout exists: fitting a zero-size parent
+      // slams xterm to a 2-col grid whose soft wraps never rejoin on grow.
+      // xterm's 80x24 default matches the kernel's ptyOpen size, so waiting
+      // keeps both layers coherent from the first paint.
+      var parent = term.element && term.element.parentElement;
+      var pw = parent ? parent.clientWidth : 0;
+      var ph = parent ? parent.clientHeight : 0;
+      if ((pw < 100 || ph < 100) && fitAttempts < 40) {
+        fitAttempts++;
+        setTimeout(reportSize, 100);
+        return;
+      }
+      fitAttempts = 0;
       fit.fit();
-      post({ type: 'resize', cols: term.cols, rows: term.rows });
+      // Clamp: never wedge the shell below a usable grid; dedupe so only
+      // real changes signal (each post is a SIGWINCH + shell redraw).
+      var c = Math.max(term.cols, 20), r = Math.max(term.rows, 10);
+      if (c === lastC && r === lastR) return;
+      lastC = c; lastR = r;
+      post({ type: 'resize', cols: c, rows: r,
+             vw: window.innerWidth, vh: window.innerHeight });
     } catch (e) {}
   };
   term.onData(function (d) { post({ type: 'data', data: d }); });

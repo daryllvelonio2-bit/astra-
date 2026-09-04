@@ -1,5 +1,6 @@
 import React, {
   forwardRef,
+  memo,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -44,13 +45,18 @@ interface GlueMessage {
 
 // Max base64 chars per injected write; keeps injectJavaScript calls small.
 const WRITE_SLICE = 65536;
+// Max queued chunks (~2KB each). Beyond this on runaway floods we drop from
+// the front rather than OOM; the native history still caps the true record.
+const MAX_QUEUE = 512;
 
-export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function XtermView(
-  { sessionId, fontSize, background, foreground, cursor, onRemoteResize, onRequestKeyboard },
-  ref
-) {
+export const XtermView = memo(
+  forwardRef<XtermViewHandle, XtermViewProps>(function XtermView(
+    { sessionId, fontSize, background, foreground, cursor, onRemoteResize, onRequestKeyboard },
+    ref
+  ) {
   const webRef = useRef<WebView>(null);
   const readyRef = useRef(false);
+  const pageLoadedRef = useRef(false);
   const queueRef = useRef<string[]>([]);
   const selResolveRef = useRef<((text: string) => void) | null>(null);
   const sessionRef = useRef(sessionId);
@@ -69,6 +75,13 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
     for (let i = 0; i < b64.length; i += WRITE_SLICE) {
       const piece = b64.slice(i, i + WRITE_SLICE);
       webRef.current?.injectJavaScript(`window.__astraWrite('${piece}');true;`);
+    }
+  };
+
+  const enqueue = (b64: string) => {
+    queueRef.current.push(b64);
+    if (queueRef.current.length > MAX_QUEUE) {
+      queueRef.current.splice(0, queueRef.current.length - MAX_QUEUE);
     }
   };
 
@@ -99,26 +112,52 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
     },
     writeText: (text: string) => {
       if (!text) return;
-      queueRef.current.push(utf8ToB64(text));
+      enqueue(utf8ToB64(text));
       flushQueue();
     },
   }));
 
-  // Session lifecycle: subscribe to the native stream, replay history into a
-  // fresh grid on switch, surface exits as an on-screen marker.
+  // Reset + paint the native history snapshot for `id`. Atomic by
+  // construction: the ready gate stays closed until the snapshot lands, so a
+  // live byte can neither duplicate (snapshot + queue) nor slip through.
+  // Native appends to history before emitting, so dropped pre-ready bytes
+  // are always inside the snapshot.
+  const replaySession = async (id: string) => {
+    try {
+      webRef.current?.injectJavaScript("window.__astraReset&&window.__astraReset();true;");
+      const hist = await getSessionHistory(id);
+      if (sessionRef.current !== id) return; // switched away mid-flight
+      if (hist) injectWrite(utf8ToB64(hist));
+      webRef.current?.injectJavaScript("window.__astraFit&&window.__astraFit();true;");
+    } catch (_) {}
+  };
+
+  // Session lifecycle: subscribe to the native stream; paint the new session
+  // on switch. Pre-ready bytes are dropped (covered by the replay snapshot).
   useEffect(() => {
     readyRef.current = false;
     queueRef.current = [];
 
     const dataSub = addTerminalDataListener(sessionId, (chunk: string) => {
-      if (!readyRef.current) return; // covered by the history replay below
-      queueRef.current.push(utf8ToB64(chunk));
+      if (!readyRef.current) return;
+      enqueue(utf8ToB64(chunk));
     });
 
     const exitSub = addTerminalExitListener(sessionId, (code: number) => {
-      queueRef.current.push(utf8ToB64(`\r\n[Process completed: exit ${code}]\r\n`));
+      enqueue(utf8ToB64(`\r\n[Process completed: exit ${code}]\r\n`));
       flushQueue();
     });
+
+    // Tab switch onto an already-loaded page: paint before latching ready.
+    // First mount waits for the page 'ready' message instead (see below).
+    if (pageLoadedRef.current) {
+      replaySession(sessionId).then(() => {
+        if (sessionRef.current === sessionId) {
+          readyRef.current = true;
+          flushQueue();
+        }
+      });
+    }
 
     const flusher = setInterval(flushQueue, 80);
     return () => {
@@ -138,13 +177,10 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
   }, [fontSize]);
 
   const handleReady = async () => {
+    pageLoadedRef.current = true;
+    readyRef.current = false;
+    await replaySession(sessionRef.current);
     readyRef.current = true;
-    try {
-      const hist = await getSessionHistory(sessionRef.current);
-      webRef.current?.injectJavaScript("window.__astraReset&&window.__astraReset();true;");
-      if (hist) injectWrite(utf8ToB64(hist));
-      webRef.current?.injectJavaScript("window.__astraFit&&window.__astraFit();true;");
-    } catch (_) {}
     flushQueue();
   };
 
@@ -164,6 +200,11 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
       typeof msg.cols === "number" &&
       typeof msg.rows === "number"
     ) {
+      if (__DEV__) {
+        console.log(
+          `[xterm-grid] cols=${msg.cols} rows=${msg.rows} vw=${(msg as any).vw} vh=${(msg as any).vh}`
+        );
+      }
       resizeTerminalSession(sessionRef.current, msg.cols, msg.rows);
       resizeRef.current?.(msg.cols, msg.rows);
     } else if (msg.type === "selection") {
@@ -194,7 +235,8 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
       onMessage={handleMessage}
     />
   );
-});
+  })
+);
 
 const styles = StyleSheet.create({
   web: {

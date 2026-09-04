@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -110,7 +110,8 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     return () => clearTimeout(timer);
   }, [isReady, isTaskTab, isXterm, windowWidth, windowHeight, fontSize, activeSessionId, sendInput]);
 
-  const handleFocusTerminal = () => {
+  // Stable identity so the memoized XtermView doesn't re-render with us.
+  const handleFocusTerminal = useCallback(() => {
     setIsFocused(true);
     // The soft keyboard always lives on the RN catcher — in xterm mode too
     // (xterm's textarea is disabled). Never blur a focused input: the old
@@ -119,7 +120,7 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     setTimeout(() => {
       if (!inputRef.current?.isFocused()) inputRef.current?.focus();
     }, 40);
-  };
+  }, []);
 
   const handleDoubleTap = () => {
     const now = Date.now();
@@ -203,6 +204,9 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   // echoes, so backspaces become DELs and newlines execute in the shell.
   const handleXtermInput = (text: string) => {
     const { removed, added } = diffNativeText(text);
+    if (__DEV__ && (removed > 0 || added)) {
+      console.log(`[xterm-in] removed=${removed} added=${JSON.stringify(added)}`);
+    }
     if (removed > 0) {
       sendInput("\x7f".repeat(Math.min(removed, 256)));
     }

@@ -126,9 +126,13 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     };
   }, [workspaceId]);
 
-  // Subscribe to native terminal streaming events for the active session
+  // Subscribe to native terminal streaming events for the active session.
+  // Skipped for shell tabs in PTY mode: XtermView owns that stream (this
+  // per-chunk setState + autoscroll would re-render every flood chunk).
   useEffect(() => {
     let isSubscribed = true;
+
+    if (PTY_XTERM_ENABLED && !activeSessionId.startsWith("task-")) return;
 
     // Load buffered history when switching sessions (for native sh sessions)
     if (!activeSessionId.startsWith("task-")) {

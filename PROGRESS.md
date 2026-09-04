@@ -22,6 +22,23 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - 2-Col Persists After Restart (Fit Before Layout, No Reflow)
+- **Evidence (fresh-restart logcat):** `ptyOpen 24x80` then `[xterm-grid] cols=20 rows=10 vw=0 vh=0` — page loads pre-layout, `fit()` slammed xterm to min 2 cols; old guard withheld only the kernel post, not the xterm shrink, and grown soft-wraps never rejoined. Kernel/posts were otherwise sane (61×55, sends 1:1).
+- **Fix (JS-only):** `reportSize` waits for a real parent (≥100px, 40 retries) before ever fitting — xterm's 80×24 default matches `ptyOpen` 80, so both layers stay coherent from first paint; kernel clamp ≥20×10 kept as backstop; duplicate posts suppressed (each post = SIGWINCH + redraw).
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild. Retest: restart, prompts must never wrap vertically (first paint may flash tiny 80-col text, then snap).
+
+### [2026-09-04] - Display Duplication + Flood Jank (Atomic Replay, Stream Ownership)
+- **Evidence (logcat):** keyboard sends proven 1:1 (`a|p|k| |a|d|d| |v|i|m`, grid stable 61×55) — doubling is on-screen duplication, not input. Scramble = replay/flush race on remount + per-chunk hook renders during floods.
+- **Fix (JS-only):** atomic replay (reset→snapshot→paint→latch; pre-ready bytes provably ⊆ snapshot) + replay on tab switch; hook stream subscription skipped for xterm shell tabs (XtermView owns it — no per-chunk renders/scroll spam); write queue capped (512 chunks, drop-front); XtermView memoized with stable callbacks.
+- **Rule Compliance (`agent.md`):** `tsc` clean, files <500 lines. JS-only — Metro reload required, no rebuild. Retest: fresh restart, `hello`, re-run `apk` flow.
+
+### [2026-09-04] - 2-Column Grid Wedge (Fit Published Garbage at Load)
+- **Symptoms (screenshot):** prompt one char per line (shell wrapped at ~2 cols), flood-jank when running anything, suspected double-typed letters.
+- **Root cause:** FitAddon clamps to min 2 cols; at load the parent measures ~0px, so first fit published 2×1 to the kernel and wedged the shell. Refits never repaired it.
+- **Fix (JS-only):** glue retries fit until sane (10×4) instead of publishing garbage; kernel grid clamped ≥20×10; resize post carries viewport px for telemetry; `__DEV__` logcat tracing (`[xterm-grid]`, `[xterm-in]`). Awaiting instrumented reload (`stty size` + type `hello`) to confirm all three layers agree.
+- **Confirmed on device:** `[xterm-grid] cols=61 rows=55 vw=424 vh=744`, keyboard-toggle refits (744↔786) flowing, fresh `session-1` spawned post-restart. Wedge gone; stale wrapped lines are dead scrollback (session restart flushes).
+- **Rule Compliance (`agent.md`):** `tsc` clean, files <500 lines. JS-only — Metro reload required, no rebuild.
+
 ### [2026-09-04] - Terminal Half-Screen + Wrap/Delete (WebView Flex, Fit Race)
 - **Symptoms (screenshot):** terminal filled only the top ~40% (white gap below), long lines wrapped early, backspace stuck at the wrap, SwiftKey capitalized `Vim` (also: Alpine ships `vi`, not `vim`).
 - **Root causes:** (1) RN WebView's wrapper View had no flex, so the grid measured a short viewport — shell inherited a too-small grid (early scroll + wrap/delete desync); (2) first fit raced pre-settle layout; (3) predictions/autocaps active despite flags.
