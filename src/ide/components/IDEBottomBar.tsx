@@ -4,8 +4,8 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
 
 interface IDEBottomBarProps {
-  bottomTab: "editor" | "terminal" | "browser";
-  onChangeTab: (tab: "editor" | "terminal" | "browser") => void;
+  bottomTab: "editor" | "terminal" | "browser" | "desktop";
+  onChangeTab: (tab: "editor" | "terminal" | "browser" | "desktop") => void;
   runningTaskCount?: number;
   compact?: boolean;
 }
@@ -79,6 +79,26 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           ]}
         >
           Browser
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[
+          styles.bottomTabBtn,
+          bottomTab === "desktop" && { backgroundColor: theme.bgTertiary },
+        ]}
+        onPress={() => onChangeTab("desktop")}
+      >
+        <Ionicons name="desktop-outline" size={16} color={bottomTab === "desktop" ? theme.accent : theme.textMuted} />
+        <Text
+          style={[
+            styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
+            { color: theme.textMuted },
+            bottomTab === "desktop" && { color: theme.accent, fontWeight: "700" },
+          ]}
+        >
+          Desktop
         </Text>
       </TouchableOpacity>
     </View>

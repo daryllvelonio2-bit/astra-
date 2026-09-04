@@ -18,12 +18,13 @@ import { EditorView } from "./EditorView";
 import { FileActionModal } from "./FileActionModal";
 import { TerminalView } from "./TerminalView";
 import { WebBrowserPreview } from "./WebBrowserPreview";
+import { DesktopView } from "./DesktopView";
 import { IDEBottomBar } from "./IDEBottomBar";
 import { WorkspaceLoadingScreen } from "./WorkspaceLoadingScreen";
 import { AiAssistantMenu } from "./AiAssistantMenu";
 import { AstraLogo } from "../../ai/components/AstraLogo";
-import { FloatingOverlay } from "../../ai/services/floatingOverlayService";
 import { OverlayPermissionModal } from "../../ai/components/OverlayPermissionModal";
+import { useFloatingOverlayControl } from "./useFloatingOverlayControl";
 import { runningTasksService, RunningTask } from "../../ai/services/runningTasksService";
 import { FileNode } from "../types";
 import { useSidebarResizer } from "./useSidebarResizer";
@@ -50,6 +51,17 @@ interface IDELayoutProps {
 const shortLoadPath = (p: string) =>
   (p || "").replace(/^file:\/\//, "").split("/").filter(Boolean).slice(-2).join("/");
 
+const findFirstFile = (node: FileNode): FileNode | null => {
+  if (node.type === "file") return node;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findFirstFile(child);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
 export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELayoutProps) {
   const insets = useSafeAreaInsets();
   const { isLandscape } = useOrientation();
@@ -57,12 +69,20 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser">("editor");
+  const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser" | "desktop">("editor");
+  const [desktopFullscreen, setDesktopFullscreen] = useState(false);
   const [browserUrl, setBrowserUrl] = useState<string>("http://127.0.0.1:8000");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [showAiMenu, setShowAiMenu] = useState(false);
-  const [isOverlayRunning, setIsOverlayRunning] = useState(false);
+  const {
+    showPermissionModal,
+    setShowPermissionModal,
+    showAiMenu,
+    setShowAiMenu,
+    isOverlayRunning,
+    handleLaunchSystemOverlay,
+    handleStopSystemOverlay,
+    handlePermissionGranted,
+  } = useFloatingOverlayControl(workspace, activeFile);
   const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
   const [loadStatus, setLoadStatus] = useState("Starting…");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -188,17 +208,6 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
       if (cancelled) return;
       setWorkspace(ws);
 
-      const findFirstFile = (node: FileNode): FileNode | null => {
-        if (node.type === "file") return node;
-        if (node.children) {
-          for (const child of node.children) {
-            const found = findFirstFile(child);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-
       const initialFile = findFirstFile(ws.root);
       if (initialFile) {
         let content = initialFile.content || "";
@@ -302,40 +311,6 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     setActiveFile,
     refreshWorkspace,
   });
-  const checkOverlayStatus = async () => {
-    try {
-      const running = await FloatingOverlay.isRunning();
-      setIsOverlayRunning(running);
-    } catch (_) {}
-  };
-
-  useEffect(() => {
-    checkOverlayStatus();
-    const interval = setInterval(checkOverlayStatus, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleLaunchSystemOverlay = async () => {
-    setShowAiMenu(false);
-    const hasPerm = await FloatingOverlay.hasPermission();
-    if (!hasPerm) {
-      setShowPermissionModal(true);
-      return;
-    }
-    const started = await FloatingOverlay.start({
-      workspaceId: workspace?.id,
-      activeFileName: activeFile?.name,
-    });
-    if (started) {
-      setIsOverlayRunning(true);
-    }
-  };
-
-  const handleStopSystemOverlay = async () => {
-    setShowAiMenu(false);
-    await FloatingOverlay.stop();
-    setIsOverlayRunning(false);
-  };
 
   if (!workspace) {
     return (
@@ -350,8 +325,12 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingTop: insets.top }]}>
-      <StatusBar barStyle={theme.isDark ? "light-content" : "dark-content"} backgroundColor={theme.bgSecondary} />
+    <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingTop: desktopFullscreen ? 0 : insets.top }]}>
+      <StatusBar
+        barStyle={theme.isDark ? "light-content" : "dark-content"}
+        backgroundColor={theme.bgSecondary}
+        hidden={desktopFullscreen}
+      />
 
       {/* Main Workspace Area */}
       <View style={styles.workspace}>
@@ -403,28 +382,37 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
             />
           </View>
 
+          <View style={[styles.tabContent, bottomTab !== "desktop" && styles.hiddenTab]}>
+            <DesktopView
+              visible={bottomTab === "desktop"}
+              onFullscreenChange={setDesktopFullscreen}
+            />
+          </View>
+
           {/* AI Assistant Floating Button & Menu */}
-          <AiAssistantMenu
-            showAiMenu={showAiMenu}
-            isOverlayRunning={isOverlayRunning}
-            runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
-            onToggleAiMenu={() => setShowAiMenu((prev) => !prev)}
-            onLaunchSystemOverlay={handleLaunchSystemOverlay}
-            onStopSystemOverlay={handleStopSystemOverlay}
-            onOpenFullChat={
-              onOpenFullChat
-                ? () => {
-                    setShowAiMenu(false);
-                    onOpenFullChat();
-                  }
-                : undefined
-            }
-          />
+          {!desktopFullscreen && (
+            <AiAssistantMenu
+              showAiMenu={showAiMenu}
+              isOverlayRunning={isOverlayRunning}
+              runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
+              onToggleAiMenu={() => setShowAiMenu((prev) => !prev)}
+              onLaunchSystemOverlay={handleLaunchSystemOverlay}
+              onStopSystemOverlay={handleStopSystemOverlay}
+              onOpenFullChat={
+                onOpenFullChat
+                  ? () => {
+                      setShowAiMenu(false);
+                      onOpenFullChat();
+                    }
+                  : undefined
+              }
+            />
+          )}
         </View>
       </View>
 
       {/* Bottom Panel Toggle Bar (Auto-hidden when soft keyboard is open) */}
-      {!isKeyboardVisible && (
+      {!isKeyboardVisible && !desktopFullscreen && (
         <IDEBottomBar
           bottomTab={bottomTab}
           onChangeTab={setBottomTab}
@@ -437,13 +425,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
       <OverlayPermissionModal
         visible={showPermissionModal}
         onClose={() => setShowPermissionModal(false)}
-        onPermissionGranted={() => {
-          setShowPermissionModal(false);
-          FloatingOverlay.start({
-            workspaceId: workspace?.id,
-            activeFileName: activeFile?.name,
-          }).then((ok) => ok && setIsOverlayRunning(true));
-        }}
+        onPermissionGranted={handlePermissionGranted}
       />
 
       {/* File Action Modal */}

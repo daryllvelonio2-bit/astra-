@@ -1,8 +1,17 @@
 # Project Progress Tracker
 
 ## Status
-- **Current Phase:** Production Release Build Verified
-- **Last Updated:** September 4, 2026
+- **Current Phase:** Fullscreen Landscape Desktop Verified
+- **Last Updated:** September 5, 2026
+
+### [2026-09-05] - Fullscreen Landscape Mode for Linux Desktop (No Notification Bar)
+- **Feature:** Rotating to landscape while viewing the Linux Desktop tab automatically triggers full-screen mode, hiding the Android notification/status bar, eliminating top safe-area inset padding, hiding the bottom IDE navigation bar, and hiding the floating AI assistant menu.
+- **Components:**
+  - `DesktopView.tsx` (379 lines): Integrated `useOrientation` to automatically engage fullscreen and call `StatusBar.setHidden(true, 'slide')` on landscape rotation, and restore the status bar on rotating back to portrait or navigating away. Added notch/safe-area aware floating controls (1-tap contract/exit and 1-tap geometry refit when XFCE aspect ratio changes).
+  - `DesktopSetupCard.tsx` (250 lines): Extracted non-running desktop phases (checking, not installed, installing, stopped, error) to isolate setup UI and guarantee strict `<500` lines compliance per `agent.md` (Rule 5).
+  - `IDELayout.tsx` (481 lines): Updated container `paddingTop` to dynamically collapse to 0 when `desktopFullscreen` is active (`paddingTop: desktopFullscreen ? 0 : insets.top`), added declarative `<StatusBar hidden={desktopFullscreen} />`, and auto-hid the floating AI assistant menu (`!desktopFullscreen && <AiAssistantMenu ... />`).
+  - `useFloatingOverlayControl.ts` (70 lines): Extracted system overlay status polling and permission handling from `IDELayout.tsx` to maintain modularity.
+- **Rule Compliance (`agent.md`):** All modified and created files strictly `<500` lines (`DesktopView.tsx`: 379, `DesktopSetupCard.tsx`: 250, `IDELayout.tsx`: 481, `useFloatingOverlayControl.ts`: 70). `npx tsc --noEmit` clean (0 errors).
 
 ### [2026-09-04] - Linux Dependencies Auto Downloader Progress in Settings
 - **Problem:** The embedded Alpine Linux developer toolchain auto-downloader (`ToolchainProvisioner.kt`) ran completely in the dark on a detached background daemon thread. Users had zero visibility into which stage was executing, which packages were actively downloading, whether APK locks or timeouts occurred, or how to safely cancel/retry.
@@ -21,6 +30,40 @@
     - **Binary Health Diagnostics**: Real-time status badges for Node.js, Python 3, PHP 8.3, and Git.
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
+
+### [2026-09-04] - Desktop Start Unwedged (Supervisor PTY Session)
+- Root cause of the eternal "starting" spinner, proven via `ps` + `/proc/net/tcp`: all daemons (Xvnc, xfce4, websockify, panel) were ALIVE and both ports LISTENING — but PRoot waits for every forked descendant, so the blocking start call could never return. Same trap would catch any daemon spawn via executeCommand.
+- Fix: daemons now spawn from a persistent supervisor PTY session (`desktop-svc`); readiness arrives as terminal-data events with a 60s reconcile fallback. Port probes switched to python (host/guest shells lack /dev/tcp). Stop kills the supervisor tree + pidfile sweep.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - Desktop Suicide pkill (Start Killed Itself via Self-Match)
+- STEP markers proved startup died between CLEANUP and XVNC with zero output: `pkill -f '[X]vnc :0'` matched the start script's own command line (it contains the real `Xvnc :0` launch text later on) and SIGTERM'd its own shell/proot. The `[X]` trick only guards the trick text, not real occurrences.
+- Fix: no pkill/pgrep for Xvnc/websockify anywhere near their launch lines — cleanup + ready checks use pidfiles with `/proc/PID/cmdline` verification (also guards stale-PID kills); trick-pattern pkill kept only where the literal can't occur (xfce4-session, stop fallbacks). Diagnostics shows pidfile cmdlines instead of pgrep.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - Desktop Diagnostics Honesty (BusyBox command -v Trap)
+- Diagnose screenshot showed only Xvnc + missing logs: busybox `command -v` ignores all but its first arg, so both the provision gate and diagnostics overstated things. Now checks each binary separately; start script emits STEP markers + regenerates a missing passwd file; error log view shows last 60 lines (was 12, hiding the real error).
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - Desktop "Running" False Positive (pgrep Self-Match Fix)
+- `ERR_CONNECTION_REFUSED` on :6080 while status said running: the `pgrep -f 'Xvnc :0'` check matched the start script's own command line (it literally contains that string) — a false positive hiding a dead websockify/Xvnc.
+- Fix: `[X]`-style pgrep patterns, real port probe (`/dev/tcp/127.0.0.1:6080`) in the ready check, `mkdir -p /tmp/.X11-unix`, all three daemon logs on failure, plus a Diagnose button (binaries + procs + log tails) in the error view.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - XFCE Desktop Tab (Xvnc + noVNC)
+- New 4th IDE tab `Desktop`: on-demand provision (tigervnc/Xvnc + xfce4 + fonts + pip websockify + noVNC v1.5.0, ~1GB) with streamed install log; start/stop; viewer is the bundled noVNC client in a WebView over localhost websockify (6080→5900). VNC is localhost-only + random per-install password injected into the URL.
+- Files: `src/ide/services/desktopService.ts`, `src/ide/components/DesktopView.tsx`, Desktop tab in `IDEBottomBar` + keep-alive slot in `IDELayout`.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild. On-device provision + first launch still to verify.
+
+### [2026-09-04] - PTY Write Preserves CR (Real opencode Enter Fix)
+- Follow-up: JS-side CR translation wasn't enough — `PtySession.write()` was rewriting every `\r`→`\n` natively, so opencode still got LF (newline) from ALL Enter paths. Removed the normalization; bytes now go verbatim. Shells unaffected (ICRNL accepts CR).
+- Rebuild + reinstall done (BUILD SUCCESSFUL). App restarts on install — opencode must be relaunched to test.
+
+### [2026-09-04] - Soft-Keyboard Enter Sends CR in PTY Mode (opencode Submit Fix)
+- Bug: Gboard commits Enter as `\n`, which went raw to the pty. Shells tolerate it, but raw-mode TUIs (opencode, vim) bind submit to CR and read LF as Ctrl+J = "insert newline" — so Enter in opencode just wrapped lines.
+- Fix (`TerminalView.tsx`): `handleXtermInput` translates a lone `\n`/`\r\n` commit to `\r`; multi-char pastes keep raw LFs for shell line-by-line execution. Removed the `onKeyPress` Enter→CR send (every keyboard also commits text — keeping both double-submitted).
+- Safe by construction: with ICRNL on, CR submits in canonical shell mode exactly like LF did.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
 
 ### [2026-09-04] - Fullscreen Chat Survives Navigation (Keep-Alive)
 - Bug: `App.tsx` conditionally unmounted screens, so leaving mid-turn orphaned the agent chain — the dead hook kept streaming into discarded state (never saved) while the remount showed a frozen "thinking" message. Same unmount also killed terminal WebViews editor↔chat.

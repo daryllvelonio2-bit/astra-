@@ -257,7 +257,17 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     if (removed > 0) {
       sendInput("\x7f".repeat(Math.min(removed, 256)));
     }
-    if (added) sendInput(added);
+    // A lone newline is the soft keyboard's Enter key (Gboard commits "\n",
+    // some IMEs "\r\n" — neither fires onKeyPress reliably). The pty must
+    // receive CR: in canonical mode ICRNL turns it into a submit, and raw-mode
+    // TUIs (opencode, vim, htop) bind submit to CR while LF means Ctrl+J /
+    // "insert newline". Multi-char additions are pastes — their LFs stay raw
+    // so the shell still executes line-by-line.
+    if (added === "\n" || added === "\r\n") {
+      sendInput("\r");
+    } else if (added) {
+      sendInput(added);
+    }
     resetCatcher();
   };
 
@@ -308,9 +318,11 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   const handleKeyPress = (e: any) => {
     const key = e.nativeEvent.key;
     if (isXterm) {
-      // xterm owns the keyboard; the catcher is a safety net only.
-      if (key === "Enter") sendInput("\r");
-      else if (key === "ArrowUp") sendInput("\x1b[A");
+      // xterm owns the keyboard; the catcher is a safety net only. Enter is
+      // deliberately NOT sent here: every keyboard (soft + hardware) also
+      // commits the newline as text, and handleXtermInput translates that
+      // single commit to CR. Sending here too would double-submit.
+      if (key === "ArrowUp") sendInput("\x1b[A");
       else if (key === "ArrowDown") sendInput("\x1b[B");
       return;
     }
