@@ -40,6 +40,7 @@ import {
 import { GitHeaderBar } from "./GitHeaderBar";
 import { GitChangesList } from "./GitChangesList";
 import { GitHistoryList } from "./GitHistoryList";
+import { GitCommitFilesList } from "./GitCommitFilesList";
 import { GitDiffViewer } from "./GitDiffViewer";
 import { GitBranchModal } from "./GitBranchModal";
 import { GitCredentialsModal } from "./GitCredentialsModal";
@@ -73,6 +74,7 @@ export function GitHubDesktopView({
 
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [loadingCommitFiles, setLoadingCommitFiles] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -87,7 +89,6 @@ export function GitHubDesktopView({
     const newStatus = await getGitStatus(workspaceId);
     setStatus(newStatus);
     setLoadingStatus(false);
-
     if (newStatus.isRepo) {
       getGitCommitHistory(workspaceId).then(setCommits);
       getGitBranches(workspaceId).then(setBranches);
@@ -96,9 +97,7 @@ export function GitHubDesktopView({
   }, [workspaceId, visible]);
 
   useEffect(() => {
-    if (visible) {
-      refreshGitState();
-    }
+    if (visible) refreshGitState();
   }, [visible, refreshGitState]);
 
   const loadFileDiff = async (file: GitFileStatus) => {
@@ -116,12 +115,13 @@ export function GitHubDesktopView({
   const loadCommitDiff = async (commit: GitCommit) => {
     setSelectedCommit(commit);
     setSelectedFile(null);
-    setLoadingDiff(true);
-    if (!isLandscape) setPortraitShowDetail(true);
+    setLoadingCommitFiles(true);
     const files = await getGitCommitFiles(workspaceId, commit.hash);
     setCommitFiles(files);
+    setLoadingCommitFiles(false);
     const initialFile = files[0] || null;
     setSelectedCommitFile(initialFile);
+    setLoadingDiff(true);
     const diff = await getGitCommitDiff(workspaceId, commit.hash, initialFile?.path);
     setDiffText(diff);
     setLoadingDiff(false);
@@ -131,9 +131,18 @@ export function GitHubDesktopView({
     if (!selectedCommit) return;
     setSelectedCommitFile(file);
     setLoadingDiff(true);
+    if (!isLandscape) setPortraitShowDetail(true);
     const diff = await getGitCommitDiff(workspaceId, selectedCommit.hash, file.path);
     setDiffText(diff);
     setLoadingDiff(false);
+  };
+
+  const handleBackToCommits = () => {
+    setSelectedCommit(null);
+    setSelectedCommitFile(null);
+    setCommitFiles([]);
+    setDiffText("");
+    if (!isLandscape) setPortraitShowDetail(false);
   };
 
   const handleToggleStageFile = async (file: GitFileStatus) => {
@@ -197,11 +206,7 @@ export function GitHubDesktopView({
     const pushRes = await pushGitRemote(workspaceId, status?.currentBranch);
     setCommitting(false);
     refreshGitState();
-    if (pushRes.success) {
-      Alert.alert("Success", "Committed and pushed changes to remote!");
-    } else {
-      Alert.alert("Pushed with notice", pushRes.message);
-    }
+    Alert.alert(pushRes.success ? "Success" : "Pushed with notice", pushRes.success ? "Committed and pushed changes to remote!" : pushRes.message);
   };
 
   const handleSaveRemote = async (url: string): Promise<{ success: boolean; error?: string }> => {
@@ -215,10 +220,7 @@ export function GitHubDesktopView({
 
   const handlePush = async () => {
     if (!status?.isRepo) return;
-    if (!remoteUrl) {
-      setShowRemoteModal(true);
-      return;
-    }
+    if (!remoteUrl) return setShowRemoteModal(true);
     setSyncing(true);
     const res = await pushGitRemote(workspaceId, status.currentBranch);
     setSyncing(false);
@@ -228,50 +230,33 @@ export function GitHubDesktopView({
 
   const handleSync = async () => {
     if (!status?.isRepo) return;
-    if (!remoteUrl) {
-      setShowRemoteModal(true);
-      return;
-    }
+    if (!remoteUrl) return setShowRemoteModal(true);
     setSyncing(true);
-    if (status.behind > 0) {
-      const res = await pullGitRemote(workspaceId);
-      Alert.alert("Pull", res.message);
-    } else if (status.ahead > 0) {
-      const res = await pushGitRemote(workspaceId, status.currentBranch);
-      Alert.alert("Push", res.message);
-    } else {
-      const res = await fetchGitRemote(workspaceId);
-      Alert.alert("Fetch", res.message);
-    }
+    let res: { message: string };
+    if (status.behind > 0) res = await pullGitRemote(workspaceId);
+    else if (status.ahead > 0) res = await pushGitRemote(workspaceId, status.currentBranch);
+    else res = await fetchGitRemote(workspaceId);
     setSyncing(false);
     refreshGitState();
+    Alert.alert(status.behind > 0 ? "Pull" : status.ahead > 0 ? "Push" : "Fetch", res.message);
   };
 
   const handleSwitchBranch = async (branchName: string) => {
     const res = await switchGitBranch(workspaceId, branchName);
-    if (res.success) {
-      refreshGitState();
-    } else {
-      Alert.alert("Error", res.error || "Could not switch branch.");
-    }
+    if (res.success) refreshGitState();
+    else Alert.alert("Error", res.error || "Could not switch branch.");
   };
 
   const handleCreateBranch = async (branchName: string) => {
     const res = await createGitBranch(workspaceId, branchName);
-    if (res.success) {
-      refreshGitState();
-    } else {
-      Alert.alert("Error", res.error || "Could not create branch.");
-    }
+    if (res.success) refreshGitState();
+    else Alert.alert("Error", res.error || "Could not create branch.");
   };
 
   const handleInitRepo = async () => {
     const ok = await initGitRepo(workspaceId);
-    if (ok) {
-      refreshGitState();
-    } else {
-      Alert.alert("Error", "Could not initialize Git repository.");
-    }
+    if (ok) refreshGitState();
+    else Alert.alert("Error", "Could not initialize Git repository.");
   };
 
   const files = status?.files || [];
@@ -367,6 +352,15 @@ export function GitHubDesktopView({
                 onCommitAndPush={handleCommitAndPush}
                 onPush={handlePush}
               />
+            ) : selectedCommit ? (
+              <GitCommitFilesList
+                commit={selectedCommit}
+                files={commitFiles}
+                selectedFile={selectedCommitFile}
+                loading={loadingCommitFiles}
+                onSelectFile={handleSelectCommitFile}
+                onBackToCommits={handleBackToCommits}
+              />
             ) : (
               <GitHistoryList
                 commits={commits}
@@ -385,9 +379,7 @@ export function GitHubDesktopView({
               loading={loadingDiff}
               selectedFile={selectedFile}
               selectedCommit={selectedCommit}
-              commitFiles={commitFiles}
               selectedCommitFile={selectedCommitFile}
-              onSelectCommitFile={handleSelectCommitFile}
               onBackToMaster={!isLandscape ? () => setPortraitShowDetail(false) : undefined}
             />
           </View>

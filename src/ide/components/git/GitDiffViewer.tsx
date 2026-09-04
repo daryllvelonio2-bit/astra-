@@ -11,7 +11,6 @@ import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
 import { GitCommit, GitCommitFile, GitFileStatus } from "./types";
-import { GitCommitFileSelector } from "./GitCommitFileSelector";
 import { parseUnifiedDiff, ParsedDiffLine, DiffParseResult } from "./diffParser";
 
 interface GitDiffViewerProps {
@@ -19,9 +18,7 @@ interface GitDiffViewerProps {
   loading: boolean;
   selectedFile: GitFileStatus | null;
   selectedCommit: GitCommit | null;
-  commitFiles?: GitCommitFile[];
   selectedCommitFile?: GitCommitFile | null;
-  onSelectCommitFile?: (file: GitCommitFile) => void;
   onBackToMaster?: () => void;
 }
 
@@ -30,9 +27,7 @@ export function GitDiffViewer({
   loading,
   selectedFile,
   selectedCommit,
-  commitFiles = [],
   selectedCommitFile = null,
-  onSelectCommitFile,
   onBackToMaster,
 }: GitDiffViewerProps) {
   const { theme } = useTheme();
@@ -48,7 +43,9 @@ export function GitDiffViewer({
     );
   }
 
-  if (!selectedFile && !selectedCommit) {
+  const currentFile = selectedFile || selectedCommitFile;
+
+  if (!currentFile && !selectedCommit) {
     return (
       <View style={[styles.center, { backgroundColor: theme.bgPrimary }]}>
         <Octicons name="diff" size={isLandscape ? 32 : 40} color={theme.textMuted} />
@@ -83,18 +80,18 @@ export function GitDiffViewer({
               style={[styles.headerTitle, isLandscape && styles.headerTitleLandscape, { color: theme.textPrimary }]}
               numberOfLines={1}
             >
-              {selectedFile ? selectedFile.path : selectedCommit?.message}
+              {currentFile ? currentFile.path : selectedCommit?.message}
             </Text>
-            {selectedFile && (
+            {currentFile && (
               <View
                 style={[
                   styles.fileStatusPill,
                   isLandscape && styles.fileStatusPillLandscape,
                   {
                     backgroundColor:
-                      selectedFile.status === "deleted"
+                      currentFile.status === "deleted"
                         ? `${theme.accentRed}18`
-                        : selectedFile.status === "modified"
+                        : currentFile.status === "modified"
                         ? `${theme.accentGold}18`
                         : `${theme.accentGreen}18`,
                   },
@@ -106,19 +103,19 @@ export function GitDiffViewer({
                     isLandscape && styles.fileStatusPillTextLandscape,
                     {
                       color:
-                        selectedFile.status === "deleted"
+                        currentFile.status === "deleted"
                           ? theme.accentRed
-                          : selectedFile.status === "modified"
+                          : currentFile.status === "modified"
                           ? theme.accentGold
                           : theme.accentGreen,
                     },
                   ]}
                 >
-                  {selectedFile.status === "modified"
+                  {currentFile.status === "modified"
                     ? "Modified"
-                    : selectedFile.status === "deleted"
+                    : currentFile.status === "deleted"
                     ? "Deleted"
-                    : selectedFile.status === "renamed"
+                    : currentFile.status === "renamed"
                     ? "Renamed"
                     : "New"}
                 </Text>
@@ -147,15 +144,6 @@ export function GitDiffViewer({
           )}
         </View>
       </View>
-
-      {/* Commit File Selector Dropdown */}
-      {selectedCommit && commitFiles && commitFiles.length > 0 && (
-        <GitCommitFileSelector
-          files={commitFiles}
-          selectedFile={selectedCommitFile || null}
-          onSelect={onSelectCommitFile}
-        />
-      )}
 
       {/* Code Diff Lines */}
       {parsed.infoMessage ? (
