@@ -164,6 +164,19 @@ class LinuxRunnerModule : Module() {
             return@Function true
         }
 
+        Function("getStringFromClipboard") {
+            val context = appContext.reactContext ?: return@Function ""
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = clipboard.primaryClip ?: return@Function ""
+            val sb = StringBuilder()
+            for (i in 0 until clip.itemCount) {
+                val text = clip.getItemAt(i)?.coerceToText(context)?.toString() ?: continue
+                if (sb.isNotEmpty()) sb.append("\n")
+                sb.append(text)
+            }
+            return@Function sb.toString()
+        }
+
         Function("checkOverlayPermission") {
             val context = appContext.reactContext ?: return@Function false
             return@Function if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {

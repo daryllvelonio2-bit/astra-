@@ -332,6 +332,8 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     if (text) {
       writeTerminalInput(activeSessionId, text);
       showToast("Pasted from clipboard");
+    } else {
+      showToast("Clipboard is empty");
     }
   }, [activeSessionId, showToast]);
 
