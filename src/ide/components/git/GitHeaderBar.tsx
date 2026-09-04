@@ -40,12 +40,12 @@ export function GitHeaderBar({
     if (!remoteUrl) return isLandscape ? "Publish" : "Publish repo";
     if (!status) return "Fetch origin";
     if (status.behind > 0) return `Pull (${status.behind})`;
-    if (status.ahead > 0) return `Push (${status.ahead})`;
-    return "Fetch origin";
+    if (status.ahead > 0) return `Push ${status.ahead}`;
+    return isLandscape ? "Fetch" : "Fetch origin";
   };
 
   const getSyncIcon = () => {
-    if (!remoteUrl) return "cloud-upload";
+    if (!remoteUrl) return "upload";
     if (!status) return "sync";
     if (status.behind > 0) return "arrow-down";
     if (status.ahead > 0) return "arrow-up";

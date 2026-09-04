@@ -25,6 +25,18 @@ export function GitHistoryList({
     return (name[0] || "?").toUpperCase();
   };
 
+  const getStatusDetails = (status?: string) => {
+    switch (status) {
+      case "New":
+        return { label: "New", color: theme.accentGreen, bg: `${theme.accentGreen}18` };
+      case "Deleted":
+        return { label: "Deleted", color: theme.accentRed, bg: `${theme.accentRed}18` };
+      case "Modified":
+      default:
+        return { label: "Modified", color: theme.accentGold, bg: `${theme.accentGold}18` };
+    }
+  };
+
   return (
     <FlatList
       data={commits}
@@ -33,6 +45,7 @@ export function GitHistoryList({
       contentContainerStyle={commits.length === 0 ? styles.emptyContainer : undefined}
       renderItem={({ item }) => {
         const isSelected = selectedCommit?.hash === item.hash;
+        const statusBadge = getStatusDetails(item.status);
         return (
           <TouchableOpacity
             style={[
@@ -94,24 +107,54 @@ export function GitHistoryList({
                 >
                   {item.relativeTime}
                 </Text>
+                <Text style={[styles.dot, { color: theme.textMuted }]}>·</Text>
+                <Text
+                  style={[
+                    styles.hashSubText,
+                    isLandscape && styles.hashSubTextLandscape,
+                    { color: theme.textMuted },
+                  ]}
+                >
+                  #{item.shortHash}
+                </Text>
               </View>
             </View>
-            <View
-              style={[
-                styles.hashBadge,
-                isLandscape && styles.hashBadgeLandscape,
-                { backgroundColor: theme.bgTertiary, borderColor: theme.border },
-              ]}
-            >
-              <Text
+
+            <View style={[styles.rightCol, isLandscape && styles.rightColLandscape]}>
+              {/* Diff Stats: +Added (green) and -Deleted (red) */}
+              {((item.additions || 0) > 0 || (item.deletions || 0) > 0) && (
+                <View style={styles.statsRow}>
+                  {(item.additions || 0) > 0 && (
+                    <Text style={[styles.statAdd, isLandscape && styles.statAddLandscape, { color: theme.accentGreen }]}>
+                      +{item.additions}
+                    </Text>
+                  )}
+                  {(item.deletions || 0) > 0 && (
+                    <Text style={[styles.statDel, isLandscape && styles.statDelLandscape, { color: theme.accentRed }]}>
+                      -{item.deletions}
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* Status Badge */}
+              <View
                 style={[
-                  styles.hashText,
-                  isLandscape && styles.hashTextLandscape,
-                  { color: theme.textSecondary },
+                  styles.statusBadge,
+                  isLandscape && styles.statusBadgeLandscape,
+                  { backgroundColor: statusBadge.bg },
                 ]}
               >
-                {item.shortHash}
-              </Text>
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    isLandscape && styles.statusBadgeTextLandscape,
+                    { color: statusBadge.color },
+                  ]}
+                >
+                  {statusBadge.label}
+                </Text>
+              </View>
             </View>
           </TouchableOpacity>
         );
@@ -204,24 +247,59 @@ const styles = StyleSheet.create({
   timeAgoLandscape: {
     fontSize: 9,
   },
-  hashBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-    borderWidth: 1,
+  hashSubText: {
+    fontFamily: "monospace",
+    fontSize: 9.5,
   },
-  hashBadgeLandscape: {
-    paddingHorizontal: 4,
+  hashSubTextLandscape: {
+    fontSize: 8,
+  },
+  rightCol: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 3,
+  },
+  rightColLandscape: {
+    gap: 1.5,
+  },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  statAdd: {
+    fontSize: 10,
+    fontWeight: "700",
+    fontFamily: "monospace",
+  },
+  statAddLandscape: {
+    fontSize: 8.5,
+  },
+  statDel: {
+    fontSize: 10,
+    fontWeight: "700",
+    fontFamily: "monospace",
+  },
+  statDelLandscape: {
+    fontSize: 8.5,
+  },
+  statusBadge: {
+    paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 3,
   },
-  hashText: {
-    fontFamily: "monospace",
-    fontSize: 10,
-    fontWeight: "600",
+  statusBadgeLandscape: {
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
   },
-  hashTextLandscape: {
-    fontSize: 8.5,
+  statusBadgeText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+  },
+  statusBadgeTextLandscape: {
+    fontSize: 8,
+    fontWeight: "700",
   },
   emptyContainer: {
     flexGrow: 1,

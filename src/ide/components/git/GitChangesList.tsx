@@ -18,24 +18,28 @@ interface GitChangesListProps {
   files: GitFileStatus[];
   selectedFile: GitFileStatus | null;
   currentBranch: string;
+  ahead?: number;
   committing: boolean;
   onSelectFile: (file: GitFileStatus) => void;
   onToggleStageFile: (file: GitFileStatus) => void;
   onToggleStageAll: (stageAll: boolean) => void;
   onCommit: (summary: string, description: string) => void;
   onCommitAndPush?: (summary: string, description: string) => void;
+  onPush?: () => void;
 }
 
 export function GitChangesList({
   files,
   selectedFile,
   currentBranch,
+  ahead = 0,
   committing,
   onSelectFile,
   onToggleStageFile,
   onToggleStageAll,
   onCommit,
   onCommitAndPush,
+  onPush,
 }: GitChangesListProps) {
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
@@ -118,13 +122,37 @@ export function GitChangesList({
         )}
         ListEmptyComponent={
           <View style={styles.emptyView}>
-            <Octicons name="check-circle" size={isLandscape ? 26 : 32} color={theme.accentGreen} />
-            <Text style={[styles.emptyTitle, isLandscape && styles.emptyTitleLandscape, { color: theme.textPrimary }]}>
-              No local changes
-            </Text>
-            <Text style={[styles.emptySubtitle, isLandscape && styles.emptySubtitleLandscape, { color: theme.textSecondary }]}>
-              Working directory is completely clean.
-            </Text>
+            {ahead > 0 ? (
+              <>
+                <Octicons name="arrow-up" size={isLandscape ? 22 : 28} color={theme.accent} />
+                <Text style={[styles.emptyTitle, isLandscape && styles.emptyTitleLandscape, { color: theme.textPrimary }]}>
+                  {ahead} {ahead === 1 ? "commit" : "commits"} to push
+                </Text>
+                <Text style={[styles.emptySubtitle, isLandscape && styles.emptySubtitleLandscape, { color: theme.textSecondary }]}>
+                  Your local commits are ready to push to GitHub.
+                </Text>
+                {onPush && (
+                  <TouchableOpacity
+                    style={[styles.pushNowBtn, { backgroundColor: theme.accent }]}
+                    onPress={onPush}
+                    activeOpacity={0.8}
+                  >
+                    <Octicons name="upload" size={13} color="#fff" />
+                    <Text style={styles.pushNowBtnText}>Push origin</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <>
+                <Octicons name="check-circle" size={isLandscape ? 26 : 32} color={theme.accentGreen} />
+                <Text style={[styles.emptyTitle, isLandscape && styles.emptyTitleLandscape, { color: theme.textPrimary }]}>
+                  No local changes
+                </Text>
+                <Text style={[styles.emptySubtitle, isLandscape && styles.emptySubtitleLandscape, { color: theme.textSecondary }]}>
+                  Working directory is completely clean.
+                </Text>
+              </>
+            )}
           </View>
         }
       />
@@ -137,40 +165,42 @@ export function GitChangesList({
           { backgroundColor: theme.bgSecondary, borderTopColor: theme.border },
         ]}
       >
-        <View style={styles.summaryRow}>
-          <TextInput
-            style={[
-              styles.summaryInput,
-              isLandscape && styles.summaryInputLandscape,
-              { backgroundColor: theme.bgTertiary, borderColor: theme.border, color: theme.textPrimary },
-            ]}
-            placeholder="Summary (required)"
-            placeholderTextColor={theme.textMuted}
-            value={summary}
-            onChangeText={setSummary}
-            returnKeyType="next"
-          />
-          {isLandscape && (
-            <TouchableOpacity
+        {files.length > 0 && (
+          <View style={styles.summaryRow}>
+            <TextInput
               style={[
-                styles.descToggleBtn,
-                isLandscape && styles.descToggleBtnLandscape,
-                { backgroundColor: theme.bgTertiary, borderColor: theme.border },
-                showDescriptionInLandscape && { borderColor: theme.accent },
+                styles.summaryInput,
+                isLandscape && styles.summaryInputLandscape,
+                { backgroundColor: theme.bgTertiary, borderColor: theme.border, color: theme.textPrimary },
               ]}
-              onPress={() => setShowDescriptionInLandscape((prev) => !prev)}
-              accessibilityLabel="Toggle Description field"
-            >
-              <Ionicons
-                name={showDescriptionInLandscape ? "chevron-down" : "add"}
-                size={13}
-                color={showDescriptionInLandscape ? theme.accent : theme.textMuted}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
+              placeholder="Summary (required)"
+              placeholderTextColor={theme.textMuted}
+              value={summary}
+              onChangeText={setSummary}
+              returnKeyType="next"
+            />
+            {isLandscape && (
+              <TouchableOpacity
+                style={[
+                  styles.descToggleBtn,
+                  isLandscape && styles.descToggleBtnLandscape,
+                  { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+                  showDescriptionInLandscape && { borderColor: theme.accent },
+                ]}
+                onPress={() => setShowDescriptionInLandscape((prev) => !prev)}
+                accessibilityLabel="Toggle Description field"
+              >
+                <Ionicons
+                  name={showDescriptionInLandscape ? "chevron-down" : "add"}
+                  size={13}
+                  color={showDescriptionInLandscape ? theme.accent : theme.textMuted}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
-        {(!isLandscape || showDescriptionInLandscape) && (
+        {files.length > 0 && (!isLandscape || showDescriptionInLandscape) && (
           <TextInput
             style={[
               styles.descriptionInput,
@@ -187,65 +217,53 @@ export function GitChangesList({
         )}
 
         <View style={styles.commitBtnRow}>
-          <TouchableOpacity
-            style={[
-              styles.commitBtn,
-              isLandscape && styles.commitBtnLandscape,
-              { backgroundColor: canCommit ? theme.accent : theme.bgTertiary, borderColor: theme.border },
-            ]}
-            onPress={handleCommitPress}
-            disabled={!canCommit}
-            activeOpacity={0.8}
-          >
-            {committing ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text
-                style={[
-                  styles.commitBtnText,
-                  isLandscape && styles.commitBtnTextLandscape,
-                  { color: canCommit ? "#fff" : theme.textMuted },
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
+          {files.length === 0 && ahead > 0 ? (
+            onPush && (
+              <TouchableOpacity
+                style={[styles.commitBtn, isLandscape && styles.commitBtnLandscape, { backgroundColor: theme.accent, borderColor: theme.accent, flexDirection: "row", gap: 6 }]}
+                onPress={onPush}
+                activeOpacity={0.8}
               >
-                Commit to {currentBranch} ({stagedCount || files.length})
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {onCommitAndPush && (
-            <TouchableOpacity
-              style={[
-                styles.commitPushBtn,
-                isLandscape && styles.commitPushBtnLandscape,
-                {
-                  backgroundColor: canCommit ? `${theme.accent}20` : theme.bgTertiary,
-                  borderColor: canCommit ? theme.accent : theme.border,
-                },
-              ]}
-              onPress={handleCommitAndPushPress}
-              disabled={!canCommit}
-              activeOpacity={0.8}
-              accessibilityLabel="Commit and Push"
-            >
-              <Octicons
-                name="upload"
-                size={isLandscape ? 12 : 14}
-                color={canCommit ? theme.accent : theme.textMuted}
-              />
-              {!isLandscape && (
-                <Text
-                  style={[
-                    styles.commitPushText,
-                    { color: canCommit ? theme.accent : theme.textMuted },
-                  ]}
-                  numberOfLines={1}
-                >
-                  Push
+                <Octicons name="upload" size={isLandscape ? 12 : 14} color="#fff" />
+                <Text style={[styles.commitBtnText, isLandscape && styles.commitBtnTextLandscape, { color: "#fff", fontWeight: "700" }]} numberOfLines={1}>
+                  Push {ahead} {ahead === 1 ? "commit" : "commits"} to origin
                 </Text>
+              </TouchableOpacity>
+            )
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.commitBtn, isLandscape && styles.commitBtnLandscape, { backgroundColor: canCommit ? theme.accent : theme.bgTertiary, borderColor: theme.border }]}
+                onPress={handleCommitPress}
+                disabled={!canCommit}
+                activeOpacity={0.8}
+              >
+                {committing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.commitBtnText, isLandscape && styles.commitBtnTextLandscape, { color: canCommit ? "#fff" : theme.textMuted }]} numberOfLines={1} ellipsizeMode="tail">
+                    Commit to {currentBranch} ({stagedCount || files.length})
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {onCommitAndPush && (
+                <TouchableOpacity
+                  style={[styles.commitPushBtn, isLandscape && styles.commitPushBtnLandscape, { backgroundColor: canCommit ? `${theme.accent}20` : theme.bgTertiary, borderColor: canCommit ? theme.accent : theme.border }]}
+                  onPress={handleCommitAndPushPress}
+                  disabled={!canCommit}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Commit and Push"
+                >
+                  <Octicons name="upload" size={isLandscape ? 12 : 14} color={canCommit ? theme.accent : theme.textMuted} />
+                  {!isLandscape && (
+                    <Text style={[styles.commitPushText, { color: canCommit ? theme.accent : theme.textMuted }]} numberOfLines={1}>
+                      Commit & Push
+                    </Text>
+                  )}
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </>
           )}
         </View>
       </View>
@@ -310,6 +328,21 @@ const styles = StyleSheet.create({
   },
   emptySubtitleLandscape: {
     fontSize: 10.5,
+  },
+  pushNowBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  pushNowBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
   },
   commitBox: {
     padding: 10,

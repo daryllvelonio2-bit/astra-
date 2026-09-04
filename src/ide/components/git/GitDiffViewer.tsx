@@ -10,28 +10,33 @@ import {
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
-import { GitCommit, GitFileStatus } from "./types";
+import { GitCommit, GitCommitFile, GitFileStatus } from "./types";
+import { GitCommitFileSelector } from "./GitCommitFileSelector";
+import { parseUnifiedDiff, ParsedDiffLine, DiffParseResult } from "./diffParser";
 
 interface GitDiffViewerProps {
   diff: string;
   loading: boolean;
   selectedFile: GitFileStatus | null;
   selectedCommit: GitCommit | null;
+  commitFiles?: GitCommitFile[];
+  selectedCommitFile?: GitCommitFile | null;
+  onSelectCommitFile?: (file: GitCommitFile) => void;
   onBackToMaster?: () => void;
 }
-
-import { parseUnifiedDiff, ParsedDiffLine, DiffParseResult } from "./diffParser";
 
 export function GitDiffViewer({
   diff,
   loading,
   selectedFile,
   selectedCommit,
+  commitFiles = [],
+  selectedCommitFile = null,
+  onSelectCommitFile,
   onBackToMaster,
 }: GitDiffViewerProps) {
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
-
   const parsed = useMemo(() => parseUnifiedDiff(diff), [diff]);
 
   if (loading) {
@@ -73,12 +78,53 @@ export function GitDiffViewer({
           </TouchableOpacity>
         )}
         <View style={styles.headerTitleCol}>
-          <Text
-            style={[styles.headerTitle, isLandscape && styles.headerTitleLandscape, { color: theme.textPrimary }]}
-            numberOfLines={1}
-          >
-            {selectedFile ? selectedFile.path : selectedCommit?.message}
-          </Text>
+          <View style={styles.headerTitleRow}>
+            <Text
+              style={[styles.headerTitle, isLandscape && styles.headerTitleLandscape, { color: theme.textPrimary }]}
+              numberOfLines={1}
+            >
+              {selectedFile ? selectedFile.path : selectedCommit?.message}
+            </Text>
+            {selectedFile && (
+              <View
+                style={[
+                  styles.fileStatusPill,
+                  isLandscape && styles.fileStatusPillLandscape,
+                  {
+                    backgroundColor:
+                      selectedFile.status === "deleted"
+                        ? `${theme.accentRed}18`
+                        : selectedFile.status === "modified"
+                        ? `${theme.accentGold}18`
+                        : `${theme.accentGreen}18`,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.fileStatusPillText,
+                    isLandscape && styles.fileStatusPillTextLandscape,
+                    {
+                      color:
+                        selectedFile.status === "deleted"
+                          ? theme.accentRed
+                          : selectedFile.status === "modified"
+                          ? theme.accentGold
+                          : theme.accentGreen,
+                    },
+                  ]}
+                >
+                  {selectedFile.status === "modified"
+                    ? "Modified"
+                    : selectedFile.status === "deleted"
+                    ? "Deleted"
+                    : selectedFile.status === "renamed"
+                    ? "Renamed"
+                    : "New"}
+                </Text>
+              </View>
+            )}
+          </View>
           {selectedCommit && (
             <Text
               style={[styles.headerSubtitle, isLandscape && styles.headerSubtitleLandscape, { color: theme.textMuted }]}
@@ -101,6 +147,15 @@ export function GitDiffViewer({
           )}
         </View>
       </View>
+
+      {/* Commit File Selector Dropdown */}
+      {selectedCommit && commitFiles && commitFiles.length > 0 && (
+        <GitCommitFileSelector
+          files={commitFiles}
+          selectedFile={selectedCommitFile || null}
+          onSelect={onSelectCommitFile}
+        />
+      )}
 
       {/* Code Diff Lines */}
       {parsed.infoMessage ? (
@@ -280,12 +335,35 @@ const styles = StyleSheet.create({
   headerTitleCol: {
     flex: 1,
   },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   headerTitle: {
     fontSize: 12.5,
     fontWeight: "700",
   },
   headerTitleLandscape: {
     fontSize: 11.5,
+  },
+  fileStatusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  fileStatusPillLandscape: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  fileStatusPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  fileStatusPillTextLandscape: {
+    fontSize: 8.5,
+    fontWeight: "700",
   },
   headerSubtitle: {
     fontSize: 10.5,

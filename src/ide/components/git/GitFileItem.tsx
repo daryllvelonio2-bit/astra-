@@ -24,17 +24,17 @@ export function GitFileItem({
   const getStatusDetails = (status: GitFileStatus["status"]) => {
     switch (status) {
       case "modified":
-        return { text: "M", color: theme.accentGold, bg: `${theme.accentGold}18` };
+        return { text: "Modified", color: theme.accentGold, bg: `${theme.accentGold}18` };
       case "added":
-        return { text: "A", color: theme.accentGreen, bg: `${theme.accentGreen}18` };
-      case "deleted":
-        return { text: "D", color: theme.accentRed, bg: `${theme.accentRed}18` };
+        return { text: "New", color: theme.accentGreen, bg: `${theme.accentGreen}18` };
       case "untracked":
-        return { text: "U", color: theme.accentGreen, bg: `${theme.accentGreen}18` };
+        return { text: "New", color: theme.accentGreen, bg: `${theme.accentGreen}18` };
+      case "deleted":
+        return { text: "Deleted", color: theme.accentRed, bg: `${theme.accentRed}18` };
       case "renamed":
-        return { text: "R", color: theme.accent, bg: `${theme.accent}18` };
+        return { text: "Renamed", color: theme.accent, bg: `${theme.accent}18` };
       default:
-        return { text: "M", color: theme.textMuted, bg: `${theme.textMuted}18` };
+        return { text: "Modified", color: theme.textMuted, bg: `${theme.textMuted}18` };
     }
   };
 
@@ -144,22 +144,23 @@ const styles = StyleSheet.create({
     marginTop: 0.5,
   },
   statusBadge: {
-    width: 20,
-    height: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
   },
   statusBadgeLandscape: {
-    width: 17,
-    height: 17,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
     borderRadius: 3,
   },
   statusBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
   },
   statusBadgeTextLandscape: {
-    fontSize: 9.5,
+    fontSize: 8.5,
+    fontWeight: "700",
   },
 });

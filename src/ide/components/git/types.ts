@@ -27,6 +27,16 @@ export interface GitCommit {
   timestamp: number;
   message: string;
   relativeTime: string;
+  additions?: number;
+  deletions?: number;
+  filesChanged?: number;
+  status?: "Modified" | "New" | "Deleted";
+}
+
+export interface GitCommitFile {
+  path: string;
+  filename: string;
+  status: "modified" | "added" | "deleted" | "renamed";
 }
 
 export interface GitRepoStatus {
