@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LogBox, AppRegistry } from "react-native";
+import { LogBox, AppRegistry, View, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 // LogBox.ignoreAllLogs();
@@ -17,6 +17,23 @@ AppRegistry.registerComponent("FloatingChatOverlay", () => FloatingChatOverlay);
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<"chat" | "picker" | "editor">("picker");
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  // Keep-alive: chat + editor stay mounted once opened and are only hidden.
+  // Conditional unmounting used to orphan in-flight agent turns (the dead
+  // hook instance kept streaming into discarded state while the remount
+  // showed a frozen "thinking" message) and kill terminal WebViews.
+  const [visited, setVisited] = useState<Set<"chat" | "editor">>(new Set());
+
+  const showScreen = (screen: "chat" | "picker" | "editor") => {
+    if (screen === "chat" || screen === "editor") {
+      setVisited((prev) => {
+        if (prev.has(screen)) return prev;
+        const next = new Set(prev);
+        next.add(screen);
+        return next;
+      });
+    }
+    setCurrentScreen(screen);
+  };
 
   useEffect(() => {
     PRootService.ensureReady().catch(() => {});
@@ -34,25 +51,27 @@ export default function App() {
 
   const handleOpenWorkspace = (workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
-    setCurrentScreen("editor");
+    showScreen("editor");
   };
 
   const handleNavigateToChat = (workspaceId?: string) => {
     if (workspaceId) {
       setActiveWorkspaceId(workspaceId);
     }
-    setCurrentScreen("chat");
+    showScreen("chat");
   };
 
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        {currentScreen === "chat" && (
-          <AstraChatScreen
-            workspaceId={activeWorkspaceId || undefined}
-            onNavigateToWorkspaces={() => setCurrentScreen("picker")}
-            onNavigateToEditor={() => setCurrentScreen("editor")}
-          />
+        {visited.has("chat") && (
+          <View style={[styles.screen, currentScreen !== "chat" && styles.hidden]}>
+            <AstraChatScreen
+              workspaceId={activeWorkspaceId || undefined}
+              onNavigateToWorkspaces={() => showScreen("picker")}
+              onNavigateToEditor={() => showScreen("editor")}
+            />
+          </View>
         )}
         {currentScreen === "picker" && (
           <ProjectPicker
@@ -60,14 +79,25 @@ export default function App() {
             onNavigateToChat={() => handleNavigateToChat()}
           />
         )}
-        {currentScreen === "editor" && (
-          <IDELayout
-            workspaceId={activeWorkspaceId || undefined}
-            onBackToPicker={() => setCurrentScreen("picker")}
-            onOpenFullChat={() => handleNavigateToChat(activeWorkspaceId || undefined)}
-          />
+        {visited.has("editor") && (
+          <View style={[styles.screen, currentScreen !== "editor" && styles.hidden]}>
+            <IDELayout
+              workspaceId={activeWorkspaceId || undefined}
+              onBackToPicker={() => showScreen("picker")}
+              onOpenFullChat={() => handleNavigateToChat(activeWorkspaceId || undefined)}
+            />
+          </View>
         )}
       </ThemeProvider>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+  hidden: {
+    display: "none",
+  },
+});

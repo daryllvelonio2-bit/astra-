@@ -22,6 +22,11 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - Fullscreen Chat Survives Navigation (Keep-Alive)
+- Bug: `App.tsx` conditionally unmounted screens, so leaving mid-turn orphaned the agent chain — the dead hook kept streaming into discarded state (never saved) while the remount showed a frozen "thinking" message. Same unmount also killed terminal WebViews editor↔chat.
+- Fix: chat + editor mount on first open and are only hidden (`display: none`) afterwards; picker still remounts fresh. Turn, timer, scroll, and PTY sessions now run uninterrupted across navigation.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
 ### [2026-09-04] - Interactive Mode Removed From UI (Always YOLO)
 - Removed every toggle surface: YOLO/Interactive pill in `CognitiveModeBar`, YOLO-vs-Interactive cards in `CognitiveModeModal`, and the whole Agent tab (`AgentSection` deleted, tab dropped from `SettingsTabBar`) in Settings.
 - Behavior hard-wired to auto-approve: `useChatSession` passes `interactiveApproval: false`, `streamAstraCliChat` defaults to `false` (stale saved `true` can no longer trap users with no way to switch back). Approval modal plumbing kept as invisible safety infra — it never triggers in YOLO.
