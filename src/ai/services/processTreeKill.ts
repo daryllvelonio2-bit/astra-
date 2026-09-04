@@ -1,5 +1,5 @@
 import { PRootService } from "../../ide/services/prootService";
-import { killProcessTreeNative } from "../../../modules/linux-runner/src/processKill";
+import { killProcessTreeNative, killByPatternNative } from "../../../modules/linux-runner/src/processKill";
 
 export interface ProcInfo {
   pid: number;
@@ -73,14 +73,49 @@ export function collectDescendants(procs: ProcInfo[], rootPid: number): number[]
 export async function killPidTree(pid: number, workspaceId?: string): Promise<void> {
   if (!pid) return;
   try {
-    if ((await killProcessTreeNative(pid)) > 0) return;
-  } catch (_) {}
+    const n = await killProcessTreeNative(pid);
+    console.log(`[killTask] native killTree(${pid})=${n}`);
+    if (n > 0) return;
+  } catch (e) {
+    console.log(`[killTask] native killTree(${pid}) threw: ${e}`);
+  }
   try {
     const procs = await listProcesses(workspaceId);
     const targets = procs.length > 0 ? [...collectDescendants(procs, pid), pid] : [pid];
     if (procs.length > 0 && !procs.some((p) => p.pid === pid)) return;
     await PRootService.runCommand(`kill -9 ${targets.join(" ")} 2>/dev/null || true`, workspaceId);
   } catch (_) {}
+}
+
+/** Host-side pattern kill; logs the count for kill diagnostics. */
+export async function killByCommandPattern(pattern: string): Promise<number> {
+  try {
+    const n = await killByPatternNative(pattern);
+    console.log(`[killTask] native killByPattern(${pattern})=${n}`);
+    return n;
+  } catch (e) {
+    console.log(`[killTask] native killByPattern(${pattern}) threw: ${e}`);
+    return 0;
+  }
+}
+
+/**
+ * Distinctive cmdline fragments per server type. The tracked pid's tree is
+ * the primary target; these catch pid-less tasks and double-forked children
+ * (e.g. `php83 -S`, whose cmdline never contains "artisan serve").
+ */
+export function killPatternsFor(command: string, port?: number): string[] {
+  const cmd = (command || "").toLowerCase();
+  if (/artisan/.test(cmd)) {
+    const pats = ["artisan serve"];
+    pats.push(port ? `-S 0.0.0.0:${port}` : "php83 -S");
+    if (port) pats.push(`-S 127.0.0.1:${port}`);
+    return pats;
+  }
+  if (/expo|metro/.test(cmd)) return ["expo start"];
+  if (/vite/.test(cmd)) return ["vite"];
+  if (/http\.server|python/.test(cmd)) return ["http.server"];
+  return [];
 }
 
 /** Pids listening on a TCP port via netstat/ss output (`pid=…` or `pid/name`). */

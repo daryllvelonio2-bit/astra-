@@ -1,5 +1,6 @@
 import { PRootService } from "../../ide/services/prootService";
-import { killPidTree, findPidsOnPort, isServerAlive } from "./processTreeKill";
+import { killPidTree, isServerAlive, killByCommandPattern, killPatternsFor } from "./processTreeKill";
+import { inspectAndRegisterFromText as inspectText } from "./runningTasksInspect";
 
 export interface RunningTask {
   id: string;
@@ -27,6 +28,7 @@ class RunningTasksServiceImpl {
   private listeners: Set<TaskListener> = new Set();
   private triggerListeners: Set<TriggerListener> = new Set();
   private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private verifying = false;
 
   constructor() {
     // Periodically verify if processes are still running in PRoot
@@ -234,52 +236,38 @@ class RunningTasksServiceImpl {
   async killTask(id: string): Promise<boolean> {
     const task = this.tasks.get(id);
     if (!task) return false;
+    const t0 = Date.now();
+    const mark = (s: string) => console.log(`[killTask] +${Date.now() - t0}ms ${s}`);
 
     try {
-      // Every pid that could be the server: tracked pid + port listeners.
-      const roots = new Set<number>();
-      if (task.pid) roots.add(task.pid);
-      if (task.port) {
-        for (const p of await findPidsOnPort(task.port, task.workspaceId)) roots.add(p);
+      mark(`kill pid=${task.pid} port=${task.port} cmd=${task.command}`);
+      // Host-side tree kill of the tracked pid (covers wrapper → server →
+      // double-forked `php -S` child). Guest kill/pkill/fuser/lsof cannot
+      // signal through proot (EPERM) and lsof -i is unsupported, so every
+      // kill here is native — no guest kill commands at all.
+      if (task.pid) {
+        mark(`killPidTree(${task.pid}) start`);
+        await killPidTree(task.pid, task.workspaceId);
+        mark(`killPidTree(${task.pid}) done`);
       }
-      // Kill whole trees — the tracked pid is often just the wrapper shell,
-      // and killing it alone orphans the real server on its port.
-      for (const pid of roots) {
-        await killPidTree(pid, task.workspaceId);
-      }
-
-      if (task.port) {
-        // Kill any process bound to the port
-        await PRootService.runCommand(
-          `fuser -k ${task.port}/tcp 2>/dev/null || lsof -ti:${task.port} | xargs kill -9 2>/dev/null || true`,
-          task.workspaceId
-        );
-      }
-
-      if (/expo/i.test(task.command)) {
-        await PRootService.runCommand(`pkill -9 -f "expo" 2>/dev/null || true`, task.workspaceId);
-      } else if (/artisan/i.test(task.command)) {
-        // artisan double-forks: the `php -S` child holds the socket (no "artisan" in cmdline).
-        await PRootService.runCommand(
-          `pkill -9 -f "artisan serve" 2>/dev/null; pkill -9 -f "php[0-9]* -S " 2>/dev/null || true`,
-          task.workspaceId
-        );
-      } else if (/vite/i.test(task.command)) {
-        await PRootService.runCommand(`pkill -9 -f "vite" 2>/dev/null || true`, task.workspaceId);
-      } else {
-        const cleanCmd = task.command.replace(/[;&|].*$/, "").trim();
-        if (cleanCmd && !cleanCmd.includes(" ") && cleanCmd.length > 2) {
-          await PRootService.runCommand(`pkill -9 -f "${cleanCmd}" 2>/dev/null || true`, task.workspaceId);
-        }
+      // Pid-less tasks and strays: host-side pattern kill (skips app/agent).
+      for (const pat of killPatternsFor(task.command, task.port)) {
+        mark(`pattern ${pat} start`);
+        await killByCommandPattern(pat);
+        mark(`pattern ${pat} done`);
       }
 
       // Never silently leak: only untrack a server verified dead. On failure
       // the task stays listed so the kill can be retried (still returns false).
-      if (await isServerAlive(task, task.workspaceId)) return false;
+      mark("isServerAlive start");
+      const alive = await isServerAlive(task, task.workspaceId);
+      mark(`isServerAlive=${alive}`);
+      if (alive) return false;
       this.tasks.delete(id);
       this.notify();
       return true;
-    } catch (_) {
+    } catch (e) {
+      mark(`threw: ${e}`);
       return false;
     }
   }
@@ -325,6 +313,10 @@ class RunningTasksServiceImpl {
    * Check running processes via active port probes, ps, and netstat to maintain accurate task state.
    */
   async verifyProcesses() {
+    // Overlap guard: one poll spawns 2+ proot commands; a new poll every 5s
+    // while the last is still running piles up spawns and wedges kills.
+    if (this.verifying) return;
+    this.verifying = true;
     try {
       const psRes = await PRootService.runCommand("ps -ef 2>/dev/null || ps aux 2>/dev/null");
       const psOutput = psRes?.stdout || "";
@@ -413,86 +405,16 @@ class RunningTasksServiceImpl {
       if (changed) {
         this.notify();
       }
-    } catch (_) {}
+    } catch (_) {} finally {
+      this.verifying = false;
+    }
   }
 
   /**
    * Inspect text from the AI assistant or tool calls to automatically extract background tasks.
    */
   inspectAndRegisterFromText(text: string, workspaceId?: string): RunningTask | null {
-    if (!text) return null;
-
-    // Ignore scaffold, package installation, build, or file commands
-    const isOneShot = /create-expo-app|create-react-app|create-vite|npm\s+(install|i|ci|build|test|audit)|yarn\s+(add|install)|apk\s+add|pip\s+install|git\s+|mkdir|touch|cp|rm|ls\s/i.test(text);
-    if (isOneShot && !/started.*server|listening on|ready in|waiting on exp:/i.test(text)) {
-      return null;
-    }
-
-    // Detect Expo Go exp:// URL
-    const expMatch = text.match(/(exp:\/\/[^\s\n"']+)/i);
-    // Detect local server URLs (127.0.0.1, localhost, 0.0.0.0)
-    const urlMatch = expMatch || text.match(/(https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0):\d+)/i);
-    let url = urlMatch ? urlMatch[1] : undefined;
-
-    let port: number | undefined;
-    if (url) {
-      const portMatch = url.match(/:(\d+)/);
-      if (portMatch) port = parseInt(portMatch[1], 10);
-    }
-
-    // Extract port from arguments only if explicit server command
-    if (!port && /(?:expo\s+start|npm\s+start|artisan\s+serve|npm\s+run\s+dev|vite|http\.server)/i.test(text)) {
-      const cliPortMatch = text.match(/(?:--port|-p)\s+(\d{2,5})|:(\d{4,5})/i);
-      if (cliPortMatch) {
-        port = parseInt(cliPortMatch[1] || cliPortMatch[2], 10);
-      }
-    }
-
-    // Detect PID only when explicit Process ID pattern is present
-    const pidMatch = text.match(/(?:Process\s*ID\s*\(PID\)|\[PID:\s*(\d+)\]|\(\s*PID\s*[:=]?\s*`?(\d+)`?\s*\)|PID\s*[:=]\s*`?(\d+)`?)/i);
-    const pid = pidMatch ? parseInt(pidMatch[1] || pidMatch[2] || pidMatch[3], 10) : undefined;
-
-    let command = "Background Server";
-    let isServer = false;
-    if (/expo\s+start|npx\s+expo|exp:\/\//i.test(text)) {
-      command = "Expo Dev Server";
-      if (!port) port = 8081;
-      if (!url) url = `exp://127.0.0.1:${port}`;
-      isServer = true;
-    } else if (/php\s+artisan\s+serve/i.test(text)) {
-      command = "php artisan serve";
-      if (!port) port = 8000;
-      isServer = true;
-    } else if (/npm\s+run\s+dev|yarn\s+dev|npx\s+vite|\bvite\s+dev\b/i.test(text)) {
-      command = "npm run dev (Vite)";
-      if (!port) port = 5173;
-      isServer = true;
-    } else if (/npm\s+start|yarn\s+start/i.test(text)) {
-      command = "npm start";
-      if (!port) port = 8081;
-      isServer = true;
-    } else if (/python[3]?\s+-m\s+http\.server(?:\s+\d+)?/i.test(text)) {
-      command = "Python HTTP Server";
-      if (!port) port = 8000;
-      isServer = true;
-    }
-
-    if (!url && port) {
-      url = `http://127.0.0.1:${port}`;
-    }
-
-    // Register if it is an actual server OR has a PID and local URL
-    if ((isServer && port) || (pid && url) || expMatch) {
-      return this.addTask({
-        command,
-        pid,
-        url,
-        port,
-        workspaceId,
-      });
-    }
-
-    return null;
+    return inspectText(text, workspaceId, (seed) => this.addTask(seed));
   }
 }
 

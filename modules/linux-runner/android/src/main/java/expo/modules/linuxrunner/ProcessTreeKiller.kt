@@ -90,6 +90,7 @@ object ProcessTreeKiller {
      */
     fun killTree(rootPid: Long, graceMs: Long = 1500): Int {
         if (rootPid <= 0) return 0
+        Log.i(TAG, "killTree($rootPid) entry")
         val myUid = android.os.Process.myUid()
         return try {
             val snap = snapshot()
@@ -132,11 +133,68 @@ object ProcessTreeKiller {
         } catch (e: Exception) {
             Log.w(TAG, "killTree($rootPid) failed: ${e.message}")
             0
+        } finally {
+            Log.i(TAG, "killTree($rootPid) exit")
         }
     }
 
     fun killTreeOf(process: Process, graceMs: Long = 1500): Int {
         return killTree(pidOf(process), graceMs)
+    }
+
+    /**
+     * Host-side pattern kill for servers tracked without a PID (or whose
+     * wrapper already exited). Guest pkill/kill/fuser/lsof cannot reliably
+     * signal through proot (EPERM) and lsof -i is unsupported — so match
+     * /proc cmdlines here and killTree each hit. Never touches the app
+     * itself (app_process), the agent CLI (/bin/astra — its prompt text
+     * mentions server commands!), or our own process.
+     */
+    fun killByPattern(pattern: String, graceMs: Long = 800): Int {
+        if (pattern.length < 3) return 0
+        Log.i(TAG, "killByPattern($pattern) entry")
+        var total = 0
+        try {
+            val myUid = android.os.Process.myUid()
+            val me = android.os.Process.myPid()
+            val needle = pattern.lowercase()
+            val procDir = File("/proc")
+            val entries = procDir.listFiles() ?: return 0
+            val hits = mutableListOf<Int>()
+            for (entry in entries) {
+                val pid = entry.name.toIntOrNull() ?: continue
+                if (pid == me) continue
+                try {
+                    val cmdline = File(entry, "cmdline").readText().replace('\u0000', ' ').lowercase()
+                    if (!cmdline.contains(needle)) continue
+                    if (cmdline.contains("app_process") || cmdline.contains("/bin/astra")) continue
+                    val uidLine = try {
+                        File(entry, "status").bufferedReader().useLines { lines ->
+                            lines.firstOrNull { it.startsWith("Uid:") }
+                        }
+                    } catch (_: Exception) { null }
+                    val uid = uidLine?.trim()?.split(Regex("\\s+"))?.getOrNull(1)?.toIntOrNull() ?: -1
+                    if (uid != myUid) continue
+                    hits.add(pid)
+                } catch (_: Exception) {}
+            }
+            // Roots only: drop hits nested under another hit.
+            val hitSet = hits.toSet()
+            val snap = snapshot()
+            for (pid in hits) {
+                var p = snap[pid]?.ppid ?: 0
+                var nested = false
+                while (p > 1) {
+                    if (hitSet.contains(p)) { nested = true; break }
+                    p = snap[p]?.ppid ?: 0
+                }
+                if (!nested) total += killTree(pid.toLong(), graceMs)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "killByPattern($pattern) failed: ${e.message}")
+        }
+        Log.i(TAG, "killByPattern($pattern) exit total=$total")
+        return total
     }
 
     /**

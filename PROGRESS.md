@@ -4,6 +4,17 @@
 - **Current Phase:** Production Release Build Verified
 - **Last Updated:** September 4, 2026
 
+### [2026-09-04] - Kill Hang Root Cause: Single Shared AsyncFunction Queue
+- **Smoking gun (logcat):** `[killTask] pattern artisan serve start` then silence; `killPidTree(25631) start` then silence. Zero `ProcessTreeKiller` entry logs — native bodies never started.
+- **Root cause (expo-modules-core source):** ALL `AsyncFunction`s across all modules dispatch on ONE `HandlerThread("expo.modules.AsyncFunctionQueue")`. The agent's multi-minute `executeCommandStream` holds that thread, so kill's native calls queued behind the turn forever. Same reason everything stalls while the agent codes.
+- **Fix:** kills run on a dedicated `LinuxRunnerKill` single-thread dispatcher via `.runOnQueue(killScope)` — same guarantee as the old serial queue (no concurrent kills), zero contention with streams.
+- **Rule Compliance (`agent.md`):** `tsc` clean (no TS change), Kotlin files <500 lines. NATIVE change — rebuilt + reinstalled, awaiting UI-kill verification.
+
+### [2026-09-04] - Kill Root-Caused On-Device: Guest Signals EPERM Through Proot
+- **Proven on-device:** `ps` parses fine (procps, correct PPIDs, full `bash→php→php83 -S` tree visible) and every guest command is fast — but guest `kill`/`pkill`/`fuser` get **EPERM through proot** (`kill: can't kill pid: Permission denied`), `netstat` gets `/proc/net/tcp: Permission denied` (port discovery blind), and `lsof -ti:PORT` ignores its filter and dumps 1000+ tokens (would `xargs kill` our own app — removed before it could). Direct host kill as app UID works (verified on disposable process).
+- **Fix:** kill is now 100% host-side native — `killProcessTree(pid)` + new `killByPattern` (/proc cmdline scan, skips `app_process`/`/bin/astra`/self, roots-only to avoid double-kill). All guest kill commands deleted from `killTask`. Added `[killTask]` stage timing + `ProcessTreeKiller` entry/exit logs, `verifyProcesses` overlap guard, extracted `runningTasksInspect.ts` (line budget).
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines. NATIVE change — rebuilt + reinstalled, awaiting UI-kill verification.
+
 ### [2026-09-04] - Kill Leaves Server Alive (Guest ps/pkill Gaps, Now Native Kill)
 - **Symptom:** Kill Activity spun (↻) but `http://127.0.0.1:8000` still loaded in browser.
 - **On-device root cause:** `php artisan serve` double-forks — `bash(16850) → bash → php artisan → php83 -S` holds the socket. Old kill relied on guest `ps` PPID parsing (fragile busybox/procps flavors) so only the wrapper died; `pkill -f "artisan serve"` never matches the `php83 -S` child cmdline; `fuser -k -n tcp` syntax wrong for psmisc. Plus 6 sequential proot spawns made kill take 30s+.

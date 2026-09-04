@@ -22,3 +22,17 @@ export async function killProcessTreeNative(pid: number): Promise<number> {
   } catch (_) {}
   return 0;
 }
+
+/**
+ * Host-side pattern kill (see killProcessTreeNative). Matches own-UID
+ * /proc cmdlines, skips the app/agent processes. Returns kill count.
+ */
+export async function killByPatternNative(pattern: string): Promise<number> {
+  try {
+    if (LinuxRunnerModule?.killByPattern && pattern && pattern.length >= 3) {
+      const n = await LinuxRunnerModule.killByPattern(pattern);
+      return typeof n === "number" ? n : 0;
+    }
+  } catch (_) {}
+  return 0;
+}

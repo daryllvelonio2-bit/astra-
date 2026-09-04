@@ -2,8 +2,18 @@ package expo.modules.linuxrunner
 
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import java.util.concurrent.Executors
 
 class LinuxRunnerModule : Module() {
+    // Kills bypass the single shared AsyncFunction queue: a streaming agent
+    // turn would otherwise park them behind minutes of command execution.
+    private val killScope = CoroutineScope(
+        Executors.newSingleThreadExecutor { r -> Thread(r, "LinuxRunnerKill") }.asCoroutineDispatcher() +
+            SupervisorJob()
+    )
     override fun definition() = ModuleDefinition {
         Name("LinuxRunner")
 
@@ -57,7 +67,11 @@ class LinuxRunnerModule : Module() {
 
         AsyncFunction("killProcessTree") { pid: Int ->
             return@AsyncFunction ProcessTreeKiller.killTree(pid.toLong(), 800)
-        }
+        }.runOnQueue(killScope)
+
+        AsyncFunction("killByPattern") { pattern: String ->
+            return@AsyncFunction ProcessTreeKiller.killByPattern(pattern, 800)
+        }.runOnQueue(killScope)
 
         AsyncFunction("startTerminalSession") { sessionId: String, workspaceId: String? ->
             val context = appContext.reactContext ?: return@AsyncFunction
