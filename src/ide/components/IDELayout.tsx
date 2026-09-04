@@ -19,6 +19,7 @@ import { FileActionModal } from "./FileActionModal";
 import { TerminalView } from "./TerminalView";
 import { WebBrowserPreview } from "./WebBrowserPreview";
 import { DesktopView } from "./DesktopView";
+import { GitHubDesktopView } from "./git/GitHubDesktopView";
 import { IDEBottomBar } from "./IDEBottomBar";
 import { WorkspaceLoadingScreen } from "./WorkspaceLoadingScreen";
 import { AiAssistantMenu } from "./AiAssistantMenu";
@@ -69,7 +70,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser" | "desktop">("editor");
+  const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser" | "git" | "desktop">("editor");
   const [desktopFullscreen, setDesktopFullscreen] = useState(false);
   const [browserUrl, setBrowserUrl] = useState<string>("http://127.0.0.1:8000");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -382,6 +383,14 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
             />
           </View>
 
+          <View style={[styles.tabContent, bottomTab !== "git" && styles.hiddenTab]}>
+            <GitHubDesktopView
+              workspaceId={workspace?.id}
+              projectName={workspace?.name}
+              visible={bottomTab === "git"}
+            />
+          </View>
+
           <View style={[styles.tabContent, bottomTab !== "desktop" && styles.hiddenTab]}>
             <DesktopView
               visible={bottomTab === "desktop"}
@@ -390,7 +399,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
           </View>
 
           {/* AI Assistant Floating Button & Menu */}
-          {!desktopFullscreen && (
+          {!desktopFullscreen && bottomTab !== "git" && (
             <AiAssistantMenu
               showAiMenu={showAiMenu}
               isOverlayRunning={isOverlayRunning}

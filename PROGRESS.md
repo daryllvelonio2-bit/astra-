@@ -1,8 +1,67 @@
 # Project Progress Tracker
 
 ## Status
-- **Current Phase:** Fullscreen Landscape Desktop Verified
+- **Current Phase:** Landscape GitHub Desktop Optimized & Verified
 - **Last Updated:** September 5, 2026
+
+### [2026-09-05] - GitHub Dual Authentication: Fine-Grained PATs & SSH Keys (Ed25519)
+- **Feature:** Added native support for both modern GitHub Fine-Grained Personal Access Tokens (repository-scoped, non-classic) and ed25519 SSH Keys.
+- **Components & Services:**
+  - `gitService.ts` (447 lines): Added `getSshPublicKey()`, `generateSshKey()`, `getGitRemoteUrl()`, and `setGitRemoteUrl()`. Auto-provisions `~/.ssh/config` with `StrictHostKeyChecking accept-new` for non-interactive `github.com` connections.
+  - `GitCredentialsModal.tsx` (262 lines): Refactored into a tabbed authentication modal with two modes: "Fine-Grained Token" and "SSH Key".
+  - `GitTokenTab.tsx` (142 lines): Clear instructions for generating modern Fine-Grained PATs with repository scoping (`Contents: Read & write`), with username, email, and token inputs.
+  - `GitSshKeyTab.tsx` (220 lines): 1-tap generation of ed25519 SSH keys, formatted display of `~/.ssh/id_ed25519.pub`, 1-tap "Copy Public Key" to clipboard, and guidance on configuring SSH remotes (`git@github.com:...`).
+- **Rule Compliance (`agent.md`):** All 4 files strictly `<500` lines (`GitCredentialsModal.tsx`: 262, `GitSshKeyTab.tsx`: 220, `GitTokenTab.tsx`: 142, `gitService.ts`: 447). `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - GitHub Desktop 50% Sidebar Width Reduction (Landscape)
+- **Problem:** In landscape mode, the left changes/history sidebar occupied 380px (`maxWidth: 46%`), consuming almost half of the screen and constraining the diff viewer pane.
+- **Fix:**
+  - `GitHubDesktopView.tsx` (368 lines): Reduced landscape sidebar width by 50% from 380px down to **190px** (`maxWidth: 25%`), allocating ~75% of horizontal screen real estate to the diff viewer. Adjusted tab bar padding and added single-line clipping to tab labels.
+  - `GitChangesList.tsx` (466 lines): Added `numberOfLines={1}` and `ellipsizeMode="tail"` to the commit button to prevent text wrapping on long branch names. Compacted summary input, toggle button, and commit button padding for the 190px sidebar.
+  - `GitHistoryList.tsx` (244 lines): Added responsive landscape styles (`commitRowLandscape`, `avatarLandscape`, `hashBadgeLandscape`, `metaRowLandscape`) so commit history items render cleanly in the 190px pane.
+- **Rule Compliance (`agent.md`):** All files strictly `<500` lines. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - GitHub Desktop Diff Parsing, Branch Detection & Layout Fixes
+- **Problem:**
+  - Raw Git metadata headers (`diff --git`, `new file mode`, `index`, `---`, `+++`) were displayed as lines 1-5 in the diff viewer, confusing the user with numbered header rows.
+  - Untracked files exhibited duplicated file contents (lines 7 & 8) due to bash `|| cat` executing when `git diff --no-index` exited with code 1.
+  - Repositories without an initial commit (`## No commits yet on main`) caused the branch regex to extract `"No"` as the branch name (`Commit to No (0)` and `No v`).
+  - Android `TextInput` vertical font padding sliced off the lower half of letters in the commit summary input in landscape mode.
+  - Floating AI assistant menu hovered over the diff viewer in the Git tab.
+- **Fix:**
+  - `diffParser.ts` (125 lines): Extracted modular unified diff parser. Skips pre-hunk Git metadata headers, identifies `@@` hunks as clean divider rows with no line numbers, and tracks separate old/new line numbers.
+  - `GitDiffViewer.tsx` (383 lines): Refactored to use `diffParser.ts`. Renders dual gutter columns (Old #, New #, marker `+`/`-`), styling hunk headers with soft accent backgrounds and additions/deletions with clear color coding.
+  - `gitService.ts` (388 lines):
+    - Fixed `getGitStatus` branch parsing to detect `No commits yet on ` and `Initial commit on ` before running the regex, correctly extracting `main`.
+    - Fixed `getGitFileDiff` untracked diff generation to safely handle exit code 1 with `|| true` and avoid duplicate `cat` concatenation.
+  - `GitChangesList.tsx` (463 lines): Fixed summary input height (32px), set `paddingVertical: 0`, `textAlignVertical: "center"` for Android text rendering, added `flexShrink: 0` to `commitBox`, and aligned toggle/commit buttons to 32px.
+  - `IDELayout.tsx` (490 lines): Auto-hides `AiAssistantMenu` when `bottomTab === "git"` to keep diff view unobstructed.
+- **Rule Compliance (`agent.md`):** All 12 files strictly `<500` lines. `npx tsc --noEmit` clean (0 errors).
+
+### [2026-09-05] - GitHub Desktop Landscape Mode UI Optimization
+- **Problem:** In landscape mode on mobile, the commit box (summary, description, and button) and header bar took up excessive vertical height (~160px), leaving little room for the working directory's changed files list.
+- **Fix:**
+  - `GitHeaderBar.tsx` (274 lines): Added compact landscape layout collapsing header height from 44px to 32px, reducing font sizes and button padding.
+  - `GitChangesList.tsx` (452 lines): Optimized commit box in landscape mode down to ~68px (height 28px summary input, collapsible description toggle button, and height 28px commit button). This frees up over 85px of vertical space directly for the working directory file list.
+  - `GitHubDesktopView.tsx` (365 lines): Expanded landscape sidebar width from 320px to 380px (`maxWidth: 46%`) and compacted sub-tab bar height to 32px, giving the file list significantly more horizontal and vertical breathing room.
+  - `GitDiffViewer.tsx` (260 lines): Compacted diff header to 32px in landscape mode, giving maximum vertical lines to code inspection.
+- **Rule Compliance (`agents.md`):** All files strictly `<500` lines. `npx tsc --noEmit` passed with 0 errors.
+
+### [2026-09-05] - Custom GitHub Desktop Interface
+- **Feature:** Integrated a native, responsive GitHub Desktop experience directly into Astra, backed by the embedded Alpine Linux `git` binary via the PRoot command bridge.
+- **Components & Services:**
+  - `gitService.ts` (379 lines): Comprehensive porcelain Git engine supporting repo detection/init (`git rev-parse`, `git init`), branch status & ahead/behind tracking (`git status --porcelain=v1 -b`), file staging/unstaging (`git add`, `git restore --staged`), atomic commits, commit history & inspection (`git log`, `git show`), branch switching/creation (`git checkout`), remote synchronization (`git fetch`, `git pull`, `git push`), and credential management via `~/.git-credentials`.
+  - `types.ts` (45 lines): Typed definitions for Git file statuses, branches, commits, and repository states.
+  - `GitHubDesktopView.tsx` (350 lines): Master coordinating view with responsive layouts (split side-by-side in landscape; master-detail navigation in portrait).
+  - `GitHeaderBar.tsx` (211 lines): GitHub Desktop top repository bar featuring current repo name, branch dropdown, sync button with ahead/behind indicators (`Push ↑2`, `Pull ↓1`, `Fetch`), and settings trigger.
+  - `GitChangesList.tsx` (305 lines): Staging list with individual and bulk file checkboxes, status chips (`M`, `A`, `D`, `U`), and fixed bottom commit box with summary & description fields.
+  - `GitHistoryList.tsx` (167 lines): Commit timeline with author initials, commit messages, relative timestamps, and short SHA pills.
+  - `GitDiffViewer.tsx` (220 lines): GitHub-style unified diff viewer with addition (+ green) and deletion (- red) color coding, line numbers, and horizontal scrolling.
+  - `GitBranchModal.tsx` (272 lines): Searchable branch switcher and new branch creator.
+  - `GitCredentialsModal.tsx` (185 lines): GitHub Personal Access Token (PAT) setup modal for seamless push/pull authentication.
+  - `IDEBottomBar.tsx` (179 lines): Added 5th tab `Git` with branch icon and responsive button padding.
+  - `IDELayout.tsx` (490 lines): Added keep-alive `GitHubDesktopView` slot and `SWITCH_TAB` support.
+- **Rule Compliance (`agents.md`):** All 11 files strictly `<500` lines (largest is 490 lines). Zero bloatware, pure native React Native UI, dynamic global theme adherence (`useTheme()`). `npx tsc --noEmit` passed with 0 errors.
 
 ### [2026-09-05] - Fullscreen Landscape Mode for Linux Desktop (No Notification Bar)
 - **Feature:** Rotating to landscape while viewing the Linux Desktop tab automatically triggers full-screen mode, hiding the Android notification/status bar, eliminating top safe-area inset padding, hiding the bottom IDE navigation bar, and hiding the floating AI assistant menu.

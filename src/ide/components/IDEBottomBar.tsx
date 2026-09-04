@@ -4,8 +4,8 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
 
 interface IDEBottomBarProps {
-  bottomTab: "editor" | "terminal" | "browser" | "desktop";
-  onChangeTab: (tab: "editor" | "terminal" | "browser" | "desktop") => void;
+  bottomTab: "editor" | "terminal" | "browser" | "git" | "desktop";
+  onChangeTab: (tab: "editor" | "terminal" | "browser" | "git" | "desktop") => void;
   runningTaskCount?: number;
   compact?: boolean;
 }
@@ -85,6 +85,26 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
+          bottomTab === "git" && { backgroundColor: theme.bgTertiary },
+        ]}
+        onPress={() => onChangeTab("git")}
+      >
+        <Ionicons name="git-branch-outline" size={16} color={bottomTab === "git" ? theme.accent : theme.textMuted} />
+        <Text
+          style={[
+            styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
+            { color: theme.textMuted },
+            bottomTab === "git" && { color: theme.accent, fontWeight: "700" },
+          ]}
+        >
+          Git
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[
+          styles.bottomTabBtn,
           bottomTab === "desktop" && { backgroundColor: theme.bgTertiary },
         ]}
         onPress={() => onChangeTab("desktop")}
@@ -119,8 +139,8 @@ const styles = StyleSheet.create({
   bottomTabBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: 5,
+    paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 4,
   },
