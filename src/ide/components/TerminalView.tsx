@@ -112,12 +112,9 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
 
   const handleFocusTerminal = () => {
     setIsFocused(true);
-    if (isXterm) {
-      xtermRef.current?.focusTerminal();
-      return;
-    }
-    // Never blur a focused input: the old blur+refocus cycle opened a ~40ms
-    // window where soft-keyboard keystrokes went nowhere (dropped letters).
+    // The soft keyboard always lives on the RN catcher — in xterm mode too
+    // (xterm's textarea is disabled). Never blur a focused input: the old
+    // blur+refocus cycle opened a ~40ms window that ate keystrokes.
     if (inputRef.current?.isFocused()) return;
     setTimeout(() => {
       if (!inputRef.current?.isFocused()) inputRef.current?.focus();
@@ -145,19 +142,20 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     }
   };
 
-  // Drop-proof ingestion for the pipe shell. onChangeText events race our
-  // programmatic resets, coalesce rapid keystrokes, and rewrite text on
-  // autocorrect — so instead of assuming "one event = one new char after a
-  // sentinel", diff against the last observed native text: a length shrink
-  // means backspaces (clamped, so phantom deletes can't eat echo), the rest
-  // is genuinely new. Backspace stays handled here only (never onKeyPress).
-  const handlePipeInput = (text: string) => {
+  // Shared native-text differ: onChangeText races programmatic resets and
+  // coalesces strokes, so compare against the last observed text. Returns
+  // backspaced count + genuinely new tail.
+  const diffNativeText = (text: string): { removed: number; added: string } => {
     const prev = lastNativeRef.current;
     lastNativeRef.current = text;
     let i = 0;
     while (i < prev.length && i < text.length && prev[i] === text[i]) i++;
-    const removed = prev.length - i;
-    const added = text.slice(i);
+    return { removed: prev.length - i, added: text.slice(i) };
+  };
+  // Drop-proof ingestion for the pipe shell. Backspace stays handled here
+  // only (never onKeyPress).
+  const handlePipeInput = (text: string) => {
+    const { removed, added } = diffNativeText(text);
 
     let echo = currentInputRef.current;
     if (removed > 0) echo = echo.slice(0, Math.max(0, echo.length - removed));
@@ -199,17 +197,22 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     resetCatcher();
   };
 
+  // PTY mode: the soft keyboard lives on the RN catcher (xterm's textarea
+  // is disabled — its async composition handling drops fast Gboard input).
+  // Same diff ingestion, but bytes go raw to the pty: the line discipline
+  // echoes, so backspaces become DELs and newlines execute in the shell.
+  const handleXtermInput = (text: string) => {
+    const { removed, added } = diffNativeText(text);
+    if (removed > 0) {
+      sendInput("\x7f".repeat(Math.min(removed, 256)));
+    }
+    if (added) sendInput(added);
+    resetCatcher();
+  };
+
   const handleDirectInput = (text: string) => {
-    // PTY mode: the hidden catcher is never focused (xterm owns the
-    // keyboard); this is only a safety net routing bytes raw.
     if (isXterm) {
-      if (text === "") {
-        sendInput("\x7f");
-      } else {
-        const typed = text.startsWith(" ") ? text.slice(1) : text;
-        if (typed && typed !== " ") sendInput(typed);
-      }
-      setRawInputValue(" ");
+      handleXtermInput(text);
       return;
     }
     handlePipeInput(text);
@@ -319,6 +322,7 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
           background={theme.background}
           foreground={theme.foreground}
           cursor={theme.cursor}
+          onRequestKeyboard={handleFocusTerminal}
         />
       ) : (
       <ScrollView
@@ -379,14 +383,21 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
         onKeyPress={handleKeyPress}
         autoCapitalize="none"
         autoCorrect={false}
+        // visible-password forces third-party keyboards (SwiftKey/Gboard) to
+        // drop predictions + auto-capitalization, both of which corrupt shell
+        // input ("Vim" for "vim", mid-command rewrites).
+        autoComplete="off"
+        keyboardType="visible-password"
         spellCheck={false}
         multiline={false}
         blurOnSubmit={false}
         disableFullscreenUI={true}
         caretHidden={true}
-        keyboardType="default"
         returnKeyType="send"
-        onSubmitEditing={() => submitCurrentInput()}
+        onSubmitEditing={() => {
+          if (isXterm) sendInput("\r");
+          else submitCurrentInput();
+        }}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
       />

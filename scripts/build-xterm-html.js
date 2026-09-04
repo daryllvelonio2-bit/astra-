@@ -45,6 +45,16 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
   var fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(document.getElementById('terminal'));
+  // Soft-keyboard input is owned by the React Native hidden catcher (it
+  // ingests Gboard composition bursts reliably; xterm 5.3's textarea races
+  // and drops fast input). Disabling the helper textarea keeps it from
+  // stealing IME focus; hardware keydowns still reach a focused terminal.
+  try {
+    var ta = term.textarea;
+    if (ta) { ta.setAttribute('disabled', 'disabled'); ta.setAttribute('inputmode', 'none'); }
+  } catch (e) {}
+  var termEl = document.getElementById('terminal');
+  termEl.addEventListener('click', function () { post({ type: 'tap' }); });
   var post = function (m) { window.ReactNativeWebView.postMessage(JSON.stringify(m)); };
   var resizeTimer = null;
   var reportSize = function () {
@@ -73,8 +83,12 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
     try { post({ type: 'selection', text: term.getSelection() }); }
     catch (e) { post({ type: 'selection', text: '' }); }
   };
+  window.__astraSelectAll = function () { try { term.selectAll(); } catch (e) {} };
   reportSize();
   post({ type: 'ready' });
+  // Layout often settles after first paint (keyboard, flex): re-fit once so
+  // the kernel grid matches the true viewport, not a transient one.
+  setTimeout(reportSize, 800);
 })();
 </script>
 </body>

@@ -22,6 +22,23 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - Terminal Half-Screen + Wrap/Delete (WebView Flex, Fit Race)
+- **Symptoms (screenshot):** terminal filled only the top ~40% (white gap below), long lines wrapped early, backspace stuck at the wrap, SwiftKey capitalized `Vim` (also: Alpine ships `vi`, not `vim`).
+- **Root causes:** (1) RN WebView's wrapper View had no flex, so the grid measured a short viewport — shell inherited a too-small grid (early scroll + wrap/delete desync); (2) first fit raced pre-settle layout; (3) predictions/autocaps active despite flags.
+- **Fix (JS-only, no rebuild):** `containerStyle={{flex:1}}` on the WebView; glue re-fits 800ms after ready; catcher `keyboardType="visible-password"` + `autoComplete="off"` (kills suggestion bar + autocaps). User check: `stty size` should now match the visible grid; long-line backspace must clear fully.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, files <500 lines. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Fast Typing Still Dropped: xterm Textarea Bypassed
+- **Root cause:** in PTY mode keystrokes went through xterm.js 5.3's own hidden textarea, whose async composition handling (`compositionupdate`/`compositionend` + keydown-229 snapshots via `setTimeout 0`) straddles Gboard's rapid mutations — confirmed in `node_modules/xterm/lib/xterm.js` (`_finalizeComposition`/`_handleAnyTextareaChanges`). Upstream can't ingest fast swipe/keyboard bursts reliably.
+- **Fix (JS-only, no rebuild):** soft keyboard moved to the RN hidden catcher for both modes — xterm's textarea is `disabled`+`inputmode=none` (renders only; hardware keydowns still work), WebView taps report `{type:'tap'}` to raise the catcher, shared diff ingest in both paths (pipe: echo buffer; xterm: raw DELs + bytes to the pty). Gboard Enter in xterm sends CR; added `__astraSelectAll` for future copy. Simulated delivery: fast abc → exact, backspace → 1 DEL, autocorrect teh→the → DEL×2+he.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, files <500 lines. JS-only (bundle string included) — Metro reload required, no rebuild.
+
+### [2026-09-04] - Phase 2 PTY Shipped: Real Controlling Terminal (vim-ready)
+- **Native:** hand-rolled JNI forkpty (`cpp/pty_session.c`, no bionic pty.h — manual /dev/ptmx ioctls, Termux-style) + CMake wired into `linux-runner/build.gradle`; `PtyNative.kt` bridge; `PtySessionManager.kt` (reader thread, exit watcher, resize via TIOCSWINSZ+SIGWINCH, stop via `killTree`); `ProotSessionConfig.kt` extracted as single guest argv/env source (pipe manager refactored onto it); bridge: `startPtySession`, `resizeTerminalSession`, `onTerminalExit` event; read/write/history/stop route PTY-first.
+- **JS:** `scripts/build-xterm-html.js` generator → 296KB offline `xtermHtml.generated.ts` (xterm 5.3 + fit addon + css, token-colored at runtime); `XtermView.tsx` (WebView, base64 write queue, fit→native resize, selection copy, history replay); `terminalEncoding.ts`; `ptyConfig.ts` flag (`PTY_XTERM_ENABLED`, task tabs stay on legacy renderer); hook spawns PTY sessions; view routes all input raw in xterm mode (pty echoes, readline owns history/completion).
+- **Proof on device (`AUDUT20616012479`):** BUILD SUCCESSFUL, `libptysession.so` in APK with all 7 JNI symbols, `ptyOpen: master=179 child=7292`, `ps` shows `7292 136:0 libproot.so` = controlling terminal **/dev/pts/0**, no crashes across reinstall. Awaiting user interactive test (vim/nano/htop/tinker).
+- **Rule Compliance (`agent.md`):** `tsc` clean, all files <500 lines. NATIVE change — rebuilt + reinstalled + relaunched.
+
 ### [2026-09-04] - Terminal Dropped Keystrokes (Echo Ref, Diff Ingest, Focus Fix)
 - **Symptom:** typed letters sometimes never applied.
 - **Root causes (all in `TerminalView.tsx` hidden-catcher path):** (1) submit read echo from render-closure state — fast type+Enter lost the last char; (2) every extra-key press blurred+refocused the keyboard, opening a 40ms window that ate keystrokes; (3) `onChangeText` assumed one-event-one-char-after-sentinel, broken by coalesced keystrokes, unlanded resets, and autocorrect rewrites.

@@ -30,10 +30,12 @@ interface XtermViewProps {
   foreground: string;
   cursor: string;
   onRemoteResize?: (cols: number, rows: number) => void;
+  /** WebView tapped: the soft keyboard lives on the RN catcher — raise it. */
+  onRequestKeyboard?: () => void;
 }
 
 interface GlueMessage {
-  type: "ready" | "data" | "resize" | "selection";
+  type: "ready" | "data" | "resize" | "selection" | "tap";
   data?: string;
   cols?: number;
   rows?: number;
@@ -44,7 +46,7 @@ interface GlueMessage {
 const WRITE_SLICE = 65536;
 
 export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function XtermView(
-  { sessionId, fontSize, background, foreground, cursor, onRemoteResize },
+  { sessionId, fontSize, background, foreground, cursor, onRemoteResize, onRequestKeyboard },
   ref
 ) {
   const webRef = useRef<WebView>(null);
@@ -55,6 +57,8 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
   sessionRef.current = sessionId;
   const resizeRef = useRef(onRemoteResize);
   resizeRef.current = onRemoteResize;
+  const keyboardRef = useRef(onRequestKeyboard);
+  keyboardRef.current = onRequestKeyboard;
 
   const html = useMemo(
     () => buildXtermHtml({ background, foreground, cursor, fontSize: 13 }),
@@ -165,6 +169,8 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
     } else if (msg.type === "selection") {
       selResolveRef.current?.(msg.text || "");
       selResolveRef.current = null;
+    } else if (msg.type === "tap") {
+      keyboardRef.current?.();
     }
   };
 
@@ -173,6 +179,10 @@ export const XtermView = forwardRef<XtermViewHandle, XtermViewProps>(function Xt
       ref={webRef}
       source={{ html }}
       style={styles.web}
+      // The wrapper View defaults to wrap-content: without its own flex the
+      // WebView never fills the column, fit measures a short viewport, and
+      // the shell inherits a too-small grid (early scroll + wrap mismatch).
+      containerStyle={styles.webContainer}
       originWhitelist={["*"]}
       javaScriptEnabled
       domStorageEnabled={false}
@@ -190,5 +200,8 @@ const styles = StyleSheet.create({
   web: {
     flex: 1,
     backgroundColor: "transparent",
+  },
+  webContainer: {
+    flex: 1,
   },
 });
