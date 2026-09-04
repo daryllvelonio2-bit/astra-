@@ -15,6 +15,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include <android/log.h>
@@ -123,6 +124,20 @@ Java_expo_modules_linuxrunner_PtyNative_ptyOpen(JNIEnv *env, jclass clazz,
         if (slave < 0) _exit(127);
         ioctl(slave, TIOCSCTTY, 0);
         ioctl(slave, TIOCSWINSZ, &ws);
+        // Sane baseline discipline: no XON/XOFF flow control (an accidental
+        // Ctrl+S would otherwise freeze all output with no visible cause on
+        // a mobile keyboard), DEL erases, Ctrl+C interrupts. The guest line
+        // editor may adjust bits further for its own use.
+        {
+            struct termios tio;
+            if (tcgetattr(slave, &tio) == 0) {
+                tio.c_iflag &= (unsigned int)~(IXON | IXOFF);
+                tio.c_lflag |= (ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE);
+                tio.c_cc[VERASE] = 127;
+                tio.c_cc[VINTR] = 3;
+                tcsetattr(slave, TCSANOW, &tio);
+            }
+        }
         dup2(slave, 0);
         dup2(slave, 1);
         dup2(slave, 2);

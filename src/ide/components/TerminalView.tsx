@@ -110,6 +110,17 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     return () => clearTimeout(timer);
   }, [isReady, isTaskTab, isXterm, windowWidth, windowHeight, fontSize, activeSessionId, sendInput]);
 
+  // Stray CTRL/ALT taps must not poison later typing (e.g. armed CTRL + "s"
+  // = XOFF freeze). Disarm after a few idle seconds.
+  useEffect(() => {
+    if (!isCtrlActive && !isAltActive) return;
+    const t = setTimeout(() => {
+      setIsCtrlActive(false);
+      setIsAltActive(false);
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [isCtrlActive, isAltActive, setIsCtrlActive, setIsAltActive]);
+
   // Stable identity so the memoized XtermView doesn't re-render with us.
   const handleFocusTerminal = useCallback(() => {
     setIsFocused(true);
@@ -424,6 +435,8 @@ const styles = StyleSheet.create({
   },
   viewport: {
     flex: 1,
+    minHeight: 0,
+    minWidth: 0,
   },
   viewportInner: {
     flex: 1,

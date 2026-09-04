@@ -289,7 +289,9 @@ export LC_ALL=C.UTF-8
 export CI=1
 export EXPO_NO_TELEMETRY=1
 export EXPO_USE_LOCAL_CLI=1
-export PS1='\e[1;32mastra\e[0m:\e[1;34m\w\e[0m# '
+# Plain prompt on purpose: busybox ash counts raw PS1 bytes for cursor math,
+# so any ANSI color breaks erase/redraw in its line editor (keep colors out).
+export PS1='astra:\w# '
 export NODE_OPTIONS="--dns-result-order=ipv4first"
 alias ll='ls -la'
 alias l='ls -lh'

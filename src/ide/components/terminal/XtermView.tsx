@@ -241,9 +241,13 @@ export const XtermView = memo(
 const styles = StyleSheet.create({
   web: {
     flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     backgroundColor: "transparent",
   },
   webContainer: {
     flex: 1,
+    minHeight: 0,
+    minWidth: 0,
   },
 });

@@ -100,7 +100,9 @@ object ProotSessionConfig {
             "LANG" to "C.UTF-8",
             "LC_ALL" to "C.UTF-8",
             "ENV" to "/root/.profile",
-            "PS1" to "\u001b[1;32mastra\u001b[0m:\u001b[1;34m\\w\u001b[0m# ",
+            // Plain prompt on purpose: busybox ash counts raw PS1 bytes for
+            // cursor math, so any ANSI color breaks erase/redraw.
+            "PS1" to "astra:\\w# ",
             "PROOT_TMP_DIR" to tmpDir,
             "PROOT_LOADER" to loaderPath,
             "PROOT_LOADER_32" to loader32Path,

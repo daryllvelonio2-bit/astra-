@@ -22,6 +22,17 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - Stuck Terminal: XOFF Freeze + Squeezed Keys (Termios, Layout)
+- **Confirmed by user:** sent command never runs + dead input = output freeze; ExtraKeysBar hidden behind keyboard when open.
+- **Root causes:** (1) armed CTRL + typed `s` emits XOFF; slave had IXON on, so all output froze (typed chars invisible with echo off) — no visible cause, persists until Ctrl+Q; (2) WebView content minimum squeezed the keys row out of the shrunk keyboard layout (Yoga content-minimum); (3) stray CTRL/ALT taps stayed armed indefinitely.
+- **Fix:** slave termios at spawn (`-IXON -IXOFF`, ECHO* on, VERASE=DEL, VINTR=^C) — NATIVE, background rebuild started, will verify `-ixon` via run-as stty; `minHeight/minWidth: 0` on web/container/viewport so the keys row survives the keyboard; CTRL/ALT auto-disarm after 6s idle. Rescue if frozen now: restart the session (↻).
+- **Rule Compliance (`agent.md`):** `tsc` clean. NATIVE change — rebuilding.
+
+### [2026-09-04] - Undeletable Letters: Colored PS1 Breaks ash Cursor Math
+- **Evidence:** `stty` shows `-icanon -echo` (ash lineedit owns editing); logcat proves DELs arrive 1:1; screen never erases. ash counts raw PS1 bytes for cursor math — our 22 invisible ANSI bytes desync it, so erase repaints land off-screen.
+- **Fix:** plain `astra:\w# ` prompt — live override appended to on-device `.profile` (backup `.profile.bak.astra`, new sessions pick it up) + permanent template/env change (`EnvironmentManager.kt`, `ProotSessionConfig.kt`). Colors sacrificed for correct editing (bash+`\[ \]` later if wanted). NOTE: any agent command rewrites `.profile` until the rebuild lands — erase regressing after agent use means reprovision, not a new bug.
+- **Rule Compliance (`agent.md`):** NATIVE change — background rebuild started. Open threads: "send stuck" repro details, ExtraKeysBar visibility with keyboard open.
+
 ### [2026-09-04] - 2-Col Persists After Restart (Fit Before Layout, No Reflow)
 - **Evidence (fresh-restart logcat):** `ptyOpen 24x80` then `[xterm-grid] cols=20 rows=10 vw=0 vh=0` — page loads pre-layout, `fit()` slammed xterm to min 2 cols; old guard withheld only the kernel post, not the xterm shrink, and grown soft-wraps never rejoined. Kernel/posts were otherwise sane (61×55, sends 1:1).
 - **Fix (JS-only):** `reportSize` waits for a real parent (≥100px, 40 retries) before ever fitting — xterm's 80×24 default matches `ptyOpen` 80, so both layers stay coherent from first paint; kernel clamp ≥20×10 kept as backstop; duplicate posts suppressed (each post = SIGWINCH + redraw).
