@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,8 +10,18 @@ import {
 import { useTerminalSession } from "./terminal/useTerminalSession";
 import { AnsiRenderer } from "./terminal/AnsiRenderer";
 import { TerminalHeader } from "./terminal/TerminalHeader";
+import { ExtraKeysBar } from "./terminal/ExtraKeysBar";
+import { XtermView, XtermViewHandle } from "./terminal/XtermView";
+import { PTY_XTERM_ENABLED } from "./terminal/ptyConfig";
 import { ThemePickerModal } from "./terminal/ThemePickerModal";
+import {
+  estimateTerminalGrid,
+  buildViewportExport,
+  sameGrid,
+  TerminalGrid,
+} from "./terminal/terminalGeometry";
 import { useTheme } from "../../theme/themeContext";
+import { useOrientation } from "../../theme/useOrientation";
 
 interface TerminalViewProps {
   workspaceId?: string;
@@ -32,6 +42,14 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     sendInput,
     runCommandDirectly,
     navigateHistory,
+    copyActiveOutput,
+    copyXtermSelection,
+    pasteFromClipboard,
+    isCtrlActive,
+    isAltActive,
+    setIsCtrlActive,
+    setIsAltActive,
+    isReady,
     zoomIn,
     zoomOut,
     addNewSession,
@@ -40,6 +58,12 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     clearActiveSession,
   } = useTerminalSession({ workspaceId });
   const { theme: appTheme } = useTheme();
+  const { width: windowWidth, height: windowHeight } = useOrientation();
+  const isTaskTab = activeSessionId.startsWith("task-");
+  // PTY mode: real terminal (xterm.js) for shell sessions; the RN scrollback
+  // renderer stays for task tabs and as the flag-off fallback.
+  const isXterm = PTY_XTERM_ENABLED && !isTaskTab;
+  const xtermRef = useRef<XtermViewHandle>(null);
 
   const [rawInputValue, setRawInputValue] = useState<string>(" ");
   const [currentInput, setCurrentInput] = useState<string>("");
@@ -47,12 +71,56 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   const [showThemeModal, setShowThemeModal] = useState<boolean>(false);
   const inputRef = useRef<TextInput>(null);
   const lastTapRef = useRef<number>(0);
+  const viewportSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  const sentGridRef = useRef<Record<string, TerminalGrid>>({});
+  // Synchronous mirror of the echo buffer. State lags a render behind, so
+  // submit paths must read the ref — otherwise a fast type+Enter drops the
+  // last keystroke (it hadn't reached state yet when Enter fired).
+  const currentInputRef = useRef<string>("");
+  const setEchoInput = (next: string) => {
+    currentInputRef.current = next;
+    setCurrentInput(next);
+  };
+  // Last native catcher text actually observed. The catcher holds a rotating
+  // blank sentinel so every programmatic reset changes the value (defeats
+  // React's same-value bailout and forces the keyboard to converge).
+  const SENTINELS = [" ", " \u200B"];
+  const sentinelIdxRef = useRef<number>(0);
+  const lastNativeRef = useRef<string>(" ");
+  const resetCatcher = () => {
+    sentinelIdxRef.current = (sentinelIdxRef.current + 1) % SENTINELS.length;
+    const s = SENTINELS[sentinelIdxRef.current];
+    lastNativeRef.current = s;
+    setRawInputValue(s);
+  };
+
+  // Publish COLUMNS/LINES once the native session is ready and whenever the
+  // viewport grid changes (rotation, font zoom). Skipped in PTY mode: the
+  // kernel window size (TIOCSWINSZ from xterm's fit) is authoritative there.
+  useEffect(() => {
+    if (!isReady || isTaskTab || isXterm) return;
+    const { w, h } = viewportSizeRef.current;
+    if (w <= 0 || h <= 0) return;
+    const grid = estimateTerminalGrid(w, h, fontSize);
+    if (sameGrid(sentGridRef.current[activeSessionId] || null, grid)) return;
+    sentGridRef.current[activeSessionId] = grid;
+    const timer = setTimeout(() => {
+      sendInput(buildViewportExport(grid));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [isReady, isTaskTab, isXterm, windowWidth, windowHeight, fontSize, activeSessionId, sendInput]);
 
   const handleFocusTerminal = () => {
     setIsFocused(true);
-    inputRef.current?.blur();
+    if (isXterm) {
+      xtermRef.current?.focusTerminal();
+      return;
+    }
+    // Never blur a focused input: the old blur+refocus cycle opened a ~40ms
+    // window where soft-keyboard keystrokes went nowhere (dropped letters).
+    if (inputRef.current?.isFocused()) return;
     setTimeout(() => {
-      inputRef.current?.focus();
+      if (!inputRef.current?.isFocused()) inputRef.current?.focus();
     }, 40);
   };
 
@@ -68,8 +136,8 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   };
 
   const submitCurrentInput = () => {
-    const cmd = currentInput;
-    setCurrentInput("");
+    const cmd = currentInputRef.current;
+    setEchoInput("");
     if (cmd.trim()) {
       runCommandDirectly(cmd);
     } else {
@@ -77,24 +145,121 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     }
   };
 
-  const handleDirectInput = (text: string) => {
-    if (text === "") {
-      setCurrentInput((prev) => prev.slice(0, -1));
-    } else if (text.length > 1) {
-      const typed = text.startsWith(" ") ? text.slice(1) : text;
-      if (typed.includes("\n") || typed.includes("\r")) {
+  // Drop-proof ingestion for the pipe shell. onChangeText events race our
+  // programmatic resets, coalesce rapid keystrokes, and rewrite text on
+  // autocorrect — so instead of assuming "one event = one new char after a
+  // sentinel", diff against the last observed native text: a length shrink
+  // means backspaces (clamped, so phantom deletes can't eat echo), the rest
+  // is genuinely new. Backspace stays handled here only (never onKeyPress).
+  const handlePipeInput = (text: string) => {
+    const prev = lastNativeRef.current;
+    lastNativeRef.current = text;
+    let i = 0;
+    while (i < prev.length && i < text.length && prev[i] === text[i]) i++;
+    const removed = prev.length - i;
+    const added = text.slice(i);
+
+    let echo = currentInputRef.current;
+    if (removed > 0) echo = echo.slice(0, Math.max(0, echo.length - removed));
+
+    if (added.includes("\n") || added.includes("\r")) {
+      // Multi-line paste: submit each complete line, keep the tail echoing.
+      const parts = added.split(/[\n\r]+/);
+      const trailingPartial = /[\n\r]$/.test(added) ? "" : (parts.pop() as string);
+      setIsCtrlActive(false);
+      setIsAltActive(false);
+      for (const seg of parts) {
+        setEchoInput(echo + seg);
         submitCurrentInput();
-      } else {
-        setCurrentInput((prev) => prev + typed);
+        echo = "";
       }
-    } else if (text !== " ") {
-      setCurrentInput((prev) => prev + text);
+      setEchoInput(echo + trailingPartial);
+      resetCatcher();
+      return;
     }
-    setRawInputValue(" ");
+
+    if (added.length === 1 && (isCtrlActive || isAltActive)) {
+      // Pending Ctrl/Alt toggle turns the next key into a control sequence.
+      if (removed > 0) setEchoInput(echo);
+      if (isCtrlActive && added.toUpperCase() === "C") setEchoInput("");
+      sendInput(added);
+      resetCatcher();
+      return;
+    }
+
+    if (added || removed > 0) {
+      if (added) {
+        setIsCtrlActive(false);
+        setIsAltActive(false);
+        setEchoInput(echo + added);
+      } else {
+        setEchoInput(echo);
+      }
+    }
+    resetCatcher();
+  };
+
+  const handleDirectInput = (text: string) => {
+    // PTY mode: the hidden catcher is never focused (xterm owns the
+    // keyboard); this is only a safety net routing bytes raw.
+    if (isXterm) {
+      if (text === "") {
+        sendInput("\x7f");
+      } else {
+        const typed = text.startsWith(" ") ? text.slice(1) : text;
+        if (typed && typed !== " ") sendInput(typed);
+      }
+      setRawInputValue(" ");
+      return;
+    }
+    handlePipeInput(text);
+  };
+
+  // Termux-style extra-keys routing. Pipe mode: printables join the local
+  // echo buffer (no tty echo on pipes), control sequences go raw. PTY mode:
+  // everything goes raw — the pty line discipline echoes and readline owns
+  // history/completion, exactly like Termux.
+  const handleExtraPrintable = (ch: string) => {
+    if (isXterm || isCtrlActive || isAltActive) {
+      sendInput(ch);
+    } else {
+      setEchoInput(currentInputRef.current + ch);
+    }
+    handleFocusTerminal();
+  };
+
+  const handleExtraRaw = (data: string) => {
+    if (!isXterm && data === "\t" && currentInputRef.current) {
+      // Flush the echoed line first so Tab completes the real text.
+      setIsCtrlActive(false);
+      setIsAltActive(false);
+      sendInput(`${currentInputRef.current}\t`);
+      return;
+    }
+    setIsCtrlActive(false);
+    setIsAltActive(false);
+    sendInput(data);
+    handleFocusTerminal();
+  };
+
+  const handleExtraEnter = () => {
+    if (isXterm) {
+      sendInput("\r");
+      handleFocusTerminal();
+    } else {
+      submitCurrentInput();
+    }
   };
 
   const handleKeyPress = (e: any) => {
     const key = e.nativeEvent.key;
+    if (isXterm) {
+      // xterm owns the keyboard; the catcher is a safety net only.
+      if (key === "Enter") sendInput("\r");
+      else if (key === "ArrowUp") sendInput("\x1b[A");
+      else if (key === "ArrowDown") sendInput("\x1b[B");
+      return;
+    }
     // Note: Backspace is handled solely in handleDirectInput (onChangeText "")
     // to avoid double-deleting on Android soft keyboards which fire both events.
     if (key === "Enter") {
@@ -102,12 +267,12 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     } else if (key === "ArrowUp") {
       const prevCmd = navigateHistory("up");
       if (prevCmd !== null) {
-        setCurrentInput(prevCmd);
+        setEchoInput(prevCmd);
       }
     } else if (key === "ArrowDown") {
       const nextCmd = navigateHistory("down");
       if (nextCmd !== null) {
-        setCurrentInput(nextCmd);
+        setEchoInput(nextCmd);
       }
     }
   };
@@ -123,20 +288,50 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
         onCloseSession={closeSession}
         onRestartSession={restartActiveSession}
         onClearSession={() => {
-          setCurrentInput("");
+          if (isXterm) {
+            sendInput("clear\n");
+            return;
+          }
+          setEchoInput("");
           clearActiveSession();
         }}
         onOpenThemePicker={() => setShowThemeModal(true)}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
+        onCopyOutput={
+          isXterm
+            ? () =>
+                copyXtermSelection(() =>
+                  xtermRef.current?.requestSelection().then((t) => t || "") ||
+                  Promise.resolve("")
+                )
+            : copyActiveOutput
+        }
+        onPasteClipboard={pasteFromClipboard}
       />
 
-      {/* Terminal Viewport */}
+      {/* Terminal Viewport: xterm grid for PTY sessions, scrollback otherwise */}
+      {isXterm ? (
+        <XtermView
+          ref={xtermRef}
+          sessionId={activeSessionId}
+          fontSize={fontSize}
+          background={theme.background}
+          foreground={theme.foreground}
+          cursor={theme.cursor}
+        />
+      ) : (
       <ScrollView
         ref={scrollRef}
         style={[styles.viewport, { backgroundColor: theme.background }]}
         contentContainerStyle={styles.viewportContent}
         keyboardShouldPersistTaps="handled"
+        onLayout={(e) => {
+          viewportSizeRef.current = {
+            w: e.nativeEvent.layout.width,
+            h: e.nativeEvent.layout.height,
+          };
+        }}
       >
         <Pressable onPress={handleDoubleTap} style={styles.viewportInner}>
           <AnsiRenderer
@@ -147,6 +342,19 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
           />
         </Pressable>
       </ScrollView>
+      )}
+
+      {/* Termux-style extra keys row (hidden for read-only task tabs) */}
+      <ExtraKeysBar
+        ctrlActive={isCtrlActive}
+        altActive={isAltActive}
+        onToggleCtrl={() => setIsCtrlActive((v) => !v)}
+        onToggleAlt={() => setIsAltActive((v) => !v)}
+        onPrintable={handleExtraPrintable}
+        onRaw={handleExtraRaw}
+        onEnter={handleExtraEnter}
+        disabled={isTaskTab}
+      />
 
       {/* Toast Feedback Notification */}
       {toastMessage && (

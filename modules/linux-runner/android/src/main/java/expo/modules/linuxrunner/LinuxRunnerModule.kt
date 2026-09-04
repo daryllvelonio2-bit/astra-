@@ -17,11 +17,47 @@ class LinuxRunnerModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LinuxRunner")
 
-        Events("onTerminalData", "onCommandOutput")
+        Events("onTerminalData", "onCommandOutput", "onTerminalExit", "onProvisioningProgress")
+
+        OnCreate {
+            ToolchainProvisioner.onProgressUpdate = { status ->
+                try {
+                    sendEvent("onProvisioningProgress", mapOf(
+                        "isProvisioning" to status.isProvisioning,
+                        "stageName" to status.stageName,
+                        "stageIndex" to status.stageIndex,
+                        "totalStages" to status.totalStages,
+                        "attempt" to status.attempt,
+                        "maxRetries" to status.maxRetries,
+                        "currentPackage" to status.currentPackage,
+                        "lastOutput" to status.lastOutput,
+                        "isComplete" to status.isComplete,
+                        "hasError" to status.hasError,
+                        "errorMessage" to (status.errorMessage ?: "")
+                    ))
+                } catch (_: Exception) {}
+            }
+        }
 
         Function("isEnvironmentReady") {
             val context = appContext.reactContext ?: return@Function false
             return@Function EnvironmentManager.isEnvironmentReady(context)
+        }
+
+        Function("getProvisioningStatus") {
+            val context = appContext.reactContext ?: return@Function emptyMap<String, Any?>()
+            return@Function ToolchainProvisioner.getStatus(context)
+        }
+
+        Function("cancelProvisioning") {
+            return@Function ToolchainProvisioner.cancel()
+        }
+
+        AsyncFunction("startProvisioning") {
+            val context = appContext.reactContext ?: return@AsyncFunction false
+            val alpineDir = java.io.File(context.filesDir, "alpine")
+            ToolchainProvisioner.forceRestart(context, alpineDir)
+            return@AsyncFunction true
         }
 
         AsyncFunction("initializeEnvironment") {
@@ -81,12 +117,34 @@ class LinuxRunnerModule : Module() {
             }
         }
 
+        // PTY-backed session: the guest gets a real controlling terminal
+        // (isatty true, job control, window size) instead of pipes.
+        AsyncFunction("startPtySession") { sessionId: String, workspaceId: String?, rows: Int, cols: Int ->
+            val context = appContext.reactContext ?: return@AsyncFunction
+            EnvironmentManager.initialize(context)
+            PtySessionManager.startSession(context, sessionId, workspaceId, rows, cols,
+                onData = { data ->
+                    sendEvent("onTerminalData", mapOf("sessionId" to sessionId, "data" to data))
+                },
+                onExit = { code ->
+                    sendEvent("onTerminalExit", mapOf("sessionId" to sessionId, "exitCode" to code))
+                })
+        }
+
         Function("writeTerminalInput") { sessionId: String, data: String ->
-            TerminalSessionManager.writeInput(sessionId, data)
+            // PTY sessions first; pipe sessions otherwise. Same event stream.
+            if (!PtySessionManager.writeInput(sessionId, data)) {
+                TerminalSessionManager.writeInput(sessionId, data)
+            }
         }
 
         Function("getSessionHistory") { sessionId: String ->
-            return@Function TerminalSessionManager.getSessionHistory(sessionId)
+            val ptyHist = PtySessionManager.getSessionHistory(sessionId)
+            return@Function ptyHist.ifEmpty { TerminalSessionManager.getSessionHistory(sessionId) }
+        }
+
+        Function("resizeTerminalSession") { sessionId: String, cols: Int, rows: Int ->
+            return@Function PtySessionManager.resizeSession(sessionId, cols, rows)
         }
 
         Function("listActiveSessions") {
@@ -94,6 +152,7 @@ class LinuxRunnerModule : Module() {
         }
 
         Function("stopTerminalSession") { sessionId: String ->
+            PtySessionManager.stopSession(sessionId)
             TerminalSessionManager.stopSession(sessionId)
         }
 

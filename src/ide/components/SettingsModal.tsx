@@ -19,6 +19,7 @@ import { SettingsTabBar, SettingsTabId } from "./settings/SettingsTabBar";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { AgentSection } from "./settings/AgentSection";
 import { ModelSection } from "./settings/ModelSection";
+import { EnvironmentSection } from "./settings/EnvironmentSection";
 
 interface SettingsModalProps {
   visible: boolean;
@@ -148,6 +149,9 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
             )}
             {activeTab === "model" && (
               <ModelSection selectedModel={selectedModel} onSelectModel={setSelectedModel} theme={theme} />
+            )}
+            {activeTab === "environment" && (
+              <EnvironmentSection theme={theme} />
             )}
           </ScrollView>
         </View>

@@ -104,93 +104,14 @@ object TerminalSessionManager {
 
         stopSession(sessionId)
 
-        val filesDir = context.filesDir
-        val prootPath = EnvironmentManager.getProotPath(context)
-        val alpineDir = File(filesDir, "alpine").absolutePath
-        val workspacesDir = File(filesDir, "workspaces").absolutePath
-        val workspaceDir = File(filesDir, "workspace").absolutePath
-        val tmpDir = File(filesDir, "tmp").absolutePath
+        // Guest argv/env shared with the PTY sessions (ProotSessionConfig).
+        val cfg = ProotSessionConfig.build(context, workspaceId)
 
-        if (!File(filesDir, "workspaces").exists()) File(filesDir, "workspaces").mkdirs()
-        if (!File(filesDir, "workspace").exists()) File(filesDir, "workspace").mkdirs()
-        if (!File(filesDir, "tmp").exists()) File(filesDir, "tmp").mkdirs()
-
-        val targetDir = if (!workspaceId.isNullOrBlank()) {
-            val clean = workspaceId.removePrefix("file://").trimEnd('/')
-            if (clean.startsWith("/")) {
-                val dir = File(clean)
-                if (!dir.exists()) dir.mkdirs()
-                clean
-            } else {
-                val specificWs = File(filesDir, "workspaces/$workspaceId")
-                if (!specificWs.exists()) specificWs.mkdirs()
-                "/workspaces/$workspaceId"
-            }
-        } else {
-            "/workspace"
-        }
-
-        val nativeLibDir = context.applicationInfo.nativeLibraryDir
-        val loaderPath = "$nativeLibDir/libproot-loader.so"
-        val loader32Path = "$nativeLibDir/libproot-loader32.so"
-
-        val pbArgs = mutableListOf(
-            prootPath,
-            "--link2symlink",
-            "-r", alpineDir,
-            "-0",
-            "-w", targetDir,
-            "-b", "/dev",
-            "-b", "/proc",
-            "-b", "/sys",
-            "-b", "$workspacesDir:/workspaces",
-            "-b", "$workspaceDir:/workspace",
-            "-b", "$tmpDir:/tmp"
-        )
-        if (File("/sdcard").exists()) {
-            pbArgs.add("-b")
-            pbArgs.add("/sdcard")
-        }
-        if (File("/storage").exists()) {
-            pbArgs.add("-b")
-            pbArgs.add("/storage")
-        }
-        if (targetDir.startsWith("/") &&
-            !targetDir.startsWith("/workspaces") &&
-            !targetDir.startsWith("/workspace") &&
-            !targetDir.startsWith("/sdcard") &&
-            !targetDir.startsWith("/storage") &&
-            File(targetDir).exists()) {
-            pbArgs.add("-b")
-            pbArgs.add("$targetDir:$targetDir")
-        }
-        pbArgs.add("/bin/sh")
-        pbArgs.add("-l")
-        // -i keeps the shell interactive on pipe stdin so it reprints the
-        // dynamic PS1 (astra:<cwd>#) after every command instead of going silent.
-        pbArgs.add("-i")
-
-        val pb = ProcessBuilder(pbArgs)
-        pb.directory(File(alpineDir))
+        val pb = ProcessBuilder(cfg.argv)
+        pb.directory(File(cfg.workDir))
         pb.redirectErrorStream(true)
         val env = pb.environment()
-        env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin:/root/.npm-global/bin"
-        env["NODE_PATH"] = "/usr/local/share/astra-cli/node_modules:/usr/local/lib/node_modules:/usr/lib/node_modules"
-        env["HOME"] = "/root"
-        env["USER"] = "root"
-        env["SHELL"] = "/bin/bash"
-        env["CI"] = "1"
-        env["EXPO_NO_TELEMETRY"] = "1"
-        env["EXPO_USE_LOCAL_CLI"] = "1"
-        env["TERM"] = "xterm-256color"
-        env["LANG"] = "C.UTF-8"
-        env["LC_ALL"] = "C.UTF-8"
-        env["ENV"] = "/root/.profile"
-        env["PS1"] = "\u001b[1;32mastra\u001b[0m:\u001b[1;34m\\w\u001b[0m# "
-        env["PROOT_TMP_DIR"] = tmpDir
-        env["PROOT_LOADER"] = loaderPath
-        env["PROOT_LOADER_32"] = loader32Path
-        env["LD_LIBRARY_PATH"] = nativeLibDir
+        env.putAll(cfg.env)
         env.remove("LD_PRELOAD")
 
         try {

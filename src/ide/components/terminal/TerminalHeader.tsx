@@ -15,6 +15,8 @@ interface TerminalHeaderProps {
   onOpenThemePicker: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onCopyOutput?: () => void;
+  onPasteClipboard?: () => void;
 }
 
 export function TerminalHeader({
@@ -28,6 +30,8 @@ export function TerminalHeader({
   onOpenThemePicker,
   onZoomIn,
   onZoomOut,
+  onCopyOutput,
+  onPasteClipboard,
 }: TerminalHeaderProps) {
   const { theme: appTheme } = useTheme();
   return (
@@ -122,6 +126,28 @@ export function TerminalHeader({
         >
           <Ionicons name="color-palette-outline" size={14} color={appTheme.textMuted} />
         </TouchableOpacity>
+
+        {/* Copy Output */}
+        {onCopyOutput && (
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={onCopyOutput}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="copy-outline" size={14} color={appTheme.textMuted} />
+          </TouchableOpacity>
+        )}
+
+        {/* Paste Clipboard */}
+        {onPasteClipboard && (
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={onPasteClipboard}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="clipboard-outline" size={14} color={appTheme.textMuted} />
+          </TouchableOpacity>
+        )}
 
         {/* Restart Active */}
         <TouchableOpacity

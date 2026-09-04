@@ -4,6 +4,35 @@
 - **Current Phase:** Production Release Build Verified
 - **Last Updated:** September 4, 2026
 
+### [2026-09-04] - Linux Dependencies Auto Downloader Progress in Settings
+- **Problem:** The embedded Alpine Linux developer toolchain auto-downloader (`ToolchainProvisioner.kt`) ran completely in the dark on a detached background daemon thread. Users had zero visibility into which stage was executing, which packages were actively downloading, whether APK locks or timeouts occurred, or how to safely cancel/retry.
+- **Native Android & Bridge Layer (`modules/linux-runner`):**
+  - Updated `ToolchainProvisioner.kt` (339 lines): Added thread-safe `ProvisioningStatus` reporting with `onProgressUpdate` callback, stage indexing (1 to 4), per-attempt and timeout tracking, active package name extraction from `apk` output, status querying `getStatus(context)`, and on-demand restart `forceRestart(context, alpineDir)`.
+  - Updated `LinuxRunnerModule.kt` (279 lines): Registered `onProvisioningProgress` event with `OnCreate` listener bridge, and exposed native functions `getProvisioningStatus()`, `cancelProvisioning()`, and `startProvisioning()`.
+  - Refactored `modules/linux-runner/src`: Extracted file system helpers into `fileSystem.ts` (217 lines) and created typed `provisioning.ts` (123 lines), dropping `index.ts` from 559 lines to 360 lines to strictly respect the 500-line ceiling per `agent.md`.
+  - Resolved Gradle NDK mismatch by syncing `modules/linux-runner/android/build.gradle` to `rootProject.ext.ndkVersion` (27.1.12297006) and fixing member scope of `toEnvArray()` in `ProotSessionConfig.kt`.
+- **Settings UI & Real-Time Monitoring (`src/ide/components/settings`):**
+  - Added 5th **"Linux"** tab to `SettingsTabBar.tsx` (`SettingsTabId = "appearance" | "keys" | "agent" | "model" | "environment"`).
+  - Created modular `EnvironmentSection.tsx` (370 lines), `EnvironmentStageCard.tsx` (191 lines), and `environmentStages.ts` (47 lines):
+    - **Live Status Card**: Active stage indicator, dynamic progress bar, percentage gauge, active downloading package badge, and architecture diagnostic.
+    - **Four Provisioning Stages**: Stage 1 (CoreUtilities & Node.js v20), Stage 2 (Python 3 & PHP 8.3 + Composer), Stage 3 (C/C++ Build Tools & Headers), Stage 4 (Astra CLI Rebuild for PTY support). Includes expandable package chips for inspecting all 41 packages.
+    - **Live APK Console**: Real-time streaming log drawer of Alpine package manager output.
+    - **Process Tree Controls**: "Stop / Cancel Provisioning" button (wired to `ProcessTreeKiller`) and "Re-download / Re-verify" trigger.
+    - **Binary Health Diagnostics**: Real-time status badges for Node.js, Python 3, PHP 8.3, and Git.
+  - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
+- **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
+
+### [2026-09-04] - Terminal Dropped Keystrokes (Echo Ref, Diff Ingest, Focus Fix)
+- **Symptom:** typed letters sometimes never applied.
+- **Root causes (all in `TerminalView.tsx` hidden-catcher path):** (1) submit read echo from render-closure state — fast type+Enter lost the last char; (2) every extra-key press blurred+refocused the keyboard, opening a 40ms window that ate keystrokes; (3) `onChangeText` assumed one-event-one-char-after-sentinel, broken by coalesced keystrokes, unlanded resets, and autocorrect rewrites.
+- **Fix (JS-only, no rebuild):** synchronous echo mirror (`setEchoInput`, submit reads the ref); focus only when unfocused (blur cycle removed); diff-based ingestion (common-prefix vs last observed native text, removals clamped so phantom deletes can't eat echo, multi-line paste submits line-by-line keeping the tail); rotating blank sentinel (`" "`/`" \u200B"`) so every reset forces keyboard convergence. Headless-verified: fast typing, repeat chars, backspace, phantom delete, autocorrect, suggestion replacement all resolve.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, TerminalView under 500 lines. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Termux-Style Terminal Phase 1 (Extra Keys, Ctrl/Alt, Geometry)
+- **Shipped (JS-only, no rebuild):** new `ExtraKeysBar.tsx` (ESC/TAB/CTRL/ALT/⏎/arrows + 30 symbols, scrollable, long-press repeat on arrows, Ctrl/Alt sticky highlight, themed tokens only); `terminalGeometry.ts` (viewport→cols/rows estimate, `export COLUMNS/LINES` builder, headlessly verified: 360px@12.5 → 45x34, degenerate → 80x24 fallback).
+- **Wiring:** `TerminalView` routes printables to local echo (no tty echo on pipes) and control sequences raw to shell; Tab flushes the echoed line + `\t`; soft-keyboard chars honor pending Ctrl/Alt toggles (Ctrl+C clears the line + sends `\x03`); header gained copy/paste buttons (previously dead hook code); COLUMNS/LINES auto-published on session ready + rotation/font change (debounced, per-session, Phase 2 swaps body for native resize); paste normalized (`\r\n`→`\n`, NULs stripped); Backspace single-path rule untouched; bar disabled on read-only task tabs.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines (View 328, Header 228, hook 441). JS-only — Metro reload required, no rebuild. Next: Phase 2 real PTY (forkpty/Termux libs + xterm.js renderer decision).
+
 ### [2026-09-04] - Kill Hang Root Cause: Single Shared AsyncFunction Queue
 - **Smoking gun (logcat):** `[killTask] pattern artisan serve start` then silence; `killPidTree(25631) start` then silence. Zero `ProcessTreeKiller` entry logs — native bodies never started.
 - **Root cause (expo-modules-core source):** ALL `AsyncFunction`s across all modules dispatch on ONE `HandlerThread("expo.modules.AsyncFunctionQueue")`. The agent's multi-minute `executeCommandStream` holds that thread, so kill's native calls queued behind the turn forever. Same reason everything stalls while the agent codes.

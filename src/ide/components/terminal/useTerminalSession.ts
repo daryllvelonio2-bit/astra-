@@ -3,12 +3,14 @@ import { ScrollView } from "react-native";
 import { Clipboard } from "../../services/clipboardService";
 import {
   startTerminalSession,
+  startPtySession,
   writeTerminalInput,
   stopTerminalSession,
   getSessionHistory,
   addTerminalDataListener,
   initializeEnvironment,
 } from "../../../../modules/linux-runner/src";
+import { PTY_XTERM_ENABLED } from "./ptyConfig";
 import { TERMINAL_THEMES, TerminalTheme } from "./terminalThemes";
 import { runningTasksService, RunningTask } from "../../../ai/services/runningTasksService";
 import { useTheme } from "../../../theme/themeContext";
@@ -30,6 +32,16 @@ interface UseTerminalSessionProps {
 }
 
 const getBanner = (workspaceId?: string) => getBannerTitle(workspaceId);
+
+// Shell spawn honoring the Phase 2 flag: PTY sessions get a real controlling
+// terminal, legacy sessions keep the pipe shell + RN scrollback renderer.
+async function startShellSession(sessionId: string, workspaceId?: string) {
+  if (PTY_XTERM_ENABLED) {
+    await startPtySession(sessionId, workspaceId);
+  } else {
+    await startTerminalSession(sessionId, workspaceId);
+  }
+}
 
 const formatTaskTabName = (cmd: string) => {
   const clean = (cmd || "Task")
@@ -102,7 +114,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       await initializeEnvironment();
       if (!mounted) return;
       setIsReady(true);
-      await startTerminalSession("session-1", workspaceId);
+      await startShellSession("session-1", workspaceId);
       const hist = await getSessionHistory("session-1");
       if (hist && mounted) {
         foldNativeHistory("session-1", hist);
@@ -294,8 +306,25 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     }
   }, [sessionOutputs, activeSessionId, showToast]);
 
+  // xterm path: copy the WebView selection (plain text, no ANSI to strip).
+  const copyXtermSelection = useCallback(
+    async (getSelection: () => Promise<string>) => {
+      const text = await getSelection();
+      if (text) {
+        await Clipboard.setStringAsync(text);
+        showToast("Selection copied to clipboard");
+      } else {
+        showToast("Nothing selected");
+      }
+    },
+    [showToast]
+  );
+
   const pasteFromClipboard = useCallback(async () => {
-    const text = await Clipboard.getStringAsync();
+    const raw = await Clipboard.getStringAsync();
+    // Normalize line endings and drop NULs so multi-line pastes execute
+    // predictably line-by-line (Termux-style) instead of choking the shell.
+    const text = raw.replace(/\r\n?/g, "\n").replace(/\0/g, "");
     if (text) {
       writeTerminalInput(activeSessionId, text);
       showToast("Pasted from clipboard");
@@ -323,7 +352,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     seenNativeLen.current[newId] = 0;
     setActiveSessionId(newId);
 
-    await startTerminalSession(newId, workspaceId);
+    await startShellSession(newId, workspaceId);
   }, [sessions, workspaceId]);
 
   const closeSession = useCallback(
@@ -381,7 +410,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     await stopTerminalSession(activeSessionId);
     setSessionOutputs((prev) => ({ ...prev, [activeSessionId]: getBanner(workspaceId) }));
     seenNativeLen.current[activeSessionId] = 0;
-    await startTerminalSession(activeSessionId, workspaceId);
+    await startShellSession(activeSessionId, workspaceId);
     showToast("Session restarted");
   }, [activeSessionId, workspaceId, showToast]);
 
@@ -426,6 +455,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     runCommandDirectly,
     navigateHistory,
     copyActiveOutput,
+    copyXtermSelection,
     pasteFromClipboard,
     zoomIn,
     zoomOut,
