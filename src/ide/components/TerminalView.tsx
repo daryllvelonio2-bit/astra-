@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
+  Keyboard,
 } from "react-native";
 import { useTerminalSession } from "./terminal/useTerminalSession";
 import { AnsiRenderer } from "./terminal/AnsiRenderer";
@@ -68,6 +69,32 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
 
   const [rawInputValue, setRawInputValue] = useState<string>(" ");
   const [currentInput, setCurrentInput] = useState<string>("");
+  // Soft-keyboard height for pinning the shortcut row above it. The manifest
+  // says adjustResize, but edge-to-edge leaves the layout unshrunk, so the
+  // keys row ends up behind the keyboard — pad manually instead.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Full (keyboard-closed) window height. If the OS did shrink the layout,
+  // only pad the difference so we never double-shift.
+  const closedHeightRef = useRef(windowHeight);
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+  useEffect(() => {
+    if (keyboardHeight === 0 && windowHeight > 0) {
+      closedHeightRef.current = Math.max(closedHeightRef.current, windowHeight);
+    }
+  }, [keyboardHeight, windowHeight]);
+  const osReclaimed = Math.max(0, closedHeightRef.current - windowHeight);
+  const keyboardPad = Math.max(0, keyboardHeight - osReclaimed);
   const [isFocused, setIsFocused] = useState<boolean>(true);
   const [showThemeModal, setShowThemeModal] = useState<boolean>(false);
   const inputRef = useRef<TextInput>(null);
@@ -305,7 +332,7 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: appTheme.bgPrimary }]}>
+    <View style={[styles.container, { backgroundColor: appTheme.bgPrimary, paddingBottom: keyboardPad }]}>
       {/* Terminal Header Bar */}
       <TerminalHeader
         sessions={sessions}

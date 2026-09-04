@@ -66,10 +66,10 @@ export function ExtraKeysBar({
 
   const keys: KeyDef[] = [
     { label: "ESC", a11y: "Escape", run: () => onRaw("\x1b") },
+    { label: "ENTER", a11y: "Enter", run: onEnter },
     { label: "TAB", a11y: "Tab", run: () => onRaw("\t") },
     { label: "CTRL", a11y: "Toggle control", run: onToggleCtrl, active: ctrlActive },
     { label: "ALT", a11y: "Toggle alt", run: onToggleAlt, active: altActive },
-    { label: "⏎", a11y: "Enter", run: onEnter },
     { label: "↑", a11y: "Arrow up", run: () => onRaw("\x1b[A"), repeat: true },
     { label: "↓", a11y: "Arrow down", run: () => onRaw("\x1b[B"), repeat: true },
     { label: "←", a11y: "Arrow left", run: () => onRaw("\x1b[D"), repeat: true },

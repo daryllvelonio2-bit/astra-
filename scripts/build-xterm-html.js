@@ -61,16 +61,19 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
   var lastC = 0, lastR = 0;
   var reportSize = function () {
     try {
-      // Never measure before layout exists: fitting a zero-size parent
-      // slams xterm to a 2-col grid whose soft wraps never rejoin on grow.
-      // xterm's 80x24 default matches the kernel's ptyOpen size, so waiting
-      // keeps both layers coherent from the first paint.
+      // Never fit or report before layout exists: fitting a zero-size parent
+      // slams xterm to a 2-col grid whose soft wraps never rejoin on grow —
+      // that stale wrap is exactly the "frozen UI" look. Retry quietly; the
+      // kernel keeps its ptyOpen size until the first real measurement, and
+      // the JS side replays history once the true grid lands.
       var parent = term.element && term.element.parentElement;
       var pw = parent ? parent.clientWidth : 0;
       var ph = parent ? parent.clientHeight : 0;
-      if ((pw < 100 || ph < 100) && fitAttempts < 40) {
-        fitAttempts++;
-        setTimeout(reportSize, 100);
+      if (pw < 100 || ph < 100) {
+        if (fitAttempts < 200) {
+          fitAttempts++;
+          setTimeout(reportSize, 100);
+        }
         return;
       }
       fitAttempts = 0;

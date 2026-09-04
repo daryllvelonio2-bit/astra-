@@ -63,6 +63,13 @@ export const XtermView = memo(
   const pageLoadedRef = useRef(false);
   const queueRef = useRef<string[]>([]);
   const selResolveRef = useRef<((text: string) => void) | null>(null);
+  // Grid tracking for the blind-paint heal below. lastFit persists across
+  // sessions (the page keeps its grid over a reset); paintFit records what
+  // the grid was when this session's content last painted: undefined = not
+  // yet painted, null = painted with no measurement (the 2-col wedge case).
+  const lastFitRef = useRef<{ c: number; r: number } | null>(null);
+  const paintFitRef = useRef<{ c: number; r: number } | null | undefined>(undefined);
+  const healedRef = useRef(false);
   const sessionRef = useRef(sessionId);
   sessionRef.current = sessionId;
   const resizeRef = useRef(onRemoteResize);
@@ -134,6 +141,7 @@ export const XtermView = memo(
       // Banner first: native history never contains it (legacy renderer kept
       // its own copy), and reset wiped the grid so it paints exactly once.
       injectWrite(utf8ToB64(bannerRef.current + (hist || "")));
+      paintFitRef.current = lastFitRef.current ? { ...lastFitRef.current } : null;
       webRef.current?.injectJavaScript("window.__astraFit&&window.__astraFit();true;");
     } catch (_) {}
   };
@@ -143,6 +151,8 @@ export const XtermView = memo(
   useEffect(() => {
     readyRef.current = false;
     queueRef.current = [];
+    healedRef.current = false;
+    paintFitRef.current = undefined;
 
     const dataSub = addTerminalDataListener(sessionId, (chunk: string) => {
       if (!readyRef.current) return;
@@ -217,6 +227,16 @@ export const XtermView = memo(
       }
       resizeTerminalSession(sessionRef.current, msg.cols, msg.rows);
       resizeRef.current?.(msg.cols, msg.rows);
+      lastFitRef.current = { c: msg.cols, r: msg.rows };
+      // Blind-paint heal: this session's content painted before any real
+      // measurement (wedged wraps that never rejoin). Now that the true grid
+      // is known, replay once so the paint matches it. Skipped when the
+      // paint already had a fit — normal resizes (keyboard, rotation) don't
+      // need it and must not flicker.
+      if (!healedRef.current && paintFitRef.current === null) {
+        healedRef.current = true;
+        replaySession(sessionRef.current);
+      }
     } else if (msg.type === "selection") {
       selResolveRef.current?.(msg.text || "");
       selResolveRef.current = null;

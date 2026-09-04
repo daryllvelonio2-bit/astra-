@@ -22,6 +22,30 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - ENTER Key Moved Beside ESC
+- User request: Enter was buried mid-row (⏎ after ALT). Moved to position 2 as a labeled `ENTER` key right after `ESC` — no scrolling needed.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - "Frozen UI" Root Cause: Blind Fit Wedge (Fixed)
+- **Proof:** screenshot showed prompt wrapped 1-char-per-line (2-col grid); logcat showed `cols=20 rows=10 vw=0 vh=0` — fit ran on an unlaid-out WebView, wedged the buffer at 2 cols, and xterm never reflows already-wrapped rows, so the stale wrap looked like a dead UI. Latent race (slow starts hit it), not a true regression.
+- **Fix:** (1) glue `reportSize` never fits/reports on <100px dims — retries quietly up to 20s instead of falling through to a garbage fit after 40 tries; regenerated `xtermHtml.generated.ts` (298KB). (2) `XtermView` blind-paint heal: if a session paints before any measurement, it replays once when the true grid lands (normal resizes untouched — no flicker).
+- **Instant relief (no reload):** switch terminal tabs away and back — replay repaints at the now-good grid. Reload for the permanent fix.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Shortcut Row Pinned Above Keyboard
+- **Symptom:** soft keyboard slides over the ESC/TAB/CTRL/ALT row (manifest says `adjustResize`, but edge-to-edge leaves the layout unshrunk).
+- **Fix (JS-only):** `TerminalView` tracks real keyboard height via keyboard events and pads the container by exactly what the OS didn't already reclaim (adaptive — no double-shift if the OS ever does resize). Keys row becomes the last visible element above the keyboard, Termux-style; xterm auto-refits to the smaller viewport via the existing resize path.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Termux Parity Check (Verified On-Device)
+- Listed guest `/usr/bin` on the phone: full 4-stage toolchain present — bash, git, node/npm/npx, python3.12/pip, php83/composer, gcc/g++/make, vim/vi, curl/wget, ssh/scp/sftp, sqlite3, rg, tree, plus `astra` wrapper.
+- So: yes, Termux-class CLI dev works (apk/node/pip/composer/gcc/php-artisan). Deltas vs Termux: Alpine-musl under PRoot (fake root, app-lifetime processes, no Termux:API/GUI, occasional proot syscall quirks).
+
+### [2026-09-04] - Alpine Roaming Verified (No Code Needed)
+- User confirmed on-device: `cd /` works, full guest listing, prompt follows, writes + persistence fine. The sandbox only sets the starting dir; nothing ever fenced the Alpine guest.
+- Storage map: guest-private (`/`, `/root`, `/tmp`, …) persists across launches, wiped on reinstall; phone-shared: `/workspaces`, `/workspace`, `/sdcard`, `/storage`. Android system areas unreachable by OS design.
+- No changes made. Terminal workstream stays closed.
+
 ### [2026-09-04] - Terminal Declared Healthy by User
 - User confirmed `[b9]` live on fresh tab and reports no remaining bugs after the immediate-flush fix. Terminal workstream closed; timing probes already removed.
 
