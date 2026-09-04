@@ -12,6 +12,7 @@ import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
 import { GitFileStatus } from "./types";
+import { GitFileItem } from "./GitFileItem";
 
 interface GitChangesListProps {
   files: GitFileStatus[];
@@ -22,6 +23,7 @@ interface GitChangesListProps {
   onToggleStageFile: (file: GitFileStatus) => void;
   onToggleStageAll: (stageAll: boolean) => void;
   onCommit: (summary: string, description: string) => void;
+  onCommitAndPush?: (summary: string, description: string) => void;
 }
 
 export function GitChangesList({
@@ -33,6 +35,7 @@ export function GitChangesList({
   onToggleStageFile,
   onToggleStageAll,
   onCommit,
+  onCommitAndPush,
 }: GitChangesListProps) {
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
@@ -42,41 +45,28 @@ export function GitChangesList({
 
   const stagedCount = files.filter((f) => f.staged).length;
   const allStaged = files.length > 0 && stagedCount === files.length;
-  const canCommit = summary.trim().length > 0 && stagedCount > 0 && !committing;
+  const canCommit = summary.trim().length > 0 && files.length > 0 && !committing;
 
   const handleCommitPress = () => {
     if (!canCommit) return;
+    if (stagedCount === 0) {
+      onToggleStageAll(true);
+    }
     onCommit(summary.trim(), description.trim());
     setSummary("");
     setDescription("");
   };
 
-  const renderStatusBadge = (status: GitFileStatus["status"]) => {
-    let text = "M";
-    let bg = `${theme.accentGold}25`;
-    let color = theme.accentGold;
-
-    if (status === "added" || status === "untracked") {
-      text = status === "untracked" ? "U" : "A";
-      bg = `${theme.accentGreen}25`;
-      color = theme.accentGreen;
-    } else if (status === "deleted") {
-      text = "D";
-      bg = `${theme.accentRed}25`;
-      color = theme.accentRed;
-    } else if (status === "renamed") {
-      text = "R";
-      bg = `${theme.accentPurple}25`;
-      color = theme.accentPurple;
+  const handleCommitAndPushPress = () => {
+    if (!canCommit) return;
+    if (stagedCount === 0) {
+      onToggleStageAll(true);
     }
-
-    return (
-      <View style={[styles.statusBadge, isLandscape && styles.statusBadgeLandscape, { backgroundColor: bg }]}>
-        <Text style={[styles.statusBadgeText, isLandscape && styles.statusBadgeTextLandscape, { color }]}>
-          {text}
-        </Text>
-      </View>
-    );
+    if (onCommitAndPush) {
+      onCommitAndPush(summary.trim(), description.trim());
+      setSummary("");
+      setDescription("");
+    }
   };
 
   return (
@@ -117,58 +107,15 @@ export function GitChangesList({
         keyExtractor={(item) => item.path}
         style={styles.fileList}
         contentContainerStyle={files.length === 0 ? styles.emptyContainer : styles.fileListContent}
-        renderItem={({ item }) => {
-          const isSelected = selectedFile?.path === item.path;
-          return (
-            <TouchableOpacity
-              style={[
-                styles.fileRow,
-                isLandscape && styles.fileRowLandscape,
-                { borderBottomColor: theme.border },
-                isSelected && { backgroundColor: `${theme.accent}18` },
-              ]}
-              onPress={() => onSelectFile(item)}
-              activeOpacity={0.7}
-            >
-              <TouchableOpacity
-                style={styles.checkboxTouch}
-                onPress={() => onToggleStageFile(item)}
-              >
-                <Ionicons
-                  name={item.staged ? "checkbox" : "square-outline"}
-                  size={isLandscape ? 15 : 17}
-                  color={item.staged ? theme.accent : theme.textMuted}
-                />
-              </TouchableOpacity>
-              <View style={styles.filePathCol}>
-                <Text
-                  style={[
-                    styles.fileName,
-                    isLandscape && styles.fileNameLandscape,
-                    { color: theme.textPrimary },
-                    isSelected && { color: theme.accent, fontWeight: "700" },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item.filename}
-                </Text>
-                {item.path !== item.filename && (
-                  <Text
-                    style={[
-                      styles.filePath,
-                      isLandscape && styles.filePathLandscape,
-                      { color: theme.textMuted },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.path}
-                  </Text>
-                )}
-              </View>
-              {renderStatusBadge(item.status)}
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item }) => (
+          <GitFileItem
+            file={item}
+            isSelected={selectedFile?.path === item.path}
+            isLandscape={isLandscape}
+            onSelect={() => onSelectFile(item)}
+            onToggleStage={() => onToggleStageFile(item)}
+          />
+        )}
         ListEmptyComponent={
           <View style={styles.emptyView}>
             <Octicons name="check-circle" size={isLandscape ? 26 : 32} color={theme.accentGreen} />
@@ -182,7 +129,7 @@ export function GitChangesList({
         }
       />
 
-      {/* GitHub Desktop Fixed Commit Box at Bottom (Compact in Landscape) */}
+      {/* Commit Box */}
       <View
         style={[
           styles.commitBox,
@@ -239,32 +186,68 @@ export function GitChangesList({
           />
         )}
 
-        <TouchableOpacity
-          style={[
-            styles.commitBtn,
-            isLandscape && styles.commitBtnLandscape,
-            { backgroundColor: canCommit ? theme.accent : theme.bgTertiary, borderColor: theme.border },
-          ]}
-          onPress={handleCommitPress}
-          disabled={!canCommit}
-          activeOpacity={0.8}
-        >
-          {committing ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text
+        <View style={styles.commitBtnRow}>
+          <TouchableOpacity
+            style={[
+              styles.commitBtn,
+              isLandscape && styles.commitBtnLandscape,
+              { backgroundColor: canCommit ? theme.accent : theme.bgTertiary, borderColor: theme.border },
+            ]}
+            onPress={handleCommitPress}
+            disabled={!canCommit}
+            activeOpacity={0.8}
+          >
+            {committing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text
+                style={[
+                  styles.commitBtnText,
+                  isLandscape && styles.commitBtnTextLandscape,
+                  { color: canCommit ? "#fff" : theme.textMuted },
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                Commit to {currentBranch} ({stagedCount || files.length})
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {onCommitAndPush && (
+            <TouchableOpacity
               style={[
-                styles.commitBtnText,
-                isLandscape && styles.commitBtnTextLandscape,
-                { color: canCommit ? "#fff" : theme.textMuted },
+                styles.commitPushBtn,
+                isLandscape && styles.commitPushBtnLandscape,
+                {
+                  backgroundColor: canCommit ? `${theme.accent}20` : theme.bgTertiary,
+                  borderColor: canCommit ? theme.accent : theme.border,
+                },
               ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
+              onPress={handleCommitAndPushPress}
+              disabled={!canCommit}
+              activeOpacity={0.8}
+              accessibilityLabel="Commit and Push"
             >
-              Commit to {currentBranch} ({stagedCount})
-            </Text>
+              <Octicons
+                name="upload"
+                size={isLandscape ? 12 : 14}
+                color={canCommit ? theme.accent : theme.textMuted}
+              />
+              {!isLandscape && (
+                <Text
+                  style={[
+                    styles.commitPushText,
+                    { color: canCommit ? theme.accent : theme.textMuted },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Push
+                </Text>
+              )}
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -303,60 +286,6 @@ const styles = StyleSheet.create({
   },
   fileListContent: {
     paddingBottom: 4,
-  },
-  fileRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-  },
-  fileRowLandscape: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    gap: 8,
-  },
-  checkboxTouch: {
-    padding: 2,
-  },
-  filePathCol: {
-    flex: 1,
-  },
-  fileName: {
-    fontSize: 12.5,
-    fontWeight: "500",
-  },
-  fileNameLandscape: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  filePath: {
-    fontSize: 10,
-    marginTop: 1,
-  },
-  filePathLandscape: {
-    fontSize: 9.5,
-    marginTop: 0.5,
-  },
-  statusBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusBadgeLandscape: {
-    width: 17,
-    height: 17,
-    borderRadius: 3,
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  statusBadgeTextLandscape: {
-    fontSize: 9.5,
   },
   emptyContainer: {
     flexGrow: 1,
@@ -443,12 +372,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 4,
   },
+  commitBtnRow: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
   commitBtn: {
+    flex: 1,
     height: 36,
     borderRadius: 6,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 6,
   },
   commitBtnLandscape: {
     height: 30,
@@ -461,6 +397,26 @@ const styles = StyleSheet.create({
   },
   commitBtnTextLandscape: {
     fontSize: 10.5,
+    fontWeight: "700",
+  },
+  commitPushBtn: {
+    height: 36,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  commitPushBtnLandscape: {
+    height: 30,
+    width: 32,
+    paddingHorizontal: 0,
+    borderRadius: 4,
+  },
+  commitPushText: {
+    fontSize: 11.5,
     fontWeight: "700",
   },
 });

@@ -1,0 +1,165 @@
+import React from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../../../theme/themeContext";
+import { GitFileStatus } from "./types";
+
+interface GitFileItemProps {
+  file: GitFileStatus;
+  isSelected: boolean;
+  isLandscape: boolean;
+  onSelect: () => void;
+  onToggleStage: () => void;
+}
+
+export function GitFileItem({
+  file,
+  isSelected,
+  isLandscape,
+  onSelect,
+  onToggleStage,
+}: GitFileItemProps) {
+  const { theme } = useTheme();
+
+  const getStatusDetails = (status: GitFileStatus["status"]) => {
+    switch (status) {
+      case "modified":
+        return { text: "M", color: theme.accentGold, bg: `${theme.accentGold}18` };
+      case "added":
+        return { text: "A", color: theme.accentGreen, bg: `${theme.accentGreen}18` };
+      case "deleted":
+        return { text: "D", color: theme.accentRed, bg: `${theme.accentRed}18` };
+      case "untracked":
+        return { text: "U", color: theme.accentGreen, bg: `${theme.accentGreen}18` };
+      case "renamed":
+        return { text: "R", color: theme.accent, bg: `${theme.accent}18` };
+      default:
+        return { text: "M", color: theme.textMuted, bg: `${theme.textMuted}18` };
+    }
+  };
+
+  const badge = getStatusDetails(file.status);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.fileRow,
+        isLandscape && styles.fileRowLandscape,
+        { borderBottomColor: theme.border },
+        isSelected && { backgroundColor: `${theme.accent}18` },
+      ]}
+      onPress={onSelect}
+      activeOpacity={0.7}
+    >
+      <TouchableOpacity
+        style={styles.checkboxTouch}
+        onPress={onToggleStage}
+      >
+        <Ionicons
+          name={file.staged ? "checkbox" : "square-outline"}
+          size={isLandscape ? 15 : 17}
+          color={file.staged ? theme.accent : theme.textMuted}
+        />
+      </TouchableOpacity>
+      <View style={styles.filePathCol}>
+        <Text
+          style={[
+            styles.fileName,
+            isLandscape && styles.fileNameLandscape,
+            { color: theme.textPrimary },
+            isSelected && { color: theme.accent, fontWeight: "700" },
+          ]}
+          numberOfLines={1}
+        >
+          {file.filename}
+        </Text>
+        {file.path !== file.filename && (
+          <Text
+            style={[
+              styles.filePath,
+              isLandscape && styles.filePathLandscape,
+              { color: theme.textMuted },
+            ]}
+            numberOfLines={1}
+          >
+            {file.path}
+          </Text>
+        )}
+      </View>
+      <View
+        style={[
+          styles.statusBadge,
+          isLandscape && styles.statusBadgeLandscape,
+          { backgroundColor: badge.bg },
+        ]}
+      >
+        <Text
+          style={[
+            styles.statusBadgeText,
+            isLandscape && styles.statusBadgeTextLandscape,
+            { color: badge.color },
+          ]}
+        >
+          {badge.text}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  fileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+  },
+  fileRowLandscape: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    gap: 6,
+  },
+  checkboxTouch: {
+    padding: 2,
+  },
+  filePathCol: {
+    flex: 1,
+  },
+  fileName: {
+    fontSize: 12.5,
+    fontWeight: "500",
+  },
+  fileNameLandscape: {
+    fontSize: 11.5,
+    fontWeight: "600",
+  },
+  filePath: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  filePathLandscape: {
+    fontSize: 9,
+    marginTop: 0.5,
+  },
+  statusBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusBadgeLandscape: {
+    width: 17,
+    height: 17,
+    borderRadius: 3,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  statusBadgeTextLandscape: {
+    fontSize: 9.5,
+  },
+});

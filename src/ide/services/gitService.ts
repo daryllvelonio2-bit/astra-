@@ -354,10 +354,20 @@ export async function pullGitRemote(
 }
 
 export async function pushGitRemote(
-  workspaceId?: string
+  workspaceId?: string,
+  branchName?: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const res = await executeCommand("git push", workspaceId);
+    let res = await executeCommand("git push", workspaceId);
+    if (res.exitCode === 0) {
+      return {
+        success: true,
+        message: res.stdout || "Pushed commits to remote",
+      };
+    }
+    // If push failed due to missing upstream tracking, retry with --set-upstream
+    const branch = branchName || "main";
+    res = await executeCommand(`git push -u origin "${branch}"`, workspaceId);
     return {
       success: res.exitCode === 0,
       message: res.stdout || (res.exitCode === 0 ? "Pushed commits to remote" : "Push failed"),
@@ -423,8 +433,12 @@ export async function generateSshKey(email?: string): Promise<{ success: boolean
 export async function getGitRemoteUrl(workspaceId?: string): Promise<string | null> {
   try {
     const res = await executeCommand("git remote get-url origin", workspaceId);
+    if (res.exitCode !== 0) return null;
     const url = (res.stdout || "").trim();
-    return url || null;
+    if (!url || url.toLowerCase().startsWith("error") || url.toLowerCase().startsWith("fatal")) {
+      return null;
+    }
+    return url;
   } catch (_) {
     return null;
   }
@@ -433,15 +447,35 @@ export async function getGitRemoteUrl(workspaceId?: string): Promise<string | nu
 export async function setGitRemoteUrl(
   workspaceId: string | undefined,
   url: string
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const hasOrigin = await getGitRemoteUrl(workspaceId);
-    const cmd = hasOrigin
-      ? `git remote set-url origin "${url.trim()}"`
-      : `git remote add origin "${url.trim()}"`;
+    const cleanUrl = url.trim();
+    if (!cleanUrl) {
+      const removeRes = await executeCommand("git remote remove origin", workspaceId);
+      return {
+        success: removeRes.exitCode === 0,
+        error: removeRes.exitCode === 0 ? undefined : removeRes.stdout,
+      };
+    }
+
+    // Remove existing origin (if any) and add the new one
+    const cmd = `(git remote remove origin 2>/dev/null || true) && git remote add origin "${cleanUrl}"`;
     const res = await executeCommand(cmd, workspaceId);
-    return res.exitCode === 0;
-  } catch (_) {
-    return false;
+    if (res.exitCode === 0) {
+      return { success: true };
+    }
+
+    // Fallback: try set-url if origin already exists
+    const setRes = await executeCommand(`git remote set-url origin "${cleanUrl}"`, workspaceId);
+    if (setRes.exitCode === 0) {
+      return { success: true };
+    }
+
+    return {
+      success: false,
+      error: res.stdout || setRes.stdout || "Failed to set remote URL",
+    };
+  } catch (e: any) {
+    return { success: false, error: e?.message || "Failed to set remote URL" };
   }
 }

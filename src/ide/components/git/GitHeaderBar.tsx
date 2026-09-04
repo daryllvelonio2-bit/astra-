@@ -10,10 +10,12 @@ interface GitHeaderBarProps {
   status: GitRepoStatus | null;
   loading: boolean;
   syncing: boolean;
+  remoteUrl?: string | null;
   onSelectBranch: () => void;
   onSync: () => void;
   onRefresh: () => void;
   onOpenCredentials: () => void;
+  onOpenRemoteModal?: () => void;
   onInitRepo?: () => void;
 }
 
@@ -22,10 +24,12 @@ export function GitHeaderBar({
   status,
   loading,
   syncing,
+  remoteUrl,
   onSelectBranch,
   onSync,
   onRefresh,
   onOpenCredentials,
+  onOpenRemoteModal,
   onInitRepo,
 }: GitHeaderBarProps) {
   const { theme } = useTheme();
@@ -33,13 +37,15 @@ export function GitHeaderBar({
 
   const getSyncLabel = () => {
     if (syncing) return "Syncing…";
+    if (!remoteUrl) return isLandscape ? "Publish" : "Publish repo";
     if (!status) return "Fetch origin";
-    if (status.behind > 0) return `Pull origin (${status.behind})`;
-    if (status.ahead > 0) return `Push origin (${status.ahead})`;
+    if (status.behind > 0) return `Pull (${status.behind})`;
+    if (status.ahead > 0) return `Push (${status.ahead})`;
     return "Fetch origin";
   };
 
   const getSyncIcon = () => {
+    if (!remoteUrl) return "cloud-upload";
     if (!status) return "sync";
     if (status.behind > 0) return "arrow-down";
     if (status.ahead > 0) return "arrow-up";
@@ -87,17 +93,17 @@ export function GitHeaderBar({
             <Ionicons name="chevron-down" size={isLandscape ? 10 : 12} color={theme.textMuted} />
           </TouchableOpacity>
 
-          {/* Sync (Fetch / Push / Pull) Action Button */}
+          {/* Sync (Fetch / Push / Pull / Publish) Action Button */}
           <TouchableOpacity
             style={[
               styles.syncBtn,
               isLandscape && styles.syncBtnLandscape,
               {
-                backgroundColor: status.ahead > 0 || status.behind > 0 ? theme.accent : theme.bgTertiary,
+                backgroundColor: !remoteUrl || status.ahead > 0 || status.behind > 0 ? theme.accent : theme.bgTertiary,
                 borderColor: theme.border,
               },
             ]}
-            onPress={onSync}
+            onPress={!remoteUrl && onOpenRemoteModal ? onOpenRemoteModal : onSync}
             disabled={syncing}
             activeOpacity={0.8}
           >
@@ -107,14 +113,14 @@ export function GitHeaderBar({
               <Octicons
                 name={getSyncIcon() as any}
                 size={isLandscape ? 10 : 12}
-                color={status.ahead > 0 || status.behind > 0 ? "#fff" : theme.textSecondary}
+                color={!remoteUrl || status.ahead > 0 || status.behind > 0 ? "#fff" : theme.textSecondary}
               />
             )}
             <Text
               style={[
                 styles.syncText,
                 isLandscape && styles.syncTextLandscape,
-                { color: status.ahead > 0 || status.behind > 0 ? "#fff" : theme.textSecondary },
+                { color: !remoteUrl || status.ahead > 0 || status.behind > 0 ? "#fff" : theme.textSecondary },
               ]}
             >
               {getSyncLabel()}
@@ -136,6 +142,15 @@ export function GitHeaderBar({
 
       {/* Right Utility Buttons */}
       <View style={styles.rightActions}>
+        {onOpenRemoteModal && (
+          <TouchableOpacity
+            style={[styles.iconBtn, isLandscape && styles.iconBtnLandscape]}
+            onPress={onOpenRemoteModal}
+            accessibilityLabel="Repository Remote"
+          >
+            <Octicons name="globe" size={isLandscape ? 12 : 14} color={remoteUrl ? theme.accent : theme.textSecondary} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.iconBtn, isLandscape && styles.iconBtnLandscape]}
           onPress={onOpenCredentials}

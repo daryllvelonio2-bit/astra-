@@ -32,6 +32,8 @@ import {
   pullGitRemote,
   pushGitRemote,
   initGitRepo,
+  getGitRemoteUrl,
+  setGitRemoteUrl,
 } from "../../services/gitService";
 import { GitHeaderBar } from "./GitHeaderBar";
 import { GitChangesList } from "./GitChangesList";
@@ -39,6 +41,7 @@ import { GitHistoryList } from "./GitHistoryList";
 import { GitDiffViewer } from "./GitDiffViewer";
 import { GitBranchModal } from "./GitBranchModal";
 import { GitCredentialsModal } from "./GitCredentialsModal";
+import { GitRemoteModal } from "./GitRemoteModal";
 
 interface GitHubDesktopViewProps {
   workspaceId?: string;
@@ -58,6 +61,7 @@ export function GitHubDesktopView({
   const [status, setStatus] = useState<GitRepoStatus | null>(null);
   const [commits, setCommits] = useState<GitCommit[]>([]);
   const [branches, setBranches] = useState<GitBranch[]>([]);
+  const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<GitFileStatus | null>(null);
   const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(null);
@@ -70,6 +74,7 @@ export function GitHubDesktopView({
 
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [showRemoteModal, setShowRemoteModal] = useState(false);
   const [portraitShowDetail, setPortraitShowDetail] = useState(false);
 
   const refreshGitState = useCallback(async () => {
@@ -82,6 +87,7 @@ export function GitHubDesktopView({
     if (newStatus.isRepo) {
       getGitCommitHistory(workspaceId).then(setCommits);
       getGitBranches(workspaceId).then(setBranches);
+      getGitRemoteUrl(workspaceId).then(setRemoteUrl);
     }
   }, [workspaceId, visible]);
 
@@ -143,14 +149,63 @@ export function GitHubDesktopView({
     }
   };
 
+  const handleCommitAndPush = async (summary: string, description: string) => {
+    setCommitting(true);
+    const res = await commitGitChanges(workspaceId, summary, description);
+    if (!res.success) {
+      setCommitting(false);
+      Alert.alert("Commit Failed", res.error || "Could not commit changes.");
+      return;
+    }
+    setSelectedFile(null);
+    setDiffText("");
+    if (!isLandscape) setPortraitShowDetail(false);
+
+    if (!remoteUrl) {
+      setCommitting(false);
+      refreshGitState();
+      Alert.alert(
+        "Committed Locally",
+        "Your commit was created, but no remote repository is configured. Would you like to publish this repository now?",
+        [
+          { text: "Later", style: "cancel" },
+          { text: "Publish to GitHub", onPress: () => setShowRemoteModal(true) },
+        ]
+      );
+      return;
+    }
+
+    const pushRes = await pushGitRemote(workspaceId, status?.currentBranch);
+    setCommitting(false);
+    refreshGitState();
+    if (pushRes.success) {
+      Alert.alert("Success", "Committed and pushed changes to remote!");
+    } else {
+      Alert.alert("Pushed with notice", pushRes.message);
+    }
+  };
+
+  const handleSaveRemote = async (url: string): Promise<{ success: boolean; error?: string }> => {
+    const res = await setGitRemoteUrl(workspaceId, url);
+    if (res.success) {
+      setRemoteUrl(url.trim() ? url.trim() : null);
+      refreshGitState();
+    }
+    return res;
+  };
+
   const handleSync = async () => {
     if (!status?.isRepo) return;
+    if (!remoteUrl) {
+      setShowRemoteModal(true);
+      return;
+    }
     setSyncing(true);
     if (status.behind > 0) {
       const res = await pullGitRemote(workspaceId);
       Alert.alert("Pull", res.message);
     } else if (status.ahead > 0) {
-      const res = await pushGitRemote(workspaceId);
+      const res = await pushGitRemote(workspaceId, status.currentBranch);
       Alert.alert("Push", res.message);
     } else {
       const res = await fetchGitRemote(workspaceId);
@@ -197,10 +252,12 @@ export function GitHubDesktopView({
         status={status}
         loading={loadingStatus}
         syncing={syncing}
+        remoteUrl={remoteUrl}
         onSelectBranch={() => setShowBranchModal(true)}
         onSync={handleSync}
         onRefresh={refreshGitState}
         onOpenCredentials={() => setShowCredentialsModal(true)}
+        onOpenRemoteModal={() => setShowRemoteModal(true)}
         onInitRepo={handleInitRepo}
       />
 
@@ -274,6 +331,7 @@ export function GitHubDesktopView({
                 onToggleStageFile={handleToggleStageFile}
                 onToggleStageAll={handleToggleStageAll}
                 onCommit={handleCommit}
+                onCommitAndPush={handleCommitAndPush}
               />
             ) : (
               <GitHistoryList
@@ -314,6 +372,14 @@ export function GitHubDesktopView({
       <GitCredentialsModal
         visible={showCredentialsModal}
         onClose={() => setShowCredentialsModal(false)}
+      />
+
+      {/* GitHub Remote Manager Modal */}
+      <GitRemoteModal
+        visible={showRemoteModal}
+        currentRemoteUrl={remoteUrl}
+        onClose={() => setShowRemoteModal(false)}
+        onSaveRemote={handleSaveRemote}
       />
     </View>
   );
