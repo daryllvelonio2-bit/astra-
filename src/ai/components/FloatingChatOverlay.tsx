@@ -10,6 +10,7 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AstraLogo } from "./AstraLogo";
@@ -23,6 +24,7 @@ import { ChatSessionsModal } from "./ChatSessionsModal";
 import { ActionApprovalModal } from "./ActionApprovalModal";
 import { FloatingOverlay } from "../services/floatingOverlayService";
 import { useChatSession } from "./useChatSession";
+import { useVoiceInput } from "./useVoiceInput";
 import { FloatingOverlayTopBar } from "./FloatingOverlayTopBar";
 import { getAstraModeInfo } from "../astra/astraModes";
 import { useTheme } from "../../theme/themeContext";
@@ -90,6 +92,24 @@ export function FloatingChatOverlay({
     activeFileName,
     activeFileContent,
   });
+
+  // Mic replaces send while the box is empty; dictated text lands in input.
+  const {
+    voiceSupported,
+    voiceListening,
+    voiceTranscribing,
+    toggleVoice,
+  } = useVoiceInput({
+    input,
+    onText: setInput,
+    onError: (msg) => Alert.alert("Voice input", msg),
+  });
+  const showMic = voiceSupported && !input.trim();
+  const voiceBusy = voiceListening || voiceTranscribing;
+  const onMicPress = async () => {
+    const err = await toggleVoice();
+    if (err) Alert.alert("Voice input", err);
+  };
 
   const visibleMessages = messages.slice(-renderLimit);
   const hiddenCount = Math.max(0, messages.length - renderLimit);
@@ -251,7 +271,7 @@ export function FloatingChatOverlay({
           <View style={[styles.inputContainer, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
             <TextInput
               style={[styles.input, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
-              placeholder="Ask Astra or write code..."
+              placeholder={voiceListening ? "Listening… speak now" : voiceTranscribing ? "Transcribing…" : "Ask Astra or write code..."}
               placeholderTextColor={theme.textMuted}
               value={input}
               onChangeText={setInput}
@@ -265,6 +285,25 @@ export function FloatingChatOverlay({
             />
 
             {agentStatus === "idle" ? (
+              showMic ? (
+                <TouchableOpacity
+                  style={[
+                    styles.sendBtn,
+                    voiceBusy
+                      ? { backgroundColor: theme.accentRed }
+                      : { backgroundColor: theme.bgTertiary },
+                  ]}
+                  onPress={onMicPress}
+                  activeOpacity={0.8}
+                  accessibilityLabel={voiceListening ? "Stop voice input" : "Voice input"}
+                >
+                  <Ionicons
+                    name={voiceBusy ? "mic" : "mic-outline"}
+                    size={16}
+                    color={voiceBusy ? theme.sendButtonIcon : theme.accent}
+                  />
+                </TouchableOpacity>
+              ) : (
               <TouchableOpacity
                 style={[
                   styles.sendBtn,
@@ -283,6 +322,7 @@ export function FloatingChatOverlay({
                   color={input.trim() ? theme.sendButtonIcon : theme.textMuted}
                 />
               </TouchableOpacity>
+              )
             ) : (
               <TouchableOpacity style={[styles.stopBtn, { backgroundColor: theme.accentRed }]} onPress={handleStopAgent} activeOpacity={0.8}>
                 <Ionicons name="square" size={12} color={theme.sendButtonIcon} />

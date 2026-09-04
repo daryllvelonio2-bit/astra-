@@ -22,6 +22,16 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - Chatbox Mic Button (Send ↔ Mic Swap)
+- Empty chatbox now shows an accent mic instead of the grey send arrow, in both `AstraChatScreen` and `FloatingChatOverlay`; typing swaps it back to send. Tap mic → red listening state → tap again to stop; dictated text streams/appends into the box, never clobbering typed text.
+- New `voice-input` Expo module (`modules/voice-input`, autolinked, verified in APK dex): on-device `SpeechRecognizer` streaming where available, plus MediaRecorder fallback (AAC in cacheDir) for devices with no system recognizer.
+- Device finding: this TECNO has NO `android.speech.RecognitionService` (Google apps live in GBox, not GMS), so it uses the fallback: clip is transcribed via the user's existing Gemini key (`gemini-2.0-flash` audio input, `voiceTranscribe.ts`), file deleted after. Needs a configured API key + mic permission (requested on first tap).
+- Files: `modules/voice-input/{package.json,expo-module.config.json,src/index.ts,android/.../VoiceInputModule.kt}`, `src/ai/components/{useVoiceInput.ts,voiceTranscribe.ts}`, both chat components.
+- Fix: `voiceTranscribe.ts` imports from `expo-file-system/legacy` — the root re-export throws a deprecation error at call time, which had surfaced inside the "Voice input" Alert. JS-only, Metro reload.
+- Fix: native returns a raw path — normalized to `file://` URI before read/delete.
+- Transcription model pinned to `gemini-3.1-flash-lite` per user (verified: real API ID, audio input supported, free tier). JS-only, Metro reload.
+- **Rule Compliance (`agent.md`):** `tsc` clean. Native change — full rebuild + reinstall done (BUILD SUCCESSFUL, no fatal crash on launch).
+
 ### [2026-09-04] - ENTER Key Moved Beside ESC
 - User request: Enter was buried mid-row (⏎ after ALT). Moved to position 2 as a labeled `ENTER` key right after `ESC` — no scrolling needed.
 - **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload required, no rebuild.

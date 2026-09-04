@@ -9,6 +9,7 @@ import {
   StatusBar,
   Platform,
   Keyboard,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +24,7 @@ import { ChatSessionsModal } from "./ChatSessionsModal";
 import { ActionApprovalModal } from "./ActionApprovalModal";
 import { AstraLogo } from "./AstraLogo";
 import { useChatSession } from "./useChatSession";
+import { useVoiceInput } from "./useVoiceInput";
 import { useTheme } from "../../theme/themeContext";
 import { ideActionService } from "../../ide/services/ideActionService";
 
@@ -104,6 +106,24 @@ export function AstraChatScreen({
     handleApproveSession,
     handleRejectAction,
   } = useChatSession({ workspaceId });
+
+  // Mic replaces send while the box is empty; dictated text lands in input.
+  const {
+    voiceSupported,
+    voiceListening,
+    voiceTranscribing,
+    toggleVoice,
+  } = useVoiceInput({
+    input,
+    onText: setInput,
+    onError: (msg) => Alert.alert("Voice input", msg),
+  });
+  const showMic = voiceSupported && !input.trim();
+  const voiceBusy = voiceListening || voiceTranscribing;
+  const onMicPress = async () => {
+    const err = await toggleVoice();
+    if (err) Alert.alert("Voice input", err);
+  };
 
   useEffect(() => {
     const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -231,7 +251,7 @@ export function AstraChatScreen({
       <View style={[styles.inputContainer, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
         <TextInput
           style={[styles.input, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
-          placeholder="Ask Astra..."
+          placeholder={voiceListening ? "Listening… speak now" : voiceTranscribing ? "Transcribing…" : "Ask Astra..."}
           placeholderTextColor={theme.textMuted}
           value={input}
           onChangeText={setInput}
@@ -246,6 +266,24 @@ export function AstraChatScreen({
             accessibilityLabel="Stop agent"
           >
             <Ionicons name="stop" size={16} color={theme.sendButtonIcon} />
+          </TouchableOpacity>
+        ) : showMic ? (
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              voiceBusy
+                ? { backgroundColor: theme.accentRed, borderColor: theme.accentRed }
+                : { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+            ]}
+            onPress={onMicPress}
+            activeOpacity={0.8}
+            accessibilityLabel={voiceListening ? "Stop voice input" : "Voice input"}
+          >
+            <Ionicons
+              name={voiceBusy ? "mic" : "mic-outline"}
+              size={17}
+              color={voiceBusy ? theme.sendButtonIcon : theme.accent}
+            />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
