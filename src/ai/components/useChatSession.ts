@@ -26,8 +26,6 @@ import {
   saveCognitiveMode,
   loadReasoningEffort,
   saveReasoningEffort,
-  loadInteractiveApproval,
-  saveInteractiveApproval,
   subscribeConfigChanges,
 } from "../../ide/services/configService";
 import { AstraCognitiveMode, AstraEffort } from "../astra/astraModes";
@@ -62,7 +60,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
   const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash-lite");
   const [selectedCognitiveMode, setSelectedCognitiveMode] = useState<AstraCognitiveMode>("default");
   const [selectedEffort, setSelectedEffort] = useState<AstraEffort>("default");
-  const [interactiveApproval, setInteractiveApproval] = useState<boolean>(false);
   const [pendingApprovalStep, setPendingApprovalStep] = useState<AgentStep | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState<boolean>(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -101,11 +98,10 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
       if (!isMounted) return;
       setWorkspace(ws);
 
-      const [model, cogMode, eff, apprv, sessionList] = await Promise.all([
+      const [model, cogMode, eff, sessionList] = await Promise.all([
         loadSelectedModel(),
         loadCognitiveMode(),
         loadReasoningEffort(),
-        loadInteractiveApproval(),
         listSessions(ws.id),
       ]);
       if (!isMounted) return;
@@ -113,7 +109,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
       setSelectedModel(model || "gemini-3.5-flash-lite");
       setSelectedCognitiveMode(cogMode || "default");
       setSelectedEffort(eff || "default");
-      setInteractiveApproval(apprv);
       setSessions(sessionList);
 
       let active = await getActiveSession(ws.id);
@@ -156,7 +151,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
       if (cfg.selectedModel) setSelectedModel((prev) => prev !== cfg.selectedModel ? cfg.selectedModel : prev);
       if (cfg.selectedCognitiveMode) setSelectedCognitiveMode((prev) => prev !== cfg.selectedCognitiveMode ? cfg.selectedCognitiveMode : prev);
       if (cfg.selectedEffort) setSelectedEffort((prev) => prev !== cfg.selectedEffort ? cfg.selectedEffort : prev);
-      if (cfg.interactiveApproval !== undefined) setInteractiveApproval((prev) => prev !== cfg.interactiveApproval ? cfg.interactiveApproval : prev);
     });
 
     return () => {
@@ -269,7 +263,8 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
           activeFileContent,
           cognitiveMode: selectedCognitiveMode,
           effort: selectedEffort,
-          interactiveApproval,
+          // Interactive mode removed from the UI: always auto-approve (YOLO).
+          interactiveApproval: false,
           abortSignal: abortController.signal,
           history: updatedHistory,
           onSessionId: (newSessionId) => {
@@ -341,7 +336,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
       }
     },
-    [agentStatus, messages, selectedCognitiveMode, selectedEffort, interactiveApproval, workspace, activeFileName, activeFileContent, startTimer, stopTimer, onRefreshWorkspace]
+    [agentStatus, messages, selectedCognitiveMode, selectedEffort, workspace, activeFileName, activeFileContent, startTimer, stopTimer, onRefreshWorkspace]
   );
 
   const handleSelectSession = useCallback((session: ConversationSession) => {
@@ -414,12 +409,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
     await saveReasoningEffort(effort);
   }, []);
 
-  const handleToggleInteractiveApproval = useCallback(async () => {
-    const next = !interactiveApproval;
-    setInteractiveApproval(next);
-    await saveInteractiveApproval(next);
-  }, [interactiveApproval]);
-
   const handleApproveAction = useCallback(() => {
     if (pendingApprovalResolverRef.current) {
       pendingApprovalResolverRef.current(true);
@@ -430,8 +419,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
   }, []);
 
   const handleApproveSession = useCallback(async () => {
-    setInteractiveApproval(false);
-    await saveInteractiveApproval(false);
     if (pendingApprovalResolverRef.current) {
       pendingApprovalResolverRef.current(true);
       pendingApprovalResolverRef.current = null;
@@ -460,7 +447,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
     selectedModel,
     selectedCognitiveMode,
     selectedEffort,
-    interactiveApproval,
     pendingApprovalStep,
     showApprovalModal,
     setShowApprovalModal,
@@ -488,7 +474,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
     handleSelectModel,
     handleSelectCognitiveMode,
     handleSelectEffort,
-    handleToggleInteractiveApproval,
     handleApproveAction,
     handleApproveSession,
     handleRejectAction,

@@ -6,52 +6,19 @@ import { useTheme } from "../../theme/themeContext";
 
 interface CognitiveModeBarProps {
   selectedMode: AstraCognitiveMode;
-  interactiveApproval?: boolean;
   onSelectMode: (mode: AstraCognitiveMode) => void;
   onOpenModeModal: () => void;
-  onToggleInteractiveApproval?: () => void;
 }
 
 export function CognitiveModeBar({
   selectedMode,
-  interactiveApproval = false,
   onSelectMode,
   onOpenModeModal,
-  onToggleInteractiveApproval,
 }: CognitiveModeBarProps) {
   const { theme } = useTheme();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
-      {/* Quick Interactive Approval / YOLO Toggle */}
-      {onToggleInteractiveApproval && (
-        <TouchableOpacity
-          style={[
-            styles.approvalTogglePill,
-            { backgroundColor: `${theme.accentPurple}15`, borderColor: `${theme.accentPurple}40` },
-            interactiveApproval && { backgroundColor: `${theme.accentGreen}20`, borderColor: theme.accentGreen },
-          ]}
-          onPress={onToggleInteractiveApproval}
-          activeOpacity={0.7}
-          accessibilityLabel="Toggle Interactive Approval Mode"
-        >
-          <Ionicons
-            name={interactiveApproval ? "shield-checkmark" : "flash"}
-            size={11}
-            color={interactiveApproval ? theme.accentGreen : theme.accentPurple}
-          />
-          <Text
-            style={[
-              styles.approvalToggleText,
-              { color: theme.accentPurple },
-              interactiveApproval && { color: theme.accentGreen },
-            ]}
-          >
-            {interactiveApproval ? "Interactive" : "YOLO"}
-          </Text>
-        </TouchableOpacity>
-      )}
-
       <TouchableOpacity
         style={[styles.moreBtn, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}
         onPress={onOpenModeModal}
@@ -140,22 +107,5 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 10.5,
     fontWeight: "500",
-  },
-  approvalTogglePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3.5,
-    paddingVertical: 3.5,
-    paddingHorizontal: 7,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  approvalTogglePillActive: {
-  },
-  approvalToggleText: {
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  approvalToggleTextActive: {
   },
 });

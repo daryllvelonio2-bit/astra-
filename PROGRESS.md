@@ -22,6 +22,11 @@
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
 
+### [2026-09-04] - Interactive Mode Removed From UI (Always YOLO)
+- Removed every toggle surface: YOLO/Interactive pill in `CognitiveModeBar`, YOLO-vs-Interactive cards in `CognitiveModeModal`, and the whole Agent tab (`AgentSection` deleted, tab dropped from `SettingsTabBar`) in Settings.
+- Behavior hard-wired to auto-approve: `useChatSession` passes `interactiveApproval: false`, `streamAstraCliChat` defaults to `false` (stale saved `true` can no longer trap users with no way to switch back). Approval modal plumbing kept as invisible safety infra — it never triggers in YOLO.
+- **Rule Compliance (`agent.md`):** `tsc` clean, zero `Interactive|YOLO` references left in `.tsx`. JS-only — Metro reload, no rebuild.
+
 ### [2026-09-04] - Chatbox Mic Button (Send ↔ Mic Swap)
 - Empty chatbox now shows an accent mic instead of the grey send arrow, in both `AstraChatScreen` and `FloatingChatOverlay`; typing swaps it back to send. Tap mic → red listening state → tap again to stop; dictated text streams/appends into the box, never clobbering typed text.
 - New `voice-input` Expo module (`modules/voice-input`, autolinked, verified in APK dex): on-device `SpeechRecognizer` streaming where available, plus MediaRecorder fallback (AAC in cacheDir) for devices with no system recognizer.

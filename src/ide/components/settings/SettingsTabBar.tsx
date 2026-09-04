@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemeColors } from "../../../theme/themeContext";
 
-export type SettingsTabId = "appearance" | "keys" | "agent" | "model" | "environment";
+export type SettingsTabId = "appearance" | "keys" | "model" | "environment";
 
 interface SettingsTab {
   id: SettingsTabId;
@@ -14,7 +14,6 @@ interface SettingsTab {
 const TABS: SettingsTab[] = [
   { id: "appearance", title: "Theme", icon: "color-palette-outline" },
   { id: "keys", title: "Keys", icon: "key-outline" },
-  { id: "agent", title: "Agent", icon: "shield-checkmark-outline" },
   { id: "model", title: "Model", icon: "sparkles-outline" },
   { id: "environment", title: "Linux", icon: "cube-outline" },
 ];

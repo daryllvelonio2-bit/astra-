@@ -56,7 +56,6 @@ export function FloatingChatOverlay({
     selectedModel,
     selectedCognitiveMode,
     selectedEffort,
-    interactiveApproval,
     pendingApprovalStep,
     showApprovalModal,
     showModelPicker,
@@ -83,7 +82,6 @@ export function FloatingChatOverlay({
     handleSelectEffort,
     handleRunSnippet,
     handleApplyFile,
-    handleToggleInteractiveApproval,
     handleApproveAction,
     handleApproveSession,
     handleRejectAction,
@@ -261,10 +259,8 @@ export function FloatingChatOverlay({
           {/* Cognitive Mode Quick Bar */}
           <CognitiveModeBar
             selectedMode={selectedCognitiveMode}
-            interactiveApproval={interactiveApproval}
             onSelectMode={handleSelectCognitiveMode}
             onOpenModeModal={() => setShowCognitiveModeModal(true)}
-            onToggleInteractiveApproval={handleToggleInteractiveApproval}
           />
 
           {/* Prompt Input Bar */}
@@ -337,10 +333,8 @@ export function FloatingChatOverlay({
         visible={showCognitiveModeModal}
         selectedMode={selectedCognitiveMode}
         selectedEffort={selectedEffort}
-        interactiveApproval={interactiveApproval}
         onSelectMode={handleSelectCognitiveMode}
         onSelectEffort={handleSelectEffort}
-        onToggleInteractiveApproval={handleToggleInteractiveApproval}
         onClose={() => setShowCognitiveModeModal(false)}
       />
 

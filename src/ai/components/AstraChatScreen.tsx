@@ -74,7 +74,6 @@ export function AstraChatScreen({
     selectedModel,
     selectedCognitiveMode,
     selectedEffort,
-    interactiveApproval,
     pendingApprovalStep,
     showApprovalModal,
     showModelPicker,
@@ -101,7 +100,6 @@ export function AstraChatScreen({
     handleSelectModel,
     handleSelectCognitiveMode,
     handleSelectEffort,
-    handleToggleInteractiveApproval,
     handleApproveAction,
     handleApproveSession,
     handleRejectAction,
@@ -242,10 +240,8 @@ export function AstraChatScreen({
 
       <CognitiveModeBar
         selectedMode={selectedCognitiveMode}
-        interactiveApproval={interactiveApproval}
         onSelectMode={handleSelectCognitiveMode}
         onOpenModeModal={() => setShowCognitiveModeModal(true)}
-        onToggleInteractiveApproval={handleToggleInteractiveApproval}
       />
 
       <View style={[styles.inputContainer, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
@@ -314,10 +310,8 @@ export function AstraChatScreen({
         visible={showCognitiveModeModal}
         selectedMode={selectedCognitiveMode}
         selectedEffort={selectedEffort}
-        interactiveApproval={interactiveApproval}
         onSelectMode={handleSelectCognitiveMode}
         onSelectEffort={handleSelectEffort}
-        onToggleInteractiveApproval={handleToggleInteractiveApproval}
         onClose={() => setShowCognitiveModeModal(false)}
       />
       <ActionApprovalModal

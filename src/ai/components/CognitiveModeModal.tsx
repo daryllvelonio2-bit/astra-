@@ -20,10 +20,8 @@ interface CognitiveModeModalProps {
   visible: boolean;
   selectedMode: AstraCognitiveMode;
   selectedEffort: AstraEffort;
-  interactiveApproval?: boolean;
   onSelectMode: (mode: AstraCognitiveMode) => void;
   onSelectEffort: (effort: AstraEffort) => void;
-  onToggleInteractiveApproval?: () => void;
   onClose: () => void;
 }
 
@@ -38,10 +36,8 @@ export function CognitiveModeModal({
   visible,
   selectedMode,
   selectedEffort,
-  interactiveApproval = false,
   onSelectMode,
   onSelectEffort,
-  onToggleInteractiveApproval,
   onClose,
 }: CognitiveModeModalProps) {
   const { theme } = useTheme();
@@ -126,54 +122,6 @@ export function CognitiveModeModal({
           </View>
 
           <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
-            {/* Action Permission & Interactive Approval Section */}
-            {onToggleInteractiveApproval && (
-              <>
-                <Text style={[styles.sectionHeader, { color: theme.textMuted }]}>ACTION APPROVAL & SAFETY</Text>
-                <View style={styles.approvalGrid}>
-                  <TouchableOpacity
-                    style={[
-                      styles.approvalOptionCard,
-                      { backgroundColor: theme.bgTertiary, borderColor: theme.border },
-                      !interactiveApproval && { borderColor: theme.accentPurple, backgroundColor: `${theme.accentPurple}15` },
-                    ]}
-                    onPress={interactiveApproval ? onToggleInteractiveApproval : undefined}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.approvalHeader}>
-                      <Ionicons name="flash" size={14} color={theme.accentPurple} />
-                      <Text style={[styles.approvalOptionTitle, { color: theme.textPrimary }, !interactiveApproval && { color: theme.accentPurple }]}>
-                        ⚡ YOLO Mode
-                      </Text>
-                    </View>
-                    <Text style={[styles.approvalOptionDesc, { color: theme.textSecondary }]}>
-                      Auto-approves all file writes & shell tasks without pausing.
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.approvalOptionCard,
-                      { backgroundColor: theme.bgTertiary, borderColor: theme.border },
-                      interactiveApproval && { borderColor: theme.accentGreen, backgroundColor: `${theme.accentGreen}15` },
-                    ]}
-                    onPress={!interactiveApproval ? onToggleInteractiveApproval : undefined}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.approvalHeader}>
-                      <Ionicons name="shield-checkmark" size={14} color={theme.accentGreen} />
-                      <Text style={[styles.approvalOptionTitle, { color: theme.textPrimary }, interactiveApproval && { color: theme.accentGreen }]}>
-                        🛡️ Interactive Mode
-                      </Text>
-                    </View>
-                    <Text style={[styles.approvalOptionDesc, { color: theme.textSecondary }]}>
-                      Pauses and requires explicit user confirmation before executing.
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-
             {/* Reasoning Effort Section */}
             <Text style={[styles.sectionHeader, { color: theme.textMuted, marginTop: 12 }]}>REASONING EFFORT</Text>
             <View style={styles.effortRow}>
@@ -335,32 +283,5 @@ const styles = StyleSheet.create({
   tagCode: {
     fontSize: 10,
     fontFamily: "monospace",
-  },
-  approvalGrid: {
-    gap: 8,
-    marginBottom: 6,
-  },
-  approvalOptionCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 10,
-    gap: 4,
-  },
-  approvalOptionCardActive: {
-  },
-  approvalOptionCardActiveGreen: {
-  },
-  approvalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  approvalOptionTitle: {
-    fontSize: 12.5,
-    fontWeight: "700",
-  },
-  approvalOptionDesc: {
-    fontSize: 11,
-    lineHeight: 15,
   },
 });

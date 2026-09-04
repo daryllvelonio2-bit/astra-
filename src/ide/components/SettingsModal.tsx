@@ -17,7 +17,6 @@ import { useTheme } from "../../theme/themeContext";
 import { ApiKeyManager } from "./ApiKeyManager";
 import { SettingsTabBar, SettingsTabId } from "./settings/SettingsTabBar";
 import { AppearanceSection } from "./settings/AppearanceSection";
-import { AgentSection } from "./settings/AgentSection";
 import { ModelSection } from "./settings/ModelSection";
 import { EnvironmentSection } from "./settings/EnvironmentSection";
 
@@ -35,15 +34,14 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
   const [activeTab, setActiveTab] = useState<SettingsTabId>("appearance");
   const [apiKeys, setApiKeys] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash-lite");
-  const [interactiveApproval, setInteractiveApproval] = useState(false);
   const [activeTheme, setActiveTheme] = useState<AppTheme>(themeMode);
   const [savedTick, setSavedTick] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const dirtyRef = useRef(false);
   const skipFirstRef = useRef(true);
   const saveTimer = useRef<any>(null);
-  const draftRef = useRef({ apiKeys, selectedModel, interactiveApproval, activeTheme });
-  draftRef.current = { apiKeys, selectedModel, interactiveApproval, activeTheme };
+  const draftRef = useRef({ apiKeys, selectedModel, activeTheme });
+  draftRef.current = { apiKeys, selectedModel, activeTheme };
 
   const flushSave = async () => {
     const draft = draftRef.current;
@@ -51,7 +49,6 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
       apiKeys: draft.apiKeys,
       apiKey: draft.apiKeys[0] || "",
       selectedModel: draft.selectedModel,
-      interactiveApproval: draft.interactiveApproval,
       selectedTheme: draft.activeTheme,
     });
     setTheme(draft.activeTheme);
@@ -67,7 +64,6 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
       loadConfig().then((cfg) => {
         setApiKeys(cfg.apiKeys || (cfg.apiKey ? [cfg.apiKey] : []));
         setSelectedModel(cfg.selectedModel || "gemini-3.5-flash-lite");
-        setInteractiveApproval(!!cfg.interactiveApproval);
         setActiveTheme(cfg.selectedTheme || themeMode);
         setLoaded(true);
       });
@@ -96,7 +92,7 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys, selectedModel, interactiveApproval, activeTheme, loaded]);
+  }, [apiKeys, selectedModel, activeTheme, loaded]);
 
   const handleSelectTheme = (mode: AppTheme) => {
     setActiveTheme(mode);
@@ -139,13 +135,6 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
             )}
             {activeTab === "keys" && (
               <ApiKeyManager apiKeys={apiKeys} onChangeKeys={setApiKeys} theme={theme} />
-            )}
-            {activeTab === "agent" && (
-              <AgentSection
-                interactiveApproval={interactiveApproval}
-                onToggleApproval={() => setInteractiveApproval((prev) => !prev)}
-                theme={theme}
-              />
             )}
             {activeTab === "model" && (
               <ModelSection selectedModel={selectedModel} onSelectModel={setSelectedModel} theme={theme} />

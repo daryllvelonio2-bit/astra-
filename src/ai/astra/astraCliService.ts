@@ -14,7 +14,6 @@ import {
   loadSelectedModel,
   loadCognitiveMode,
   loadReasoningEffort,
-  loadInteractiveApproval,
   DEFAULT_MODEL_ID,
 } from "../../ide/services/configService";
 import { AstraCognitiveMode, AstraEffort, getAstraModeInfo } from "./astraModes";
@@ -70,7 +69,8 @@ export async function streamAstraCliChat(
 
   const currentMode = cognitiveMode || (await loadCognitiveMode());
   const currentEffort = effort || (await loadReasoningEffort());
-  const isInteractive = interactiveApproval ?? (await loadInteractiveApproval());
+  // Interactive mode was removed from the UI: always auto-approve (YOLO).
+  const isInteractive = interactiveApproval ?? false;
   const modeInfo = getAstraModeInfo(currentMode);
 
   if (!apiKey && apiKeys.length === 0) {
