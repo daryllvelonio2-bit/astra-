@@ -42,8 +42,8 @@ export function ProjectInspectorModal({
           text: "Delete Permanently",
           style: "destructive",
           onPress: () => {
-            if (onDeleteProject) onDeleteProject(project);
             onClose();
+            if (onDeleteProject) onDeleteProject(project);
           },
         },
       ]
@@ -53,7 +53,7 @@ export function ProjectInspectorModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
         <View style={[styles.bottomSheet, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           <View style={styles.inspectorHeader}>
             <View style={styles.headerTitleRow}>
@@ -88,8 +88,8 @@ export function ProjectInspectorModal({
               onPress={() => onOpenProject(project)}
               activeOpacity={0.8}
             >
-              <Ionicons name="code-slash" size={18} color="#fff" />
-              <Text style={styles.openEditorButtonText}>Open in Mobile IDE</Text>
+              <Ionicons name="code-slash" size={18} color={theme.sendButtonIcon} />
+              <Text style={[styles.openEditorButtonText, { color: theme.sendButtonIcon }]}>Open in Mobile IDE</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -114,16 +114,13 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   bottomSheet: {
-    backgroundColor: "#252526",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     maxHeight: "80%",
     borderWidth: 1,
-    borderColor: "#3c3c3c",
   },
   inspectorHeader: {
     flexDirection: "row",
@@ -140,24 +137,20 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#f0f0f0",
     flex: 1,
   },
   inspectorDetails: {
     marginBottom: 20,
     gap: 10,
-    backgroundColor: "#1e1e1e",
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#333",
   },
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   detailText: {
-    color: "#f0f0f0",
     fontSize: 13.5,
     marginLeft: 10,
     flex: 1,
@@ -166,7 +159,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   openEditorButton: {
-    backgroundColor: "#0e639c",
     paddingVertical: 13,
     borderRadius: 10,
     flexDirection: "row",
@@ -175,14 +167,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   openEditorButtonText: {
-    color: "#fff",
     fontSize: 14.5,
     fontWeight: "700",
   },
   deleteButton: {
-    backgroundColor: "#2c1517",
     borderWidth: 1,
-    borderColor: "#5c2427",
     paddingVertical: 12,
     borderRadius: 10,
     flexDirection: "row",
@@ -191,7 +180,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deleteButtonText: {
-    color: "#f28b82",
     fontSize: 14,
     fontWeight: "600",
   },

@@ -58,20 +58,20 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
       const hasError = latestStep?.isError || message.status === "error";
 
       let statusIcon = "sparkles";
-      let statusColor = "#8ab4f8";
+      let statusColor = theme.accent;
       let statusText = "Astra is analyzing & formulating code...";
 
       if (hasError) {
         statusIcon = "alert-circle";
-        statusColor = "#f28b82";
+        statusColor = theme.accentRed;
         statusText = latestStep?.toolOutput || latestStep?.content || "An error occurred. Check your API key in Settings.";
       } else if (latestStep?.type === "tool_call") {
         statusIcon = "construct";
-        statusColor = "#81c995";
+        statusColor = theme.accentGreen;
         statusText = latestStep.content || `Executing ${latestStep.toolName || "tool"}...`;
       } else if (latestStep?.type === "thought") {
         statusIcon = "bulb-outline";
-        statusColor = "#fdd663";
+        statusColor = theme.accentGold;
         statusText = latestStep.content;
       }
 
@@ -91,7 +91,7 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
       const detectedUrl = detectedPort ? `http://127.0.0.1:${detectedPort}` : undefined;
 
       return (
-        <View style={[styles.thinkingCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }, hasError && styles.thinkingCardError]}>
+        <View style={[styles.thinkingCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }, hasError && { backgroundColor: `${theme.accentRed}12`, borderColor: `${theme.accentRed}50` }]}>
           <View style={styles.thinkingHeader}>
             <View style={styles.thinkingPulseRow}>
               {!hasError && <ActivityIndicator size="small" color={statusColor} />}
@@ -112,7 +112,7 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
           {targetFilePath && !hasError ? (
             <TouchableOpacity
               style={[styles.thinkingActionBtn, { backgroundColor: `${theme.accent}18`, borderColor: theme.accent }]}
-              onPress={() => ideActionService.openFile(targetFilePath)}
+              onPress={() => ideActionService.openFile(targetFilePath, undefined, undefined, true)}
               activeOpacity={0.7}
             >
               <Ionicons name="open-outline" size={11} color={theme.accent} />
@@ -123,7 +123,7 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
           ) : detectedUrl && !hasError ? (
             <TouchableOpacity
               style={[styles.thinkingActionBtn, { backgroundColor: `${theme.accentGreen}18`, borderColor: theme.accentGreen }]}
-              onPress={() => ideActionService.openBrowser(detectedUrl, detectedPort)}
+              onPress={() => ideActionService.openBrowser(detectedUrl, detectedPort, true)}
               activeOpacity={0.7}
             >
               <Ionicons name="globe-outline" size={11} color={theme.accentGreen} />
@@ -139,7 +139,7 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
     if (!text) {
       const errorStep = steps.find((s) => s.isError);
       return (
-        <Text selectable style={[styles.messageText, styles.assistantText]}>
+        <Text selectable style={[styles.messageText, styles.assistantText, { color: theme.textPrimary }]}>
           {errorStep ? `⚠️ ${errorStep.content || "An error occurred."}` : "✅ Completed."}
         </Text>
       );
@@ -273,12 +273,12 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
 
                 {showAllHistory && totalToolSteps > 3 && (
                   <TouchableOpacity
-                    style={styles.olderStepsBadge}
+                    style={[styles.olderStepsBadge, { backgroundColor: theme.bgTertiary }]}
                     onPress={() => setShowAllHistory(false)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="chevron-up" size={11} color="#8ab4f8" />
-                    <Text style={styles.olderStepsText}>Collapse older actions</Text>
+                    <Ionicons name="chevron-up" size={11} color={theme.accent} />
+                    <Text style={[styles.olderStepsText, { color: theme.accent }]}>Collapse older actions</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -291,8 +291,8 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
         {message.text ? (
           <View style={styles.assistantFooter}>
             <TouchableOpacity style={styles.copyMsgBtn} onPress={handleCopyMessage} activeOpacity={0.7}>
-              <Ionicons name={copiedMsg ? "checkmark-circle" : "copy-outline"} size={12} color={copiedMsg ? "#81c995" : "#9aa0a6"} />
-              <Text style={[styles.copyMsgText, copiedMsg && { color: "#81c995" }]}>{copiedMsg ? "Copied" : "Copy"}</Text>
+              <Ionicons name={copiedMsg ? "checkmark-circle" : "copy-outline"} size={12} color={copiedMsg ? theme.accentGreen : theme.textSecondary} />
+              <Text style={[styles.copyMsgText, { color: theme.textMuted }, copiedMsg && { color: theme.accentGreen }]}>{copiedMsg ? "Copied" : "Copy"}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -315,19 +315,16 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#334155",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 1,
   },
   userBubble: {
-    backgroundColor: "#1e293b",
     borderRadius: 10,
     borderTopRightRadius: 2,
     paddingHorizontal: 9,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#334155",
   },
   assistantContainer: {
     width: "100%",
@@ -342,28 +339,23 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
   assistantAuthorName: {
-    color: "#93c5fd",
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.2,
   },
   astraAuthorName: {
-    color: "#34d399",
   },
   astraBadgeIcon: {
     width: 16,
     height: 16,
     borderRadius: 3,
-    backgroundColor: "#064e3b",
     alignItems: "center",
     justifyContent: "center",
   },
   assistantBubble: {
     width: "100%",
-    backgroundColor: "#151619",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#22242a",
     paddingHorizontal: 8,
     paddingVertical: 7,
   },
@@ -371,7 +363,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1d2026",
   },
   thoughtsHeader: {
     flexDirection: "row",
@@ -385,7 +376,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   thoughtsTitle: {
-    color: "#fdd663",
     fontSize: 11,
     fontWeight: "600",
     letterSpacing: 0.2,
@@ -394,31 +384,25 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 2,
     borderLeftWidth: 2,
-    borderLeftColor: "rgba(253, 214, 99, 0.4)",
     paddingLeft: 8,
     gap: 4,
   },
   thoughtItemText: {
-    color: "#94a3b8",
     fontSize: 11.5,
     lineHeight: 16.5,
     fontStyle: "italic",
   },
   messageText: { fontSize: 11.5, lineHeight: 17 },
-  userText: { color: "#ffffff" },
-  assistantText: { color: "#e5e7eb" },
+  userText: { },
+  assistantText: { },
   thinkingCard: {
-    backgroundColor: "#11141a",
     borderRadius: 6,
     padding: 7,
     borderWidth: 1,
-    borderColor: "#1d2533",
     marginVertical: 2,
     gap: 4,
   },
   thinkingCardError: {
-    backgroundColor: "#1c0d0f",
-    borderColor: "#451a1d",
   },
   thinkingHeader: {
     flexDirection: "row",
@@ -435,34 +419,30 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   stepBadge: {
-    backgroundColor: "#171c24",
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: "#283140",
   },
   stepBadgeText: {
-    color: "#93c5fd",
     fontSize: 8.5,
     fontWeight: "bold",
   },
   thinkingSubtext: {
-    color: "#d1d5db",
     fontSize: 10.5,
     lineHeight: 14,
     fontFamily: "monospace",
   },
-  stepsSection: { marginBottom: 4, backgroundColor: "#111316", borderRadius: 5, borderWidth: 1, borderColor: "#1e2025", overflow: "hidden" },
-  stepsSummaryHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 6, paddingVertical: 3.5, backgroundColor: "#16171a" },
+  stepsSection: { marginBottom: 4, borderRadius: 5, borderWidth: 1, overflow: "hidden" },
+  stepsSummaryHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 6, paddingVertical: 3.5 },
   stepsSummaryLeft: { flexDirection: "row", alignItems: "center", gap: 4 },
-  stepsSummaryText: { color: "#93c5fd", fontSize: 9.5, fontWeight: "600" },
+  stepsSummaryText: { fontSize: 9.5, fontWeight: "600" },
   stepsList: { padding: 4, gap: 2 },
-  olderStepsBadge: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 2, backgroundColor: "#171c24", borderRadius: 3, marginVertical: 1 },
-  olderStepsText: { color: "#93c5fd", fontSize: 9, fontWeight: "600" },
+  olderStepsBadge: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 2, borderRadius: 3, marginVertical: 1 },
+  olderStepsText: { fontSize: 9, fontWeight: "600" },
   assistantFooter: { flexDirection: "row", justifyContent: "flex-end", marginTop: 2, paddingTop: 1 },
   copyMsgBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 3, paddingVertical: 1 },
-  copyMsgText: { color: "#6b7280", fontSize: 9 },
+  copyMsgText: { fontSize: 9 },
   thinkingActionBtn: {
     flexDirection: "row",
     alignItems: "center",

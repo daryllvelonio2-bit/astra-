@@ -113,7 +113,7 @@ export function DirectoryPickerModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={[styles.backdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
         <View style={[styles.container, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: theme.border }]}>
@@ -195,7 +195,7 @@ export function DirectoryPickerModal({
                 autoFocus
               />
               <TouchableOpacity style={[styles.newFolderActionBtn, { backgroundColor: theme.accent }]} onPress={handleCreateFolder}>
-                <Text style={styles.newFolderActionText}>Create</Text>
+                <Text style={[styles.newFolderActionText, { color: theme.sendButtonIcon }]}>Create</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.cancelNewFolderBtn} onPress={() => setIsCreatingFolder(false)}>
                 <Ionicons name="close" size={18} color={theme.textMuted} />
@@ -233,8 +233,8 @@ export function DirectoryPickerModal({
               <Text style={[styles.footerBtnTextCancel, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.footerBtnSelect, { backgroundColor: theme.accent }]} onPress={handleSelectCurrent}>
-              <Ionicons name="checkmark" size={18} color="#fff" />
-              <Text style={styles.footerBtnTextSelect}>Use This Directory</Text>
+              <Ionicons name="checkmark" size={18} color={theme.sendButtonIcon} />
+              <Text style={[styles.footerBtnTextSelect, { color: theme.sendButtonIcon }]}>Use This Directory</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -250,7 +250,6 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   container: {
     borderTopLeftRadius: 18,
@@ -381,7 +380,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   newFolderActionText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -441,7 +439,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   footerBtnTextSelect: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '700',
   },

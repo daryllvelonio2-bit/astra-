@@ -12,18 +12,13 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bottomResizeBoxActive: {
-    backgroundColor: 'rgba(138, 180, 248, 0.08)',
-  },
+  bottomResizeBoxActive: {},
   resizeIndicator: {
     width: 28,
     height: 3,
     borderRadius: 2,
-    backgroundColor: 'transparent',
   },
-  resizeIndicatorActive: {
-    backgroundColor: '#8ab4f8',
-  },
+  resizeIndicatorActive: {},
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -32,7 +27,6 @@ export const styles = StyleSheet.create({
     marginBottom: 6,
   },
   header: {
-    color: '#bbbbbb',
     fontSize: 11,
     fontWeight: 'bold',
     letterSpacing: 1,
@@ -51,13 +45,10 @@ export const styles = StyleSheet.create({
     elevation: 25,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e293b",
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: "#8ab4f8",
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
@@ -67,7 +58,6 @@ export const styles = StyleSheet.create({
     marginRight: 6,
   },
   dragGhostText: {
-    color: "#ffffff",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -80,24 +70,20 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyText: {
-    color: "#777",
     fontSize: 12,
   },
   inlineCreateRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e1e1e",
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginHorizontal: 4,
     marginVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#0e639c",
   },
   inlineInput: {
     flex: 1,
-    color: "#ffffff",
     fontSize: 11.5,
     fontFamily: "monospace",
     paddingVertical: 1,
@@ -108,7 +94,6 @@ export const styles = StyleSheet.create({
     marginLeft: 2,
   },
   emptySubtext: {
-    color: "#8ab4f8",
     fontSize: 11,
     marginTop: 4,
     fontWeight: "bold",
@@ -124,18 +109,14 @@ export const styles = StyleSheet.create({
     borderRadius: 4,
   },
   folderHoverTarget: {
-    backgroundColor: "rgba(138, 180, 248, 0.25)",
     borderWidth: 1,
-    borderColor: "#8ab4f8",
   },
   folderName: {
-    color: '#cccccc',
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
   },
   folderNameHover: {
-    color: "#8ab4f8",
     fontWeight: "700",
   },
   childrenContainer: {
@@ -152,19 +133,15 @@ export const styles = StyleSheet.create({
     borderRadius: 4,
     marginHorizontal: 4,
   },
-  activeFileItem: {
-    backgroundColor: '#37373d',
-  },
+  activeFileItem: {},
   fileIconWrapper: {
     marginRight: 6,
   },
   fileName: {
-    color: '#9cdcfe',
     fontSize: 13,
     flex: 1,
   },
   activeFileName: {
-    color: '#ffffff',
     fontWeight: '600',
   },
   rootDropZone: {
@@ -177,22 +154,15 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "#3a3f4b",
     borderStyle: "dashed",
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.02)",
   },
-  rootDropZoneActive: {
-    borderColor: "#8ab4f8",
-    backgroundColor: "rgba(138, 180, 248, 0.25)",
-  },
+  rootDropZoneActive: {},
   rootDropZoneText: {
-    color: "#888",
     fontSize: 11,
     fontWeight: "500",
   },
   rootDropZoneTextActive: {
-    color: "#8ab4f8",
     fontWeight: "700",
   },
   moreActionBtn: {

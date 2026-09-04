@@ -5,6 +5,7 @@ import { AgentStep } from "../agent/agentTypes";
 import { useTheme } from "../../theme/themeContext";
 import { DirectoryListRenderer, isDirectoryListingText } from "./DirectoryListRenderer";
 import { ideActionService } from "../../ide/services/ideActionService";
+import { prettyChatPath } from "../../ide/services/chatFileLinkService";
 
 interface StepCardProps {
   step: AgentStep;
@@ -39,6 +40,10 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
     step.toolArgs?.TargetFile ||
     step.toolArgs?.dir_path;
 
+  const isDirListingTool = ["list_directory", "glob_files", "glob", "list_dir", "find_by_name"].includes(
+    step.toolName || ""
+  );
+
   const rawCmd = step.toolArgs?.command || step.toolArgs?.cmd || "";
   let portMatch = (rawCmd + " " + (step.toolOutput || "")).match(/(?:--port|-p)\s+(\d{2,5})|:(\d{4,5})/i);
   let detectedPort = portMatch ? parseInt(portMatch[1] || portMatch[2], 10) : undefined;
@@ -66,7 +71,11 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
       step.toolArgs?.pattern ||
       step.toolArgs?.dir_path ||
       "";
-    const target = rawTarget ? ` (${rawTarget.slice(0, 35)}${rawTarget.length > 35 ? "..." : ""})` : "";
+    const target = rawTarget
+      ? step.toolArgs?.command
+        ? ` (${rawTarget.slice(0, 35)}${rawTarget.length > 35 ? "..." : ""})`
+        : ` (${prettyChatPath(rawTarget, undefined, 30)})`
+      : "";
     const tool = step.toolName || "tool";
 
     switch (tool) {
@@ -143,7 +152,7 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
             {detectedUrl && (
               <TouchableOpacity
                 style={[styles.actionNavigateBtn, { backgroundColor: `${theme.accentGreen}18`, borderColor: theme.accentGreen }]}
-                onPress={() => ideActionService.openBrowser(detectedUrl, detectedPort)}
+                onPress={() => ideActionService.openBrowser(detectedUrl, detectedPort, true)}
                 activeOpacity={0.7}
               >
                 <Ionicons name="globe-outline" size={11} color={theme.accentGreen} />
@@ -152,7 +161,7 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
             )}
             <TouchableOpacity
               style={[styles.actionNavigateBtn, { backgroundColor: `${theme.accentPurple}18`, borderColor: theme.accentPurple }]}
-              onPress={() => ideActionService.openTerminal()}
+              onPress={() => ideActionService.openTerminal(undefined, undefined, true)}
               activeOpacity={0.7}
             >
               <Ionicons name="terminal-outline" size={11} color={theme.accentPurple} />
@@ -172,17 +181,29 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
           {desc ? <Text style={[styles.descText, { color: theme.textMuted }]}>📌 {desc}</Text> : null}
           <View style={styles.fileHeaderRow}>
             <View style={[styles.filePathBadge, { backgroundColor: `${theme.accentGreen}18` }]}>
-              <Ionicons name="document-text-outline" size={12} color={theme.accentGreen} />
-              <Text style={[styles.filePathText, { color: theme.accentGreen }]} numberOfLines={1}>{filePath}</Text>
+              <Ionicons
+                name={isDirListingTool ? "folder-outline" : "document-text-outline"}
+                size={12}
+                color={theme.accentGreen}
+              />
+              <Text
+                style={[styles.filePathText, { color: theme.accentGreen }]}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
+                {prettyChatPath(filePath, undefined, 40)}
+              </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.actionNavigateBtn, { backgroundColor: `${theme.accent}18`, borderColor: theme.accent }]}
-              onPress={() => ideActionService.openFile(filePath)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="open-outline" size={11} color={theme.accent} />
-              <Text style={[styles.actionNavigateBtnText, { color: theme.accent }]}>View File in Editor</Text>
-            </TouchableOpacity>
+            {!isDirListingTool && (
+              <TouchableOpacity
+                style={[styles.actionNavigateBtn, { backgroundColor: `${theme.accent}18`, borderColor: theme.accent }]}
+                onPress={() => ideActionService.openFile(filePath, undefined, undefined, true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="open-outline" size={11} color={theme.accent} />
+                <Text style={[styles.actionNavigateBtnText, { color: theme.accent }]}>View</Text>
+              </TouchableOpacity>
+            )}
           </View>
           {content ? (
             <Text selectable style={[styles.codeSnippet, { backgroundColor: theme.bgPrimary, color: theme.accentGreen }]} numberOfLines={6}>
@@ -225,10 +246,10 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
         <View style={styles.subSection}>
           <View style={styles.outputHeaderRow}>
             <Text style={[styles.subLabel, { color: theme.textMuted }]}>OUTPUT</Text>
-            {filePath && (
+            {filePath && !isDirListingTool && (
               <TouchableOpacity
                 style={[styles.miniNavigateBtn, { backgroundColor: `${theme.accent}15` }]}
-                onPress={() => ideActionService.openFile(filePath)}
+                onPress={() => ideActionService.openFile(filePath, undefined, undefined, true)}
                 activeOpacity={0.7}
               >
                 <Ionicons name="open-outline" size={10} color={theme.accent} />
@@ -236,7 +257,7 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
               </TouchableOpacity>
             )}
           </View>
-          <View style={[styles.outputBox, { backgroundColor: theme.bgPrimary, borderColor: theme.border }, step.isError && styles.outputBoxError]}>
+          <View style={[styles.outputBox, { backgroundColor: theme.bgPrimary, borderColor: theme.border }, step.isError && { borderColor: theme.accentRed, backgroundColor: `${theme.accentRed}12` }]}>
             <Text selectable style={[styles.outputText, { color: theme.textPrimary }, step.isError && { color: theme.accentRed }]} numberOfLines={12}>
               {step.toolOutput}
             </Text>
@@ -247,18 +268,27 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
 
     if (step.approvalStatus === "pending") {
       return (
-        <View style={styles.pendingApprovalRow}>
-          <Ionicons name="shield-outline" size={12} color="#fbbf24" />
-          <Text style={styles.pendingApprovalText}>Awaiting your approval to proceed...</Text>
+        <View style={[styles.pendingApprovalRow, { backgroundColor: `${theme.accentGold}15`, borderColor: `${theme.accentGold}50` }]}>
+          <Ionicons name="shield-outline" size={12} color={theme.accentGold} />
+          <Text style={[styles.pendingApprovalText, { color: theme.accentGold }]}>Awaiting your approval to proceed...</Text>
         </View>
       );
     }
 
     if (step.approvalStatus === "rejected") {
       return (
-        <View style={styles.rejectedRow}>
-          <Ionicons name="close-circle-outline" size={12} color="#f87171" />
-          <Text style={styles.rejectedText}>Action rejected by user</Text>
+        <View style={[styles.rejectedRow, { backgroundColor: `${theme.accentRed}12` }]}>
+          <Ionicons name="close-circle-outline" size={12} color={theme.accentRed} />
+          <Text style={[styles.rejectedText, { color: theme.accentRed }]}>Action rejected by user</Text>
+        </View>
+      );
+    }
+
+    if (step.approvalStatus === "expired") {
+      return (
+        <View style={[styles.rejectedRow, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
+          <Ionicons name="time-outline" size={12} color={theme.textMuted} />
+          <Text style={[styles.rejectedText, { color: theme.textMuted }]}>Approval expired — turn ended, send again to retry</Text>
         </View>
       );
     }
@@ -317,12 +347,12 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
           </Text>
         </View>
         <View style={styles.stepHeaderRight}>
-          {filePath ? (
+          {filePath && !isDirListingTool ? (
             <TouchableOpacity
               style={[styles.headerQuickBtn, { backgroundColor: `${theme.accent}20` }]}
               onPress={(e) => {
                 e.stopPropagation?.();
-                ideActionService.openFile(filePath);
+                ideActionService.openFile(filePath, undefined, undefined, true);
               }}
               activeOpacity={0.7}
             >
@@ -334,7 +364,7 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
               style={[styles.headerQuickBtn, { backgroundColor: `${theme.accentGreen}20` }]}
               onPress={(e) => {
                 e.stopPropagation?.();
-                ideActionService.openBrowser(detectedUrl, detectedPort);
+                ideActionService.openBrowser(detectedUrl, detectedPort, true);
               }}
               activeOpacity={0.7}
             >
@@ -366,44 +396,44 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
 
 const styles = StyleSheet.create({
   stepCard: { borderRadius: 5, borderWidth: 1, overflow: "hidden", marginBottom: 2 },
-  thoughtCard: { backgroundColor: "#171612", borderColor: "#3b331b" },
-  toolCard: { backgroundColor: "#11141a", borderColor: "#1d2533" },
+  thoughtCard: { },
+  toolCard: { },
   stepHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 6, paddingVertical: 3.5 },
-  stepHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 5, flex: 1 },
-  stepTitle: { fontSize: 10, fontWeight: "600" },
-  thoughtTitle: { color: "#fdd663" },
-  toolTitle: { color: "#93c5fd" },
-  stepBody: { padding: 6, backgroundColor: "#0b0d11", borderTopWidth: 1, borderTopColor: "#171c24", gap: 4 },
-  thoughtText: { color: "#d1d5db", fontSize: 10.5, lineHeight: 14.5, fontStyle: "italic" },
+  stepHeaderLeft: { flex: 1, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 },
+  stepTitle: { flex: 1, flexShrink: 1, fontSize: 10, fontWeight: "600" },
+  thoughtTitle: { },
+  toolTitle: { },
+  stepBody: { padding: 6, borderTopWidth: 1, gap: 4 },
+  thoughtText: { fontSize: 10.5, lineHeight: 14.5, fontStyle: "italic" },
   subSection: { gap: 3 },
-  subLabel: { color: "#6b7280", fontSize: 8.5, fontWeight: "bold", letterSpacing: 0.5 },
-  descText: { color: "#9ca3af", fontSize: 10, fontWeight: "500" },
-  terminalBox: { flexDirection: "row", alignItems: "flex-start", backgroundColor: "#060709", padding: 5, borderRadius: 4, borderWidth: 1, borderColor: "#18202d", gap: 5 },
-  terminalPrompt: { color: "#34d399", fontFamily: "monospace", fontSize: 10, fontWeight: "bold" },
-  terminalCommandText: { color: "#e5e7eb", fontFamily: "monospace", fontSize: 10, flex: 1 },
-  filePathBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#0f1f17", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3, alignSelf: "flex-start" },
-  filePathText: { color: "#34d399", fontFamily: "monospace", fontSize: 9.5 },
-  codeSnippet: { color: "#34d399", fontFamily: "monospace", fontSize: 9.5, backgroundColor: "#060709", padding: 5, borderRadius: 4 },
+  subLabel: { fontSize: 8.5, fontWeight: "bold", letterSpacing: 0.5 },
+  descText: { fontSize: 10, fontWeight: "500" },
+  terminalBox: { flexDirection: "row", alignItems: "flex-start", padding: 5, borderRadius: 4, borderWidth: 1, gap: 5 },
+  terminalPrompt: { fontFamily: "monospace", fontSize: 10, fontWeight: "bold" },
+  terminalCommandText: { fontFamily: "monospace", fontSize: 10, flex: 1 },
+  filePathBadge: { flex: 1, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3 },
+  filePathText: { flex: 1, flexShrink: 1, fontFamily: "monospace", fontSize: 9.5 },
+  codeSnippet: { fontFamily: "monospace", fontSize: 9.5, padding: 5, borderRadius: 4 },
   kvRow: { flexDirection: "row", gap: 5 },
-  kvKey: { color: "#93c5fd", fontSize: 9.5, fontWeight: "600" },
-  kvVal: { color: "#e5e7eb", fontSize: 9.5, flex: 1 },
-  outputBox: { backgroundColor: "#060709", padding: 5, borderRadius: 4, borderWidth: 1, borderColor: "#181d24" },
-  outputBoxError: { borderColor: "#451a1d", backgroundColor: "#150a0c" },
-  outputText: { color: "#d8b4fe", fontFamily: "monospace", fontSize: 9.5, lineHeight: 13.5 },
+  kvKey: { fontSize: 9.5, fontWeight: "600" },
+  kvVal: { fontSize: 9.5, flex: 1 },
+  outputBox: { padding: 5, borderRadius: 4, borderWidth: 1 },
+  outputBoxError: { },
+  outputText: { fontFamily: "monospace", fontSize: 9.5, lineHeight: 13.5 },
   runningRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 2 },
-  runningText: { color: "#93c5fd", fontSize: 9.5, fontStyle: "italic" },
-  pendingApprovalRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, backgroundColor: "#1f1a0a", paddingHorizontal: 6, borderRadius: 4, borderWidth: 1, borderColor: "#78350f" },
-  pendingApprovalText: { color: "#fbbf24", fontSize: 10, fontWeight: "600" },
-  rejectedRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 3, backgroundColor: "#200d0d", paddingHorizontal: 6, borderRadius: 4 },
-  rejectedText: { color: "#f87171", fontSize: 9.5, fontWeight: "500" },
-  stepHeaderRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  runningText: { fontSize: 9.5, fontStyle: "italic" },
+  pendingApprovalRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 6, borderRadius: 4, borderWidth: 1 },
+  pendingApprovalText: { fontSize: 10, fontWeight: "600" },
+  rejectedRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 3, paddingHorizontal: 6, borderRadius: 4 },
+  rejectedText: { fontSize: 9.5, fontWeight: "500" },
+  stepHeaderRight: { flexShrink: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   headerQuickBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 },
   headerQuickBtnText: { fontSize: 9.5, fontWeight: "600" },
   actionRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   fileHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
-  outputHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  actionNavigateBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 3, borderWidth: 1 },
+  outputHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
+  actionNavigateBtn: { flexShrink: 0, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 3, borderWidth: 1 },
   actionNavigateBtnText: { fontSize: 9.5, fontWeight: "600" },
-  miniNavigateBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3 },
+  miniNavigateBtn: { flexShrink: 0, flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3 },
   miniNavigateBtnText: { fontSize: 9, fontWeight: "600" },
 });

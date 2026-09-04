@@ -15,8 +15,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { CodeSyntaxHighlighter } from "./CodeSyntaxHighlighter";
 import { EditorTabBar } from "./EditorTabBar";
+import { ProblemsPanel } from "./ProblemsPanel";
+import { useEditorAssists } from "./useEditorAssists";
+import { firstErrorLine } from "../services/codeDiagnosticsService";
 import { formatCode } from "../services/formatterService";
-import { tokenizeCode, TOKEN_COLORS, CodeToken } from "../services/syntaxTokenizer";
+import { tokenizeCode, getTokenColors, CodeToken } from "../services/syntaxTokenizer";
 import { useTheme } from "../../theme/themeContext";
 
 interface EditorViewProps {
@@ -48,7 +51,9 @@ export function EditorView({
   const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [startIndex, setStartIndex] = useState(0);
+  const [showProblems, setShowProblems] = useState(false);
   const textInputRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const lastTapRef = useRef<number>(0);
   const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startIndexRef = useRef(0);
@@ -61,6 +66,7 @@ export function EditorView({
   useEffect(() => {
     setStartIndex(0);
     setIsEditing(false);
+    setShowProblems(false);
   }, [fileName]);
 
   useEffect(() => {
@@ -86,11 +92,24 @@ export function EditorView({
     return tokenizeCode(visibleCodeChunk, fileName, startIndex + 1);
   }, [visibleCodeChunk, fileName, startIndex]);
 
-  const gutterWidth = totalLines >= 1000 ? 32 : totalLines >= 100 ? 26 : totalLines >= 10 ? 20 : 16;
+  // Char offset of the visible chunk within the full file (for cursor mapping).
+  const chunkStartOffset = useMemo(() => {
+    if (startIndex === 0) return 0;
+    let off = 0;
+    for (let k = 0; k < startIndex && k < rawLines.length; k++) {
+      off += rawLines[k].length + 1;
+    }
+    return off;
+  }, [rawLines, startIndex]);
 
-  const lineNumbers = useMemo(() => {
-    return tokenizedLines.map((l) => `${l.lineNumber}`).join("\n");
-  }, [tokenizedLines]);
+  const assists = useEditorAssists(content, fileName, chunkStartOffset);
+
+  useEffect(() => {
+    assists.setSelection({ start: 0, end: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileName]);
+
+  const gutterWidth = totalLines >= 1000 ? 32 : totalLines >= 100 ? 26 : totalLines >= 10 ? 20 : 16;
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -144,6 +163,49 @@ export function EditorView({
     }
   };
 
+  // Typing pipeline: diff → auto-close / skip / smart-indent → content + cursor.
+  // NOTE: TextInput stays children-driven (no `value` prop) so token colors keep
+  // rendering while typing; the explicit `selection` prop steers only the cursor.
+  const handleEditChange = (newChunkText: string) => {
+    const { chunk, cursor } = assists.assistEdit(visibleCodeChunk, newChunkText);
+    assists.setSelection({ start: cursor, end: cursor });
+    handleTextChangeInWindow(chunk);
+  };
+
+  const jumpToLine = useCallback(
+    (line: number) => {
+      const clamped = Math.max(1, Math.min(line, totalLines));
+      if (totalLines > WINDOW_SIZE) {
+        setStartIndex(Math.max(0, Math.min(clamped - 9, totalLines - WINDOW_SIZE)));
+      }
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: Math.max(0, (clamped - 1) * LINE_HEIGHT - 60), animated: true });
+      }, 80);
+    },
+    [totalLines]
+  );
+
+  const handleShowProblems = useCallback(() => {
+    setShowProblems(true);
+    const first = firstErrorLine(assists.diagnostics);
+    if (first > 0) {
+      jumpToLine(first);
+    }
+  }, [assists.diagnostics, jumpToLine]);
+
+  // Cursor line in full-file coordinates (edit mode only).
+  const cursorFullLine = isEditing
+    ? startIndex + visibleCodeChunk.slice(0, Math.min(assists.selection.start, visibleCodeChunk.length)).split("\n").length
+    : undefined;
+
+  const editGutterColor = (lineNumber: number): string => {
+    if (assists.errorLines.has(lineNumber)) return theme.accentRed;
+    if (assists.match.kind === "unmatched" && assists.matchLines.has(lineNumber)) return theme.accentRed;
+    if (assists.matchLines.has(lineNumber)) return theme.accent;
+    if (cursorFullLine === lineNumber) return theme.textPrimary;
+    return theme.textMuted;
+  };
+
   if (!fileName) {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: theme.bgPrimary }]}>
@@ -181,10 +243,14 @@ export function EditorView({
         onAskAi={onAskAiAboutFile ? () => onAskAiAboutFile(content, fileName) : undefined}
         onExitProject={onExitProject}
         onToggleSidebar={onToggleSidebar}
+        errorCount={assists.errorCount}
+        warningCount={assists.warningCount}
+        onShowProblems={handleShowProblems}
       />
 
       {/* Editor Body with Strict Sliding Window Virtualization */}
       <ScrollView
+        ref={scrollRef}
         style={[styles.editorScroll, { backgroundColor: theme.bgPrimary }]}
         contentContainerStyle={[styles.editorScrollContent, { backgroundColor: theme.bgPrimary }]}
         keyboardShouldPersistTaps="handled"
@@ -204,12 +270,19 @@ export function EditorView({
             lineHeight={LINE_HEIGHT}
             gutterWidth={gutterWidth}
             theme={theme}
+            errorLines={assists.errorLines}
           />
         ) : (
           <View style={[styles.editorRow, { backgroundColor: theme.bgPrimary }]}>
             {/* Pinned Gutter on the left */}
             <View style={[styles.gutterContainer, { width: gutterWidth, backgroundColor: theme.bgSecondary, borderRightColor: theme.border }]}>
-              <Text style={[styles.gutterText, { color: theme.textMuted }]}>{lineNumbers}</Text>
+              <Text style={[styles.gutterText, { color: theme.textMuted }]}>
+                {tokenizedLines.map((line, lIdx) => (
+                  <Text key={`g-${line.lineNumber}`} style={{ color: editGutterColor(line.lineNumber) }}>
+                    {line.lineNumber}{lIdx < tokenizedLines.length - 1 ? "\n" : ""}
+                  </Text>
+                ))}
+              </Text>
             </View>
 
             {/* Horizontally scrollable TextInput in Edit Mode */}
@@ -224,7 +297,9 @@ export function EditorView({
                 style={[styles.editorInput, { color: theme.textPrimary }]}
                 multiline
                 scrollEnabled={false}
-                onChangeText={handleTextChangeInWindow}
+                onChangeText={handleEditChange}
+                selection={assists.selection}
+                onSelectionChange={(e) => assists.setSelection(e.nativeEvent.selection)}
                 autoCapitalize="none"
                 autoCorrect={false}
                 textAlignVertical="top"
@@ -233,12 +308,10 @@ export function EditorView({
                 {tokenizedLines.map((line, lIdx) => (
                   <Text key={`line-${line.lineNumber}`}>
                     {line.tokens.map((token: CodeToken, tIdx: number) => {
-                      const isPlainOp = token.type === "plain" || token.type === "operator";
+                      const tokenPalette = getTokenColors(theme.isDark);
                       const tokenColor = token.type === "comment"
                         ? theme.textMuted
-                        : isPlainOp
-                        ? (theme.isDark ? TOKEN_COLORS[token.type] : theme.textPrimary)
-                        : (TOKEN_COLORS[token.type] || (theme.isDark ? TOKEN_COLORS.plain : theme.textPrimary));
+                        : (tokenPalette[token.type] || tokenPalette.plain);
                       return (
                         <Text
                           key={`tok-${tIdx}`}
@@ -263,6 +336,26 @@ export function EditorView({
         {/* Bottom Spacer: Virtualizes unrendered lines below window */}
         {bottomSpacerHeight > 0 && <View style={{ height: bottomSpacerHeight }} />}
       </ScrollView>
+
+      {/* Bracket partner status (edit mode, cursor on a bracket) */}
+      {isEditing && assists.matchStatus && (
+        <View style={[styles.bracketBar, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
+          <Text
+            style={[
+              styles.bracketBarText,
+              { color: assists.match.kind === "unmatched" ? theme.accentRed : theme.accent },
+            ]}
+          >
+            {assists.match.kind === "unmatched" ? "⚠ " : "{ }  "}
+            {assists.matchStatus}
+          </Text>
+        </View>
+      )}
+
+      {/* Problems: error/warning list with tap-to-jump (badge opens it) */}
+      {showProblems && (
+        <ProblemsPanel diagnostics={assists.diagnostics} onJumpToLine={jumpToLine} />
+      )}
     </View>
   );
 }
@@ -334,5 +427,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE,
     lineHeight: LINE_HEIGHT,
     includeFontPadding: false,
+  },
+  bracketBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 3,
+    borderTopWidth: 1,
+  },
+  bracketBarText: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 10.5,
+    fontWeight: "600",
   },
 });

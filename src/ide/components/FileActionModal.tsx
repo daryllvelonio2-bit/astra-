@@ -37,7 +37,7 @@ export function FileActionModal({
 
   return (
     <View style={styles.modalOverlay}>
-      <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+      <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
       <View style={[styles.modalCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border, top: menuPosition.y, left: menuPosition.x }]}>
           {modalMode === "options" && (
             <>
@@ -73,7 +73,7 @@ export function FileActionModal({
                   <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Back</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onRenameSubmit}>
-                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText]}>Save</Text>
+                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText, { color: theme.sendButtonIcon }]}>Save</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -96,7 +96,7 @@ export function FileActionModal({
                   <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onAddSubmit}>
-                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText]}>Create</Text>
+                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText, { color: theme.sendButtonIcon }]}>Create</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -114,30 +114,24 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)",
   },
   modalCard: {
     position: "absolute",
-    backgroundColor: "#252526",
     borderRadius: 8,
     padding: 12,
     width: 170,
     borderWidth: 1,
-    borderColor: "#3c3c3c",
     zIndex: 100,
     elevation: 6,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
   modalTitle: {
-    color: "#ffffff",
     fontSize: 12,
     fontWeight: "bold",
     marginBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
     paddingBottom: 4,
   },
   modalOption: {
@@ -145,27 +139,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   modalOptionText: {
-    color: "#9cdcfe",
     fontSize: 13,
   },
   deleteOption: {
     borderTopWidth: 1,
-    borderTopColor: "#333",
     marginTop: 4,
   },
-  deleteText: {
-    color: "#f48771",
-  },
+  deleteText: {},
   modalInput: {
-    backgroundColor: "#1e1e1e",
-    color: "#ffffff",
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 4,
     fontSize: 13,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#333",
   },
   modalBtnRow: {
     flexDirection: "row",
@@ -176,17 +163,12 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 4,
-    backgroundColor: "#333",
   },
   modalBtnText: {
-    color: "#ccc",
     fontSize: 12,
   },
-  modalBtnPrimary: {
-    backgroundColor: "#0e639c",
-  },
+  modalBtnPrimary: {},
   modalBtnPrimaryText: {
-    color: "#fff",
     fontWeight: "bold",
   },
 });

@@ -83,9 +83,7 @@ export function WebBrowserPortChips({
 
 const styles = StyleSheet.create({
   portPillsBar: {
-    backgroundColor: "#141414",
     borderBottomWidth: 1,
-    borderBottomColor: "#222",
     paddingVertical: 5,
   },
   pillsScroll: {
@@ -96,8 +94,6 @@ const styles = StyleSheet.create({
   liveTaskChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#064e3b",
-    borderColor: "#059669",
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 3.5,
@@ -109,31 +105,22 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#34d399",
   },
   liveTaskText: {
-    color: "#a7f3d0",
     fontSize: 11,
     fontWeight: "600",
   },
   portPill: {
-    backgroundColor: "#1f1f1f",
     paddingHorizontal: 8,
     paddingVertical: 3.5,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#2a2a2a",
   },
-  portPillActive: {
-    backgroundColor: "#1e3a8a",
-    borderColor: "#3b82f6",
-  },
+  portPillActive: {},
   portPillText: {
-    color: "#9ca3af",
     fontSize: 11,
   },
   portPillTextActive: {
-    color: "#bfdbfe",
     fontWeight: "700",
   },
 });

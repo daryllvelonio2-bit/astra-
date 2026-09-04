@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { ConversationSession, AgentChatMessage } from "../agent/agentTypes";
+import { getFileInfo, readFileText, writeFileText, makeDir, deletePath } from "../../ide/services/nativeFs";
 
 const CONVERSATIONS_DIR = `${FileSystem.documentDirectory}conversations/`;
 const WORKSPACES_DIR = `${FileSystem.documentDirectory}workspaces/`;
@@ -14,10 +15,7 @@ function getConversationsFile(workspaceId: string): string {
 
 async function ensureConversationsDir(): Promise<void> {
   try {
-    const info = await FileSystem.getInfoAsync(CONVERSATIONS_DIR);
-    if (!info.exists) {
-      await FileSystem.makeDirectoryAsync(CONVERSATIONS_DIR, { intermediates: true });
-    }
+    await makeDir(CONVERSATIONS_DIR);
   } catch (e) {
     console.error("Error ensuring conversations directory:", e);
   }
@@ -30,15 +28,15 @@ async function migrateLegacyConversations(workspaceId: string): Promise<void> {
   const newFile = getConversationsFile(workspaceId);
 
   try {
-    const legacyInfo = await FileSystem.getInfoAsync(legacyFile);
+    const legacyInfo = await getFileInfo(legacyFile);
     if (legacyInfo.exists) {
-      const newInfo = await FileSystem.getInfoAsync(newFile);
+      const newInfo = await getFileInfo(newFile);
       if (!newInfo.exists) {
         await ensureConversationsDir();
-        await FileSystem.copyAsync({ from: legacyFile, to: newFile });
+        await writeFileText(newFile, await readFileText(legacyFile));
       }
       // Purge legacy .ai folder from the user workspace
-      await FileSystem.deleteAsync(legacyDir, { idempotent: true });
+      await deletePath(legacyDir);
     }
   } catch (_) {}
 }
@@ -50,9 +48,9 @@ export async function listSessions(workspaceId: string): Promise<ConversationSes
   const filePath = getConversationsFile(workspaceId);
 
   try {
-    const info = await FileSystem.getInfoAsync(filePath);
+    const info = await getFileInfo(filePath);
     if (info.exists) {
-      const data = await FileSystem.readAsStringAsync(filePath);
+      const data = await readFileText(filePath);
       const sessions: ConversationSession[] = JSON.parse(data);
       return Array.isArray(sessions) ? sessions.sort((a, b) => b.updatedAt - a.updatedAt) : [];
     }
@@ -85,7 +83,7 @@ export async function saveAllSessions(workspaceId: string, sessions: Conversatio
   await ensureConversationsDir();
   const filePath = getConversationsFile(workspaceId);
   try {
-    await FileSystem.writeAsStringAsync(filePath, JSON.stringify(sessions, null, 2));
+    await writeFileText(filePath, JSON.stringify(sessions, null, 2));
     if (!silent) {
       notifySessionChanged(workspaceId);
     }

@@ -25,6 +25,7 @@ import { ProjectInspectorModal } from './ProjectInspectorModal';
 import { SettingsModal } from './SettingsModal';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
 import { useTheme } from '../../theme/themeContext';
+import { useOrientation } from '../../theme/useOrientation';
 
 interface ProjectPickerProps {
   onOpenWorkspace: (workspaceId: string) => void;
@@ -34,6 +35,7 @@ interface ProjectPickerProps {
 export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPickerProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { isLandscape } = useOrientation();
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
@@ -88,11 +90,16 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
   };
 
   const handleDeleteProject = async (project: ProjectItem) => {
+    // Optimistic: remove from list instantly, delete files in background.
+    setProjects((prev) => prev.filter((p) => p.id !== project.id));
+    setInspectorVisible(false);
+    setSelectedProject(null);
     try {
       await deleteWorkspace(project.id);
-      await loadProjects();
     } catch (e) {
       Alert.alert('Error', 'Failed to delete workspace');
+    } finally {
+      await loadProjects();
     }
   };
 
@@ -164,7 +171,7 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
             <Text
               style={[
                 styles.filterChipText,
-                { color: activeFilter === filter ? "#ffffff" : theme.textSecondary },
+                { color: activeFilter === filter ? theme.sendButtonIcon : theme.textSecondary },
               ]}
             >
               {filter}
@@ -175,18 +182,23 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
 
       {/* Project List */}
       <FlatList
+        key={isLandscape ? 'grid' : 'list'}
+        numColumns={isLandscape ? 2 : 1}
+        columnWrapperStyle={isLandscape ? styles.gridRow : undefined}
         data={filteredProjects}
         renderItem={({ item }) => (
-          <ProjectCard
-            item={item}
-            onPress={(p) => {
-              onOpenWorkspace(p.id);
-            }}
-            onMorePress={(p) => {
-              setSelectedProject(p);
-              setInspectorVisible(true);
-            }}
-          />
+          <View style={isLandscape ? styles.gridItem : styles.listItem}>
+            <ProjectCard
+              item={item}
+              onPress={(p) => {
+                onOpenWorkspace(p.id);
+              }}
+              onMorePress={(p) => {
+                setSelectedProject(p);
+                setInspectorVisible(true);
+              }}
+            />
+          </View>
         )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
@@ -195,8 +207,8 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
             <Text style={[styles.emptyText, { color: theme.textMuted }]}>No workspace projects found.</Text>
             <View style={styles.emptyActionsRow}>
               <TouchableOpacity style={[styles.createBtn, { backgroundColor: theme.accent }]} onPress={() => setCreateModalVisible(true)}>
-                <Ionicons name="add" size={16} color="#fff" />
-                <Text style={styles.createBtnText}>New Project</Text>
+                <Ionicons name="add" size={16} color={theme.sendButtonIcon} />
+                <Text style={[styles.createBtnText, { color: theme.sendButtonIcon }]}>New Project</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.createBtn, styles.openExistingBtn, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}
@@ -248,7 +260,6 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#181818',
   },
   header: {
     flexDirection: 'row',
@@ -257,12 +268,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#282828',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#f0f0f0',
   },
   headerActions: {
     flexDirection: 'row',
@@ -275,21 +284,18 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#252526',
     marginHorizontal: 16,
     marginTop: 10,
     marginBottom: 6,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#333',
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    color: '#f0f0f0',
     paddingVertical: 8,
     fontSize: 14,
   },
@@ -303,24 +309,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   filterChip: {
-    backgroundColor: '#252526',
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#333',
   },
-  filterChipActive: {
-    backgroundColor: '#0e639c',
-    borderColor: '#0e639c',
-  },
+  filterChipActive: {},
   filterChipText: {
-    color: '#a0a0a0',
     fontSize: 12,
     fontWeight: '500',
   },
   filterChipTextActive: {
-    color: '#fff',
     fontWeight: 'bold',
   },
   listContent: {
@@ -328,13 +327,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingBottom: 40,
   },
+  listItem: {
+    flex: 1,
+  },
+  gridRow: {
+    gap: 10,
+  },
+  gridItem: {
+    flex: 1,
+  },
   emptyContainer: {
     alignItems: 'center',
     marginTop: 60,
     gap: 14,
   },
   emptyText: {
-    color: '#888',
     fontSize: 14,
   },
   headerBtn: {
@@ -358,7 +365,6 @@ const styles = StyleSheet.create({
   createBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0e639c',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 8,
@@ -368,7 +374,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   createBtnText: {
-    color: '#fff',
     fontSize: 13.5,
     fontWeight: 'bold',
   },

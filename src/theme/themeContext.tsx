@@ -31,6 +31,7 @@ export interface ThemeColors {
   statusPillBg: string;
   statusPillBorder: string;
   cardBg: string;
+  overlay: string;
 }
 
 export const THEMES: Record<AppTheme, ThemeColors> = {
@@ -64,6 +65,7 @@ export const THEMES: Record<AppTheme, ThemeColors> = {
     statusPillBg: "#1e2025",
     statusPillBorder: "#2e323b",
     cardBg: "#17181c",
+    overlay: "rgba(0, 0, 0, 0.6)",
   },
   light: {
     id: "light",
@@ -95,6 +97,7 @@ export const THEMES: Record<AppTheme, ThemeColors> = {
     statusPillBg: "#f1f5f9",
     statusPillBorder: "#cbd5e1",
     cardBg: "#ffffff",
+    overlay: "rgba(15, 23, 42, 0.45)",
   },
   midnight: {
     id: "midnight",
@@ -126,6 +129,7 @@ export const THEMES: Record<AppTheme, ThemeColors> = {
     statusPillBg: "#111827",
     statusPillBorder: "#1e293b",
     cardBg: "#111827",
+    overlay: "rgba(0, 0, 0, 0.72)",
   },
 };
 

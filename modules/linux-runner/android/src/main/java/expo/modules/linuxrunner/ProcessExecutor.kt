@@ -12,11 +12,17 @@ object ProcessExecutor {
 
     fun stopCommand(commandId: String): Boolean {
         val process = activeProcesses.remove(commandId) ?: return false
-        try {
-            process.destroyForcibly()
-            return true
+        return try {
+            val pid = ProcessTreeKiller.pidOf(process)
+            try {
+                process.destroyForcibly()
+            } catch (_: Exception) {}
+            // destroyForcibly only signals proot itself; the guest subtree
+            // (sh -> npm -> tsc workers) would otherwise survive orphaned.
+            ProcessTreeKiller.killTree(pid)
+            true
         } catch (_: Exception) {
-            return false
+            false
         }
     }
 
@@ -26,11 +32,19 @@ object ProcessExecutor {
         while (iterator.hasNext()) {
             val entry = iterator.next()
             try {
-                entry.value.destroyForcibly()
+                val pid = ProcessTreeKiller.pidOf(entry.value)
+                try {
+                    entry.value.destroyForcibly()
+                } catch (_: Exception) {}
+                ProcessTreeKiller.killTree(pid)
                 anyStopped = true
             } catch (_: Exception) {}
             iterator.remove()
         }
+        // Provisioning stages run outside the command map — stop them too.
+        try {
+            if (EnvironmentManager.cancelProvisioning()) anyStopped = true
+        } catch (_: Exception) {}
         return anyStopped
     }
 
@@ -133,11 +147,12 @@ object ProcessExecutor {
         env.remove("LD_PRELOAD")
 
         var process: Process? = null
+        // Track even untracked one-shot executions under an auto id so
+        // stopAllCommands() can reach them while they run.
+        val effectiveCommandId = if (!commandId.isNullOrBlank()) commandId else "sync-${System.nanoTime()}"
         try {
             process = pb.start()
-            if (!commandId.isNullOrBlank()) {
-                activeProcesses[commandId] = process
-            }
+            activeProcesses[effectiveCommandId] = process
             val output = StringBuilder()
             val readerThread = Thread {
                 try {
@@ -176,9 +191,7 @@ object ProcessExecutor {
         } catch (e: Exception) {
             return ExecutionResult("Error executing command: ${e.message}", -1)
         } finally {
-            if (!commandId.isNullOrBlank()) {
-                activeProcesses.remove(commandId)
-            }
+            activeProcesses.remove(effectiveCommandId)
             try {
                 process?.destroyForcibly()
             } catch (_: Exception) {}

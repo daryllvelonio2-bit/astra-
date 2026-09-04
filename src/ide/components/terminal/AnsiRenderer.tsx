@@ -14,7 +14,7 @@ interface TextSpan {
   style: TextStyle;
 }
 
-const ANSI_COLORS: Record<number, string> = {
+const ANSI_COLORS_DARK: Record<number, string> = {
   30: "#484f58", // black
   31: "#ff7b72", // red
   32: "#7ee787", // green
@@ -33,7 +33,30 @@ const ANSI_COLORS: Record<number, string> = {
   97: "#ffffff", // bright white
 };
 
-const ANSI_BG_COLORS: Record<number, string> = {
+// Darkened variants for readability on light terminal backgrounds.
+const ANSI_COLORS_LIGHT: Record<number, string> = {
+  30: "#24292f",
+  31: "#cf222e",
+  32: "#116329",
+  33: "#9e6a03",
+  34: "#0969da",
+  35: "#8250df",
+  36: "#1b7c83",
+  37: "#24292f",
+  90: "#57606a",
+  91: "#a40e26",
+  92: "#1a7f37",
+  93: "#9e6a03",
+  94: "#0969da",
+  95: "#8250df",
+  96: "#1b7c83",
+  97: "#24292f",
+};
+
+/** @deprecated Use theme-aware palette resolution instead. */
+const ANSI_COLORS: Record<number, string> = ANSI_COLORS_DARK;
+
+const ANSI_BG_COLORS_DARK: Record<number, string> = {
   40: "#0d1117",
   41: "#b62324",
   42: "#238636",
@@ -52,10 +75,42 @@ const ANSI_BG_COLORS: Record<number, string> = {
   107: "#ffffff",
 };
 
+// Pastel backgrounds for light terminal themes.
+const ANSI_BG_COLORS_LIGHT: Record<number, string> = {
+  40: "#e9eef5",
+  41: "#ffebe9",
+  42: "#dafbe1",
+  43: "#fff8c5",
+  44: "#ddf4ff",
+  45: "#fbefff",
+  46: "#daf3f5",
+  47: "#24292f",
+  100: "#d0d7de",
+  101: "#ffcecb",
+  102: "#aceebb",
+  103: "#f5e8a8",
+  104: "#b6e3ff",
+  105: "#e0c5ff",
+  106: "#a9e8ee",
+  107: "#24292f",
+};
+
+/** @deprecated Use theme-aware palette resolution instead. */
+const ANSI_BG_COLORS: Record<number, string> = ANSI_BG_COLORS_DARK;
+
+function isLightTerminalTheme(theme: TerminalTheme): boolean {
+  return theme.id === "light";
+}
+
 /**
  * Parses raw terminal text with ANSI escape codes into React Native TextSpans
  */
-function parseAnsiToSpans(raw: string, defaultColor: string): TextSpan[] {
+function parseAnsiToSpans(
+  raw: string,
+  defaultColor: string,
+  fgPalette: Record<number, string> = ANSI_COLORS_DARK,
+  bgPalette: Record<number, string> = ANSI_BG_COLORS_DARK
+): TextSpan[] {
   if (!raw) return [];
 
   // Strip non-color control sequences and tty warning messages
@@ -97,20 +152,20 @@ function parseAnsiToSpans(raw: string, defaultColor: string): TextSpan[] {
         currentStyle = { ...currentStyle, fontWeight: "normal", opacity: 1 };
       } else if (code === 24) {
         currentStyle = { ...currentStyle, textDecorationLine: "none" };
-      } else if (ANSI_COLORS[code]) {
-        currentStyle = { ...currentStyle, color: ANSI_COLORS[code] };
-      } else if (ANSI_BG_COLORS[code]) {
-        currentStyle = { ...currentStyle, backgroundColor: ANSI_BG_COLORS[code] };
+      } else if (fgPalette[code]) {
+        currentStyle = { ...currentStyle, color: fgPalette[code] };
+      } else if (bgPalette[code]) {
+        currentStyle = { ...currentStyle, backgroundColor: bgPalette[code] };
       } else if (code === 38 && codes[i + 1] === 5 && codes[i + 2] !== undefined) {
         const colorIdx = codes[i + 2];
-        if (ANSI_COLORS[30 + (colorIdx % 8)]) {
-          currentStyle = { ...currentStyle, color: ANSI_COLORS[30 + (colorIdx % 8)] };
+        if (fgPalette[30 + (colorIdx % 8)]) {
+          currentStyle = { ...currentStyle, color: fgPalette[30 + (colorIdx % 8)] };
         }
         i += 2;
       } else if (code === 48 && codes[i + 1] === 5 && codes[i + 2] !== undefined) {
         const bgIdx = codes[i + 2];
-        if (ANSI_BG_COLORS[40 + (bgIdx % 8)]) {
-          currentStyle = { ...currentStyle, backgroundColor: ANSI_BG_COLORS[40 + (bgIdx % 8)] };
+        if (bgPalette[40 + (bgIdx % 8)]) {
+          currentStyle = { ...currentStyle, backgroundColor: bgPalette[40 + (bgIdx % 8)] };
         }
         i += 2;
       } else if (code === 39) {
@@ -136,8 +191,13 @@ export const AnsiRenderer = memo(function AnsiRenderer({
   fontSize = 12.5,
   theme = TERMINAL_THEMES.alpine,
 }: AnsiRendererProps) {
-  const displayText = rawText || "\u001b[1;32mastra\u001b[0m:\u001b[1;34m/workspace\u001b[0m# ";
-  const spans = parseAnsiToSpans(displayText, theme.foreground);
+  // Empty buffer renders just the cursor — never a fake prompt (a hardcoded
+  // prompt would freeze a stale directory on screen instead of the real one).
+  const displayText = rawText || "";
+  const isLight = isLightTerminalTheme(theme);
+  const fgPalette = isLight ? ANSI_COLORS_LIGHT : ANSI_COLORS_DARK;
+  const bgPalette = isLight ? ANSI_BG_COLORS_LIGHT : ANSI_BG_COLORS_DARK;
+  const spans = parseAnsiToSpans(displayText, theme.foreground, fgPalette, bgPalette);
   const dynamicFontSize = {
     fontSize,
     lineHeight: Math.round(fontSize * 1.45),

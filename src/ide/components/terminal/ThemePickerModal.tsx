@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TouchableWithoutFeedback } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { TerminalTheme, TERMINAL_THEMES } from "./terminalThemes";
+import { useTheme } from "../../../theme/themeContext";
 
 interface ThemePickerModalProps {
   visible: boolean;
@@ -18,10 +19,11 @@ export function ThemePickerModal({
   onSelectTheme,
   onClose,
 }: ThemePickerModalProps) {
+  const { theme: appTheme } = useTheme();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: appTheme.overlay }]}>
           <View
             style={[
               styles.themeModalContent,
@@ -78,7 +80,6 @@ export function ThemePickerModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,

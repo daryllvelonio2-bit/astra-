@@ -160,7 +160,7 @@ export function FloatingChatOverlay({
               <TouchableOpacity style={[styles.headerBtn, { backgroundColor: theme.bgSecondary }]} onPress={handleMinimize} activeOpacity={0.7}>
                 <Ionicons name="remove" size={14} color={theme.textSecondary} />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.headerBtn, styles.headerCloseBtn]} onPress={handleCloseOverlay} activeOpacity={0.7}>
+              <TouchableOpacity style={[styles.headerBtn, styles.headerCloseBtn, { backgroundColor: `${theme.accentRed}18` }]} onPress={handleCloseOverlay} activeOpacity={0.7}>
                 <Ionicons name="close" size={13} color={theme.accentRed} />
               </TouchableOpacity>
             </View>
@@ -283,8 +283,8 @@ export function FloatingChatOverlay({
                 />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={styles.stopBtn} onPress={handleStopAgent} activeOpacity={0.8}>
-                <Ionicons name="square" size={12} color="#ffffff" />
+              <TouchableOpacity style={[styles.stopBtn, { backgroundColor: theme.accentRed }]} onPress={handleStopAgent} activeOpacity={0.8}>
+                <Ionicons name="square" size={12} color={theme.sendButtonIcon} />
               </TouchableOpacity>
             )}
           </View>
@@ -354,12 +354,9 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     height: "78%",
     maxHeight: 580,
-    backgroundColor: "#13161c",
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "#2d3342",
     overflow: "hidden",
-    shadowColor: "#000000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.7,
     shadowRadius: 20,
@@ -371,9 +368,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: "#181b22",
     borderBottomWidth: 1,
-    borderBottomColor: "#222631",
   },
   headerLeft: {
     flexDirection: "row",
@@ -389,25 +384,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 3,
   },
-  headerTitle: { color: "#f1f5f9", fontSize: 12, fontWeight: "700", maxWidth: 140 },
+  headerTitle: { fontSize: 12, fontWeight: "700", maxWidth: 140 },
   subtitleRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 },
-  headerSubtitle: { color: "#64748b", fontSize: 9.5, fontWeight: "500" },
-  dotSeparator: { color: "#475569", fontSize: 9 },
+  headerSubtitle: { fontSize: 9.5, fontWeight: "500" },
+  dotSeparator: { fontSize: 9 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
-  headerBtn: { padding: 4.5, borderRadius: 5, backgroundColor: "#1f2430", alignItems: "center", justifyContent: "center" },
-  headerCloseBtn: { backgroundColor: "#2e1a1c" },
+  headerBtn: { padding: 4.5, borderRadius: 5, alignItems: "center", justifyContent: "center" },
+  headerCloseBtn: {},
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
-  loadingText: { color: "#94a3b8", fontSize: 12 },
+  loadingText: { fontSize: 12 },
   messagesScroll: { flex: 1 },
   messagesContent: { padding: 8, paddingBottom: 16 },
-  earlierBadge: { alignSelf: "center", backgroundColor: "#1f2430", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
-  earlierBadgeText: { color: "#8ab4f8", fontSize: 10.5, fontWeight: "600" },
+  earlierBadge: { alignSelf: "center", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
+  earlierBadgeText: { fontSize: 10.5, fontWeight: "600" },
   emptyState: { paddingVertical: 32, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
-  emptyTitle: { color: "#f1f5f9", fontSize: 13, fontWeight: "700", marginTop: 8 },
-  emptySubtitle: { color: "#64748b", fontSize: 11, textAlign: "center", marginTop: 4, lineHeight: 16 },
-  inputContainer: { flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 8, paddingVertical: 6, backgroundColor: "#171a21", borderTopWidth: 1, borderTopColor: "#212631", gap: 6 },
-  input: { flex: 1, minHeight: 34, maxHeight: 90, backgroundColor: "#1f2430", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, color: "#f8fafc", fontSize: 12, borderWidth: 1, borderColor: "#2d3444" },
-  sendBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#2563eb", alignItems: "center", justifyContent: "center" },
-  sendBtnDisabled: { backgroundColor: "#1e293b", opacity: 0.5 },
-  stopBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#dc2626", alignItems: "center", justifyContent: "center" },
+  emptyTitle: { fontSize: 13, fontWeight: "700", marginTop: 8 },
+  emptySubtitle: { fontSize: 11, textAlign: "center", marginTop: 4, lineHeight: 16 },
+  inputContainer: { flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 8, paddingVertical: 6, borderTopWidth: 1, gap: 6 },
+  input: { flex: 1, minHeight: 34, maxHeight: 90, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, borderWidth: 1 },
+  sendBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  sendBtnDisabled: { opacity: 0.5 },
+  stopBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
 });

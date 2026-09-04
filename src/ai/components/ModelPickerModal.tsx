@@ -16,7 +16,7 @@ export function ModelPickerModal({ visible, selectedModel, onSelectModel, onClos
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose}>
+      <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose}>
         <View style={[styles.modelPickerCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           <Text style={[styles.modalCardTitle, { color: theme.textPrimary }]}>Select AI Reasoning Model</Text>
           {SUPPORTED_MODELS.map((m) => (
@@ -52,7 +52,6 @@ export function ModelPickerModal({ visible, selectedModel, onSelectModel, onClos
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -60,14 +59,11 @@ const styles = StyleSheet.create({
   modelPickerCard: {
     width: "100%",
     maxWidth: 360,
-    backgroundColor: "#252526",
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#3c3c3c",
   },
   modalCardTitle: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 12,
@@ -82,21 +78,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   activeModelOption: {
-    backgroundColor: "#2e3035",
   },
   modelOptionLeft: {
     flex: 1,
   },
   modelOptionName: {
-    color: "#e3e3e3",
     fontSize: 14,
     fontWeight: "600",
   },
   activeModelName: {
-    color: "#8ab4f8",
   },
   modelOptionDesc: {
-    color: "#888",
     fontSize: 11,
     marginTop: 2,
   },

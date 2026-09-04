@@ -109,9 +109,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 5,
-    backgroundColor: "#131314",
     borderTopWidth: 1,
-    borderTopColor: "#1e2024",
     gap: 6,
   },
   moreBtn: {
@@ -121,12 +119,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3.5,
     paddingHorizontal: 7,
     borderRadius: 6,
-    backgroundColor: "#1c1e22",
     borderWidth: 1,
-    borderColor: "#2a2d33",
   },
   moreText: {
-    color: "#9aa0a6",
     fontSize: 10.5,
     fontWeight: "600",
   },
@@ -140,12 +135,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3.5,
     borderRadius: 6,
-    backgroundColor: "#181a1e",
     borderWidth: 1,
-    borderColor: "#25282e",
   },
   pillText: {
-    color: "#8e9297",
     fontSize: 10.5,
     fontWeight: "500",
   },
@@ -156,20 +148,14 @@ const styles = StyleSheet.create({
     paddingVertical: 3.5,
     paddingHorizontal: 7,
     borderRadius: 6,
-    backgroundColor: "rgba(168, 85, 247, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(168, 85, 247, 0.3)",
   },
   approvalTogglePillActive: {
-    backgroundColor: "rgba(52, 211, 153, 0.15)",
-    borderColor: "rgba(52, 211, 153, 0.4)",
   },
   approvalToggleText: {
-    color: "#c084fc",
     fontSize: 10.5,
     fontWeight: "700",
   },
   approvalToggleTextActive: {
-    color: "#34d399",
   },
 });

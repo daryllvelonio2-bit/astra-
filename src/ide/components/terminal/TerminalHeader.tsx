@@ -2,12 +2,11 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { TerminalTab } from "./useTerminalSession";
-import { TerminalTheme } from "./terminalThemes";
+import { useTheme } from "../../../theme/themeContext";
 
 interface TerminalHeaderProps {
   sessions: TerminalTab[];
   activeSessionId: string;
-  theme: TerminalTheme;
   onSelectSession: (id: string) => void;
   onAddSession: () => void;
   onCloseSession: (id: string) => void;
@@ -21,7 +20,6 @@ interface TerminalHeaderProps {
 export function TerminalHeader({
   sessions,
   activeSessionId,
-  theme,
   onSelectSession,
   onAddSession,
   onCloseSession,
@@ -31,11 +29,12 @@ export function TerminalHeader({
   onZoomIn,
   onZoomOut,
 }: TerminalHeaderProps) {
+  const { theme: appTheme } = useTheme();
   return (
     <View
       style={[
         styles.topBar,
-        { backgroundColor: theme.cardBg, borderBottomColor: theme.borderColor },
+        { backgroundColor: appTheme.bgSecondary, borderBottomColor: appTheme.border },
       ]}
     >
       <ScrollView
@@ -51,10 +50,10 @@ export function TerminalHeader({
               key={s.id}
               style={[
                 styles.tab,
-                { backgroundColor: theme.cardBg, borderColor: theme.borderColor },
+                { backgroundColor: appTheme.bgTertiary, borderColor: appTheme.border },
                 isActive && {
-                  backgroundColor: theme.background,
-                  borderBottomColor: theme.accent,
+                  backgroundColor: appTheme.bgPrimary,
+                  borderBottomColor: appTheme.accent,
                 },
               ]}
               onPress={() => onSelectSession(s.id)}
@@ -63,14 +62,15 @@ export function TerminalHeader({
               <View
                 style={[
                   styles.statusDot,
-                  s.isTask && { backgroundColor: "#34d399" },
-                  isActive && !s.isTask && { backgroundColor: theme.promptUser },
+                  { backgroundColor: appTheme.textMuted },
+                  s.isTask && { backgroundColor: appTheme.accentGreen },
+                  isActive && !s.isTask && { backgroundColor: appTheme.accent },
                 ]}
               />
               <Text
                 style={[
                   styles.tabText,
-                  { color: isActive ? theme.foreground : s.isTask ? "#a7f3d0" : "#8b949e" },
+                  { color: isActive ? appTheme.textPrimary : s.isTask ? appTheme.accentGreen : appTheme.textMuted },
                 ]}
               >
                 {s.name}
@@ -81,7 +81,7 @@ export function TerminalHeader({
                   style={styles.closeTabBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="close" size={12} color={theme.foreground + "80"} />
+                  <Ionicons name="close" size={12} color={appTheme.textMuted} />
                 </TouchableOpacity>
               )}
             </TouchableOpacity>
@@ -89,11 +89,11 @@ export function TerminalHeader({
         })}
 
         <TouchableOpacity
-          style={[styles.addTabBtn, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
+          style={[styles.addTabBtn, { backgroundColor: appTheme.bgTertiary, borderColor: appTheme.border }]}
           onPress={onAddSession}
           activeOpacity={0.7}
         >
-          <Ionicons name="add" size={14} color={theme.foreground + "80"} />
+          <Ionicons name="add" size={14} color={appTheme.textMuted} />
         </TouchableOpacity>
       </ScrollView>
 
@@ -104,14 +104,14 @@ export function TerminalHeader({
           onPress={onZoomOut}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="remove-outline" size={14} color="#8b949e" />
+          <Ionicons name="remove-outline" size={14} color={appTheme.textMuted} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={onZoomIn}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="add-outline" size={14} color="#8b949e" />
+          <Ionicons name="add-outline" size={14} color={appTheme.textMuted} />
         </TouchableOpacity>
 
         {/* Theme Palette */}
@@ -120,7 +120,7 @@ export function TerminalHeader({
           onPress={onOpenThemePicker}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="color-palette-outline" size={14} color="#8b949e" />
+          <Ionicons name="color-palette-outline" size={14} color={appTheme.textMuted} />
         </TouchableOpacity>
 
         {/* Restart Active */}
@@ -129,7 +129,7 @@ export function TerminalHeader({
           onPress={onRestartSession}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="refresh-outline" size={14} color="#8b949e" />
+          <Ionicons name="refresh-outline" size={14} color={appTheme.textMuted} />
         </TouchableOpacity>
 
         {/* Clear Active */}
@@ -138,7 +138,7 @@ export function TerminalHeader({
           onPress={onClearSession}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="trash-outline" size={14} color="#8b949e" />
+          <Ionicons name="trash-outline" size={14} color={appTheme.textMuted} />
         </TouchableOpacity>
       </View>
     </View>
@@ -167,7 +167,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    backgroundColor: "#0d1117",
     gap: 5,
     borderWidth: 1,
   },
@@ -175,7 +174,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#484f58",
   },
   tabText: {
     fontSize: 11,
@@ -188,7 +186,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    backgroundColor: "#0d1117",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,

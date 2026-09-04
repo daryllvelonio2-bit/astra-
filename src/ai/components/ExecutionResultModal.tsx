@@ -14,7 +14,7 @@ export function ExecutionResultModal({ runOutput, onClose }: ExecutionResultModa
 
   return (
     <Modal visible={true} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.outputModalOverlay}>
+      <View style={[styles.outputModalOverlay, { backgroundColor: theme.overlay }]}>
         <View style={[styles.outputModalCard, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border, borderWidth: 1 }]}>
           <View style={styles.outputModalHeader}>
             <Text style={[styles.outputModalTitle, { color: theme.accentGreen }]}>▶️ Sandbox Execution Result</Text>
@@ -42,7 +42,6 @@ const styles = StyleSheet.create({
   outputModalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.6)",
   },
   outputModalCard: {
     borderTopLeftRadius: 16,

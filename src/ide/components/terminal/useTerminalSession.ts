@@ -12,6 +12,11 @@ import {
 import { TERMINAL_THEMES, TerminalTheme } from "./terminalThemes";
 import { runningTasksService, RunningTask } from "../../../ai/services/runningTasksService";
 import { useTheme } from "../../../theme/themeContext";
+import {
+  getBannerTitle,
+  appendCapped,
+  mergeNativeHistory,
+} from "./terminalBuffer";
 
 export interface TerminalTab {
   id: string;
@@ -24,10 +29,7 @@ interface UseTerminalSessionProps {
   workspaceId?: string;
 }
 
-const getBanner = (workspaceId?: string) => {
-  const dir = workspaceId ? `/workspaces/${workspaceId}` : "/workspace";
-  return `\u001b[1;34m⚡ Astra Embedded Alpine Linux & PRoot Terminal\u001b[0m\r\n\u001b[1;32mastra\u001b[0m:\u001b[1;34m${dir}\u001b[0m# `;
-};
+const getBanner = (workspaceId?: string) => getBannerTitle(workspaceId);
 
 const formatTaskTabName = (cmd: string) => {
   const clean = (cmd || "Task")
@@ -60,6 +62,20 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
   const scrollRef = useRef<ScrollView>(null);
   const isAutoScrollEnabled = useRef<boolean>(true);
+  // Bytes of native history already folded into each session buffer.
+  const seenNativeLen = useRef<Record<string, number>>({});
+
+  const foldNativeHistory = useCallback((sessionId: string, hist: string) => {
+    const cleanHist = hist.replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "");
+    if (!cleanHist) return;
+    setSessionOutputs((prev) => {
+      const current = prev[sessionId] || "";
+      const merged = mergeNativeHistory(current, cleanHist, seenNativeLen.current[sessionId] || 0);
+      seenNativeLen.current[sessionId] = merged.seen;
+      if (merged.text === current) return prev;
+      return { ...prev, [sessionId]: merged.text };
+    });
+  }, []);
 
   // Sync terminal theme with global app theme mode
   useEffect(() => {
@@ -89,10 +105,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       await startTerminalSession("session-1", workspaceId);
       const hist = await getSessionHistory("session-1");
       if (hist && mounted) {
-        setSessionOutputs((prev) => ({
-          ...prev,
-          "session-1": hist,
-        }));
+        foldNativeHistory("session-1", hist);
       }
     };
     init();
@@ -109,24 +122,22 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     if (!activeSessionId.startsWith("task-")) {
       getSessionHistory(activeSessionId).then((hist) => {
         if (hist && isSubscribed) {
-          const cleanHist = hist.replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "");
-          setSessionOutputs((prev) => ({
-            ...prev,
-            [activeSessionId]: cleanHist,
-          }));
+          foldNativeHistory(activeSessionId, hist);
         }
       });
 
       const subscription = addTerminalDataListener(activeSessionId, (chunk: string) => {
         if (!isSubscribed) return;
         const cleanChunk = chunk.replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "");
+        // Live stream bytes are new by definition: count them as seen so a
+        // later history snapshot doesn't re-append them.
+        seenNativeLen.current[activeSessionId] =
+          (seenNativeLen.current[activeSessionId] || 0) + cleanChunk.length;
         setSessionOutputs((prev) => {
           const current = prev[activeSessionId] || "";
-          const updated = current + cleanChunk;
-          return {
-            ...prev,
-            [activeSessionId]: updated.length > 100000 ? updated.slice(-80000) : updated,
-          };
+          const updated = appendCapped(current, cleanChunk);
+          if (updated === current) return prev;
+          return { ...prev, [activeSessionId]: updated };
         });
 
         if (isAutoScrollEnabled.current) {
@@ -309,6 +320,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
     setSessions((prev) => [...prev, newTab]);
     setSessionOutputs((prev) => ({ ...prev, [newId]: getBanner(workspaceId) }));
+    seenNativeLen.current[newId] = 0;
     setActiveSessionId(newId);
 
     await startTerminalSession(newId, workspaceId);
@@ -320,7 +332,11 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
       if (idToClose.startsWith("task-")) {
         const taskId = idToClose.replace(/^task-/, "");
-        await runningTasksService.killTask(taskId);
+        const stopped = await runningTasksService.killTask(taskId);
+        if (!stopped) {
+          showToast("Could not stop task — server still running");
+          return;
+        }
         showToast("Background task stopped");
       } else {
         await stopTerminalSession(idToClose);
@@ -346,7 +362,11 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       const taskId = activeSessionId.replace(/^task-/, "");
       const task = runningTasksService.getRunningTasks().find((t) => t.id === taskId);
       if (task) {
-        await runningTasksService.killTask(taskId);
+        const stopped = await runningTasksService.killTask(taskId);
+        if (!stopped) {
+          showToast("Could not stop task — server still running");
+          return;
+        }
         runningTasksService.addTask({
           command: task.command,
           port: task.port,
@@ -360,6 +380,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
     await stopTerminalSession(activeSessionId);
     setSessionOutputs((prev) => ({ ...prev, [activeSessionId]: getBanner(workspaceId) }));
+    seenNativeLen.current[activeSessionId] = 0;
     await startTerminalSession(activeSessionId, workspaceId);
     showToast("Session restarted");
   }, [activeSessionId, workspaceId, showToast]);
@@ -376,11 +397,12 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       return;
     }
 
-    const dir = workspaceId ? `/workspaces/${workspaceId}` : "/workspace";
-    writeTerminalInput(activeSessionId, "\x0c");
+    // Clear scrollback to a title-only banner and ask the shell for a fresh,
+    // truthful prompt (never a frozen fake one, so `cd` always displays).
+    writeTerminalInput(activeSessionId, "\n");
     setSessionOutputs((prev) => ({
       ...prev,
-      [activeSessionId]: `\u001b[1;32mastra\u001b[0m:\u001b[1;34m${dir}\u001b[0m# `,
+      [activeSessionId]: getBanner(workspaceId),
     }));
   }, [activeSessionId, workspaceId]);
 

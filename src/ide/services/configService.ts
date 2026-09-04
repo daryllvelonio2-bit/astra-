@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { AstraCognitiveMode, AstraEffort } from "../../ai/astra/astraModes";
+import { getFileInfo, readFileText, writeFileText } from "./nativeFs";
 
 export const DEFAULT_MODEL_ID = "gemini-3.5-flash-lite";
 
@@ -72,9 +73,9 @@ export function maskApiKey(key: string): string {
 
 export async function loadConfig(): Promise<AppConfig> {
   try {
-    const info = await FileSystem.getInfoAsync(CONFIG_FILE);
+    const info = await getFileInfo(CONFIG_FILE);
     if (info.exists) {
-      const data = await FileSystem.readAsStringAsync(CONFIG_FILE);
+      const data = await readFileText(CONFIG_FILE);
       const parsed = JSON.parse(data);
       const normalizedKeys = normalizeApiKeys(parsed.apiKeys, parsed.apiKey);
       return {
@@ -117,7 +118,7 @@ export async function saveConfig(config: Partial<AppConfig>): Promise<void> {
       }
     }
 
-    await FileSystem.writeAsStringAsync(CONFIG_FILE, JSON.stringify(updated, null, 2));
+    await writeFileText(CONFIG_FILE, JSON.stringify(updated, null, 2));
     configChangeListeners.forEach((listener) => {
       try {
         listener(updated);

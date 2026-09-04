@@ -7,13 +7,14 @@ interface IDEBottomBarProps {
   bottomTab: "editor" | "terminal" | "browser";
   onChangeTab: (tab: "editor" | "terminal" | "browser") => void;
   runningTaskCount?: number;
+  compact?: boolean;
 }
 
-export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0 }: IDEBottomBarProps) {
+export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, compact = false }: IDEBottomBarProps) {
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.bottomBar, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
+    <View style={[styles.bottomBar, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }, compact && styles.bottomBarCompact]}>
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
@@ -25,6 +26,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0 }: I
         <Text
           style={[
             styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
             { color: theme.textMuted },
             bottomTab === "editor" && { color: theme.accent, fontWeight: "700" },
           ]}
@@ -44,13 +46,14 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0 }: I
           <MaterialCommunityIcons name="console" size={16} color={bottomTab === "terminal" ? theme.accent : theme.textMuted} />
           {runningTaskCount > 0 && (
             <View style={[styles.taskBadge, { backgroundColor: theme.accentGreen, borderColor: theme.bgSecondary }]}>
-              <View style={styles.taskBadgeDot} />
+              <View style={[styles.taskBadgeDot, { backgroundColor: theme.bubbleUserText }]} />
             </View>
           )}
         </View>
         <Text
           style={[
             styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
             { color: theme.textMuted },
             bottomTab === "terminal" && { color: theme.accent, fontWeight: "700" },
           ]}
@@ -70,6 +73,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0 }: I
         <Text
           style={[
             styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
             { color: theme.textMuted },
             bottomTab === "browser" && { color: theme.accent, fontWeight: "700" },
           ]}
@@ -84,12 +88,13 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0 }: I
 const styles = StyleSheet.create({
   bottomBar: {
     height: 42,
-    backgroundColor: "#181818",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
     borderTopWidth: 1,
-    borderTopColor: "#282828",
+  },
+  bottomBarCompact: {
+    height: 34,
   },
   bottomTabBtn: {
     flexDirection: "row",
@@ -99,16 +104,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 4,
   },
-  bottomTabBtnActive: {
-    backgroundColor: "#252526",
-  },
+  bottomTabBtnActive: {},
   bottomTabText: {
-    color: "#888",
     fontSize: 12,
     fontWeight: "500",
   },
+  bottomTabTextCompact: {
+    fontSize: 10.5,
+  },
   bottomTabTextActive: {
-    color: "#8ab4f8",
     fontWeight: "700",
   },
   terminalIconContainer: {
@@ -123,9 +127,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: "#10b981",
     borderWidth: 1,
-    borderColor: "#181818",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -133,6 +135,5 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: "#ffffff",
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import { ActionApprovalModal } from "./ActionApprovalModal";
 import { AstraLogo } from "./AstraLogo";
 import { useChatSession } from "./useChatSession";
 import { useTheme } from "../../theme/themeContext";
+import { ideActionService } from "../../ide/services/ideActionService";
 
 export interface AstraChatScreenProps {
   workspaceId?: string;
@@ -42,6 +43,23 @@ export function AstraChatScreen({
   const insets = useSafeAreaInsets();
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const { theme, isMidnight } = useTheme();
+  const navigateToEditorRef = useRef(onNavigateToEditor);
+  navigateToEditorRef.current = onNavigateToEditor;
+
+  // Fullscreen chat has no editor — user-initiated file/browser/terminal taps
+  // navigate to the editor; the pending action is consumed there (sticky store).
+  useEffect(() => {
+    const goEditorIfUserTap = (p?: { userInitiated?: boolean }) => {
+      if (p?.userInitiated) navigateToEditorRef.current();
+    };
+    const unsubs = [
+      ideActionService.subscribe("OPEN_FILE", (p) => goEditorIfUserTap(p)),
+      ideActionService.subscribe("OPEN_BROWSER", (p) => goEditorIfUserTap(p)),
+      ideActionService.subscribe("OPEN_TERMINAL", (p) => goEditorIfUserTap(p)),
+      ideActionService.subscribe("SWITCH_TAB", (p) => goEditorIfUserTap(p)),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, []);
 
   const {
     workspace,
@@ -158,8 +176,8 @@ export function AstraChatScreen({
         {messages.length === 0 ? (
           <View style={styles.emptyContainer}>
             <View style={styles.logoCardWrapper}>
-              <View style={[styles.logoCardGlow, isMidnight && { backgroundColor: theme.accentCyan }]} />
-              <View style={[styles.logoCard, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
+              <View style={[styles.logoCardGlow, { backgroundColor: theme.borderGlow }, isMidnight && { backgroundColor: theme.accentCyan }]} />
+              <View style={[styles.logoCard, { backgroundColor: theme.bgTertiary, borderColor: theme.border, shadowColor: theme.accent }]}>
                 <AstraLogo width={50} height={50} />
               </View>
             </View>
@@ -222,12 +240,12 @@ export function AstraChatScreen({
         />
         {agentStatus !== "idle" ? (
           <TouchableOpacity
-            style={[styles.sendButton, styles.stopButton]}
+            style={[styles.sendButton, styles.stopButton, { backgroundColor: theme.accentRed, borderColor: theme.accentRed }]}
             onPress={handleStopAgent}
             activeOpacity={0.8}
             accessibilityLabel="Stop agent"
           >
-            <Ionicons name="stop" size={16} color="#ffffff" />
+            <Ionicons name="stop" size={16} color={theme.sendButtonIcon} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -291,7 +309,7 @@ export function AstraChatScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#131314" },
+  container: { flex: 1 },
   chatScroll: { flex: 1 },
   chatContent: { padding: 16, paddingBottom: 24 },
   emptyChatContent: { flexGrow: 1, justifyContent: "center", alignItems: "center" },
@@ -312,26 +330,21 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 24,
-    backgroundColor: "rgba(59, 130, 246, 0.12)",
   },
   logoCard: {
     width: 68,
     height: 68,
     borderRadius: 20,
-    backgroundColor: "#191c22",
     borderWidth: 1,
-    borderColor: "rgba(138, 180, 248, 0.22)",
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,
-    shadowColor: "#3b82f6",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
     overflow: "hidden",
   },
   emptyTitle: {
-    color: "#f1f3f4",
     fontSize: 17,
     fontWeight: "700",
     letterSpacing: 0.2,
@@ -344,7 +357,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptySubtitlePrefix: {
-    color: "#9aa0a6",
     fontSize: 13,
     fontWeight: "500",
   },
@@ -352,27 +364,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "rgba(138, 180, 248, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(138, 180, 248, 0.25)",
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: 12,
   },
   emptyProjectBadgeText: {
-    color: "#8ab4f8",
     fontSize: 12.5,
     fontWeight: "600",
     maxWidth: 160,
   },
   emptySubtitleText: {
-    color: "#9aa0a6",
     fontSize: 13,
     textAlign: "center",
     lineHeight: 18,
   },
   emptyHintText: {
-    color: "#5f6368",
     fontSize: 12,
     textAlign: "center",
     marginTop: 2,
@@ -382,30 +389,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#1e2229",
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
     marginBottom: 12,
     alignSelf: "center",
   },
-  loadOlderText: { color: "#8ab4f8", fontSize: 11.5, fontWeight: "600" },
+  loadOlderText: { fontSize: 11.5, fontWeight: "600" },
   inputContainer: {
     flexDirection: "row",
     alignItems: "flex-end",
     paddingHorizontal: 12,
     paddingVertical: 9,
-    backgroundColor: "#161719",
     borderTopWidth: 1,
-    borderTopColor: "#26282d",
     gap: 8,
   },
   input: {
     flex: 1,
-    backgroundColor: "#1f2126",
     borderWidth: 1,
-    borderColor: "#2d3037",
-    color: "#f1f3f4",
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingTop: 9,
@@ -423,24 +424,17 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   sendButtonDisabled: {
-    backgroundColor: "#222429",
     borderWidth: 1,
-    borderColor: "#2b2e34",
   },
   sendButtonActive: {
-    backgroundColor: "#3b82f6",
     borderWidth: 1,
-    borderColor: "#60a5fa",
     elevation: 4,
-    shadowColor: "#3b82f6",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 6,
   },
   stopButton: {
-    backgroundColor: "#ef4444",
     borderWidth: 1,
-    borderColor: "#f87171",
     elevation: 3,
   },
 });

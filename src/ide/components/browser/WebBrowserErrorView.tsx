@@ -55,8 +55,8 @@ export function WebBrowserErrorView({
                 onPress={() => onNavigate(targetUrl)}
                 activeOpacity={0.8}
               >
-                <View style={[styles.pulseDot, { backgroundColor: "#ffffff" }]} />
-                <Text style={styles.switchPortBtnText} numberOfLines={1}>
+                <View style={[styles.pulseDot, { backgroundColor: theme.bubbleUserText }]} />
+                <Text style={[styles.switchPortBtnText, { color: theme.bubbleUserText }]} numberOfLines={1}>
                   Connect to {cleanCmd} (:{taskPort}) ➔
                 </Text>
               </TouchableOpacity>
@@ -83,18 +83,18 @@ export function WebBrowserErrorView({
           activeOpacity={0.8}
         >
           {isStartingServer ? (
-            <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
+            <ActivityIndicator size="small" color={theme.sendButtonIcon} style={{ marginRight: 6 }} />
           ) : (
-            <Ionicons name="play" size={14} color="#fff" style={{ marginRight: 6 }} />
+            <Ionicons name="play" size={14} color={theme.sendButtonIcon} style={{ marginRight: 6 }} />
           )}
-          <Text style={styles.retryBtnText}>
+          <Text style={[styles.retryBtnText, { color: theme.sendButtonIcon }]}>
             {isStartingServer ? "Starting Server..." : "Start Web Server"}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.accent }]} onPress={onReload} activeOpacity={0.8}>
-          <Ionicons name="refresh" size={14} color="#fff" style={{ marginRight: 4 }} />
-          <Text style={styles.retryBtnText}>Retry</Text>
+          <Ionicons name="refresh" size={14} color={theme.sendButtonIcon} style={{ marginRight: 4 }} />
+          <Text style={[styles.retryBtnText, { color: theme.sendButtonIcon }]}>Retry</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.externalLinkBtn, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]} onPress={onOpenExternal} activeOpacity={0.8}>
@@ -112,16 +112,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#161616",
   },
   errorTitle: {
-    color: "#f3f4f6",
     fontSize: 17,
     fontWeight: "700",
     marginTop: 14,
   },
   errorSubtext: {
-    color: "#9ca3af",
     fontSize: 12.5,
     textAlign: "center",
     marginTop: 6,
@@ -132,15 +129,12 @@ const styles = StyleSheet.create({
   detectedTasksCard: {
     width: "100%",
     maxWidth: 340,
-    backgroundColor: "#064e3b22",
-    borderColor: "#059669",
     borderWidth: 1,
     borderRadius: 10,
     padding: 12,
     marginBottom: 14,
   },
   detectedTasksTitle: {
-    color: "#34d399",
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 8,
@@ -148,14 +142,12 @@ const styles = StyleSheet.create({
   switchPortBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#064e3b",
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 8,
     gap: 8,
   },
   switchPortBtnText: {
-    color: "#ecfdf5",
     fontSize: 12,
     fontWeight: "600",
     flex: 1,
@@ -164,26 +156,21 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#34d399",
   },
   suggestionCard: {
     width: "100%",
     maxWidth: 340,
-    backgroundColor: "#202022",
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#2e2e32",
     marginBottom: 18,
   },
   suggestionTitle: {
-    color: "#d1d5db",
     fontSize: 12,
     fontWeight: "600",
     marginBottom: 8,
   },
   suggestionCode: {
-    color: "#8ab4f8",
     fontSize: 11.5,
     fontFamily: "monospace",
     marginVertical: 2,
@@ -198,28 +185,23 @@ const styles = StyleSheet.create({
   retryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2563eb",
     paddingVertical: 9,
     paddingHorizontal: 14,
     borderRadius: 8,
   },
   retryBtnText: {
-    color: "#ffffff",
     fontSize: 12.5,
     fontWeight: "600",
   },
   externalLinkBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e1e24",
     paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2d2d38",
   },
   externalLinkText: {
-    color: "#8ab4f8",
     fontSize: 12.5,
     fontWeight: "600",
   },

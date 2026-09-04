@@ -27,7 +27,7 @@ export interface AgentStep {
   toolArgs?: Record<string, any>;
   toolOutput?: string;
   isError?: boolean;
-  approvalStatus?: "pending" | "approved" | "rejected";
+  approvalStatus?: "pending" | "approved" | "rejected" | "expired";
   timestamp: number;
 }
 

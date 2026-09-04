@@ -11,6 +11,7 @@ import { useTerminalSession } from "./terminal/useTerminalSession";
 import { AnsiRenderer } from "./terminal/AnsiRenderer";
 import { TerminalHeader } from "./terminal/TerminalHeader";
 import { ThemePickerModal } from "./terminal/ThemePickerModal";
+import { useTheme } from "../../theme/themeContext";
 
 interface TerminalViewProps {
   workspaceId?: string;
@@ -38,6 +39,7 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     restartActiveSession,
     clearActiveSession,
   } = useTerminalSession({ workspaceId });
+  const { theme: appTheme } = useTheme();
 
   const [rawInputValue, setRawInputValue] = useState<string>(" ");
   const [currentInput, setCurrentInput] = useState<string>("");
@@ -93,9 +95,9 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
 
   const handleKeyPress = (e: any) => {
     const key = e.nativeEvent.key;
-    if (key === "Backspace") {
-      setCurrentInput((prev) => prev.slice(0, -1));
-    } else if (key === "Enter") {
+    // Note: Backspace is handled solely in handleDirectInput (onChangeText "")
+    // to avoid double-deleting on Android soft keyboards which fire both events.
+    if (key === "Enter") {
       submitCurrentInput();
     } else if (key === "ArrowUp") {
       const prevCmd = navigateHistory("up");
@@ -111,12 +113,11 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: appTheme.bgPrimary }]}>
       {/* Terminal Header Bar */}
       <TerminalHeader
         sessions={sessions}
         activeSessionId={activeSessionId}
-        theme={theme}
         onSelectSession={setActiveSessionId}
         onAddSession={addNewSession}
         onCloseSession={closeSession}
@@ -152,10 +153,10 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
         <View
           style={[
             styles.toastContainer,
-            { backgroundColor: theme.cardBg, borderColor: theme.borderColor },
+            { backgroundColor: appTheme.bgElevated, borderColor: appTheme.border },
           ]}
         >
-          <Text style={[styles.toastText, { color: theme.foreground }]}>
+          <Text style={[styles.toastText, { color: appTheme.textPrimary }]}>
             {toastMessage}
           </Text>
         </View>

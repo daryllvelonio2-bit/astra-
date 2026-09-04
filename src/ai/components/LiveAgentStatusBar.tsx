@@ -8,6 +8,7 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AgentStatus, LiveStatusInfo } from "../agent/agentTypes";
@@ -43,7 +44,7 @@ export function LiveAgentStatusBar({
   }, []);
 
   const hasRunningTasks = tasks.length > 0;
-  const isAgentBusy = status === "thinking" || status === "executing_tool" || status === "verifying";
+  const isAgentBusy = status === "thinking" || status === "executing_tool" || status === "verifying" || status === "waiting_approval";
   const isError = status === "error";
 
   // Hide if idle and no background tasks
@@ -58,8 +59,9 @@ export function LiveAgentStatusBar({
 
   const handleKill = async (task: RunningTask) => {
     setKillingId(task.id);
-    await runningTasksService.killTask(task.id);
+    const stopped = await runningTasksService.killTask(task.id);
     setKillingId(null);
+    if (!stopped) Alert.alert("Could not stop task", "The server is still running. Please try again.");
   };
 
   const handleKillAll = async () => {
@@ -198,7 +200,7 @@ export function LiveAgentStatusBar({
             {hasRunningTasks && primaryTask?.url ? (
               <TouchableOpacity
                 style={[styles.quickBarBtn, { backgroundColor: `${theme.accentGreen}20` }]}
-                onPress={() => ideActionService.openBrowser(primaryTask.url!, primaryTask.port)}
+                onPress={() => ideActionService.openBrowser(primaryTask.url!, primaryTask.port, true)}
                 activeOpacity={0.6}
               >
                 <Ionicons name="globe-outline" size={10} color={theme.accentGreen} />
@@ -224,13 +226,11 @@ export function LiveAgentStatusBar({
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: "transparent",
     paddingHorizontal: 12,
     paddingVertical: 2,
     gap: 4,
   },
   taskContainer: {
-    backgroundColor: "transparent",
   },
   taskCompactBar: {
     flexDirection: "row",
@@ -239,9 +239,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
-    backgroundColor: "rgba(30, 41, 59, 0.4)",
     borderWidth: 1,
-    borderColor: "rgba(138, 180, 248, 0.2)",
   },
   leftTaskGroup: {
     flexDirection: "row",
@@ -254,7 +252,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "rgba(129, 201, 149, 0.25)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -262,10 +259,8 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#81c995",
   },
   taskTitle: {
-    color: "#c9d1d9",
     fontSize: 11,
     fontWeight: "600",
     flex: 1,
@@ -282,10 +277,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: "rgba(242, 139, 130, 0.12)",
   },
   killBtnText: {
-    color: "#f28b82",
     fontSize: 10,
     fontWeight: "700",
   },
@@ -294,11 +287,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   taskCard: {
-    backgroundColor: "#161b22",
     borderRadius: 6,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#30363d",
     gap: 6,
   },
   cardHeader: {
@@ -310,18 +301,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(138, 180, 248, 0.12)",
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 3,
   },
   pidText: {
-    color: "#8ab4f8",
     fontSize: 9.5,
     fontWeight: "700",
   },
   commandName: {
-    color: "#e8eaed",
     fontSize: 11.5,
     fontWeight: "600",
     flex: 1,
@@ -330,24 +318,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "rgba(129, 201, 149, 0.08)",
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
   },
   urlText: {
-    color: "#81c995",
     fontSize: 10.5,
     flex: 1,
   },
   openBtn: {
-    backgroundColor: "rgba(138, 180, 248, 0.15)",
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 3,
   },
   openBtnText: {
-    color: "#8ab4f8",
     fontSize: 9.5,
     fontWeight: "700",
   },
@@ -357,7 +341,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   runningLabel: {
-    color: "#81c995",
     fontSize: 10,
   },
   killCardBtn: {
@@ -367,12 +350,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: "rgba(242, 139, 130, 0.15)",
     borderWidth: 1,
-    borderColor: "rgba(242, 139, 130, 0.3)",
   },
   killCardBtnText: {
-    color: "#f28b82",
     fontSize: 10.5,
     fontWeight: "700",
   },
@@ -381,7 +361,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 2,
-    backgroundColor: "transparent",
   },
   agentStatusLeft: {
     flexDirection: "row",
@@ -391,7 +370,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   agentStatusText: {
-    color: "#8ab4f8",
     fontSize: 10.5,
     fontWeight: "500",
     flex: 1,
@@ -402,7 +380,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   timerText: {
-    color: "#8b949e",
     fontSize: 10,
   },
   stopBtn: {
@@ -412,10 +389,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 3,
-    backgroundColor: "rgba(242, 139, 130, 0.15)",
   },
   stopBtnText: {
-    color: "#f28b82",
     fontSize: 9.5,
     fontWeight: "700",
   },

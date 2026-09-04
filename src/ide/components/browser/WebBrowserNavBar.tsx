@@ -108,9 +108,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 6,
-    backgroundColor: "#1f1f1f",
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
     gap: 6,
   },
   navControls: {
@@ -121,7 +119,6 @@ const styles = StyleSheet.create({
   navBtn: {
     padding: 6,
     borderRadius: 6,
-    backgroundColor: "#2a2a2a",
   },
   navBtnDisabled: {
     opacity: 0.4,
@@ -130,16 +127,13 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#141414",
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#333",
   },
   urlInput: {
     flex: 1,
-    color: "#f3f4f6",
     fontSize: 12,
     paddingVertical: 0,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
@@ -150,7 +144,6 @@ const styles = StyleSheet.create({
   },
   externalBtn: {
     padding: 7,
-    backgroundColor: "#2a2a2a",
     borderRadius: 6,
   },
 });

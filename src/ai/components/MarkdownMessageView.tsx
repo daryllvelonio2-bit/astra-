@@ -5,6 +5,8 @@ import { Clipboard } from "../../ide/services/clipboardService";
 import { executeCode } from "../runner";
 import { useTheme } from "../../theme/themeContext";
 import { DirectoryListRenderer, isDirectoryListingText } from "./DirectoryListRenderer";
+import { ideActionService } from "../../ide/services/ideActionService";
+import { isOpenableFileTarget } from "../../ide/services/chatFileLinkService";
 
 interface MarkdownMessageViewProps {
   content: string;
@@ -43,7 +45,86 @@ export function MarkdownMessageView({
     setTimeout(() => setAppliedIndex(null), 2500);
   };
 
+  const openLinkTarget = (target: string) => {
+    const t = target.trim();
+    if (/^https?:\/\//i.test(t)) {
+      ideActionService.openBrowser(t, undefined, true);
+    } else {
+      ideActionService.openFile(t, undefined, undefined, true);
+    }
+  };
+
+  const isBarePressable = (part: string) => {
+    if (!part) return false;
+    if (/^https?:\/\//i.test(part)) return true;
+    if (part.startsWith("file://")) return true;
+    if (part.startsWith("/workspace") || part.startsWith("/workspaces")) return true;
+    return isOpenableFileTarget(part);
+  };
+
+  const BARE_PATH_SPLIT =
+    /((?:https?:\/\/[^\s)'"`\]]+|file:\/\/[^\s)'"`\]]+|\/workspaces?\/[^\s)'"`\]]+|(?:[\w.\-~]+\/)+[\w.\-~]+\.\w{1,5}(?::\d+)?|[\w.\-~]+\.(?:tsx?|jsx?|json|py|java|kt|md|gradle|xml|ya?ml|toml|css|html|go|rs|php|rb|swift|cpp|c|h|sh|env|properties|lock)(?::\d+)?))/g;
+
+  const renderBarePaths = (text: string, keyPrefix: string) => {
+    const parts = text.split(BARE_PATH_SPLIT);
+    if (parts.length <= 1) return renderInlineInner(text, keyPrefix);
+    return parts.map((part, i) => {
+      if (part && isBarePressable(part)) {
+        const clean = part.replace(/[),.;:]+$/, "");
+        return (
+          <Text
+            key={`${keyPrefix}-file-${i}`}
+            onPress={() => openLinkTarget(clean)}
+            style={[styles.linkText, { color: theme.accentGreen }]}
+          >
+            {renderInlineInner(part, `${keyPrefix}-fileinner-${i}`)}
+          </Text>
+        );
+      }
+      return (
+        <React.Fragment key={`${keyPrefix}-txt-${i}`}>
+          {renderInlineInner(part || "", `${keyPrefix}-txtinner-${i}`)}
+        </React.Fragment>
+      );
+    });
+  };
+
   const renderInline = (text: string, keyPrefix: string) => {
+    const linkSplit = text.split(/(\[[^\]]+\]\([^)\s]+\))/g);
+    if (linkSplit.length > 1) {
+      return linkSplit.map((part, i) => {
+        const lm = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+        if (lm) {
+          const label = lm[1];
+          const target = lm[2];
+          if (/^https?:\/\//i.test(target) || target.startsWith("file://") || isOpenableFileTarget(target)) {
+            return (
+              <Text
+                key={`${keyPrefix}-link-${i}`}
+                onPress={() => openLinkTarget(target)}
+                style={[styles.linkText, { color: theme.accent }]}
+              >
+                {label}
+              </Text>
+            );
+          }
+          return (
+            <Text key={`${keyPrefix}-linktxt-${i}`} style={{ color: theme.textPrimary }}>
+              {label}
+            </Text>
+          );
+        }
+        return (
+          <React.Fragment key={`${keyPrefix}-seg-${i}`}>
+            {renderBarePaths(part, `${keyPrefix}-seg-${i}`)}
+          </React.Fragment>
+        );
+      });
+    }
+    return renderBarePaths(text, keyPrefix);
+  };
+
+  const renderInlineInner = (text: string, keyPrefix: string) => {
     const tokens = text.split(/(\*\*`[^`]+`\*\*|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
 
     return tokens.map((token, i) => {
@@ -290,44 +371,40 @@ export function MarkdownMessageView({
 
 const styles = StyleSheet.create({
   container: { width: "100%", gap: 4 },
-  userText: { color: "#ffffff", fontSize: 13.5, lineHeight: 20 },
+  userText: { fontSize: 13.5, lineHeight: 20 },
   textBlock: { width: "100%", gap: 3 },
   emptySpacing: { height: 6 },
-  bodyText: { color: "#e3e3e3", fontSize: 13.5, lineHeight: 21 },
-  boldText: { color: "#ffffff", fontWeight: "700" },
-  italicText: { color: "#bdc1c6", fontStyle: "italic" },
+  bodyText: { fontSize: 13.5, lineHeight: 21 },
+  boldText: { fontWeight: "700" },
+  italicText: { fontStyle: "italic" },
   inlineCodeText: {
-    color: "#81c995",
     fontFamily: "monospace",
     fontSize: 12.5,
   },
   boldInlineCode: {
-    color: "#81c995",
     fontFamily: "monospace",
     fontSize: 12.5,
     fontWeight: "700",
   },
-  h1Container: { marginTop: 10, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: "#2a2d32", paddingBottom: 4 },
-  h1Text: { color: "#8ab4f8", fontSize: 16.5, fontWeight: "800", letterSpacing: 0.2 },
+  h1Container: { marginTop: 10, marginBottom: 4, borderBottomWidth: 1, paddingBottom: 4 },
+  h1Text: { fontSize: 16.5, fontWeight: "800", letterSpacing: 0.2 },
   h2Container: { marginTop: 8, marginBottom: 3 },
-  h2Text: { color: "#81c995", fontSize: 15, fontWeight: "700" },
+  h2Text: { fontSize: 15, fontWeight: "700" },
   h3Container: { marginTop: 6, marginBottom: 2 },
-  h3Text: { color: "#fdd663", fontSize: 14, fontWeight: "700" },
+  h3Text: { fontSize: 14, fontWeight: "700" },
   h4Container: { marginTop: 4, marginBottom: 2 },
-  h4Text: { color: "#c58af9", fontSize: 13, fontWeight: "700" },
+  h4Text: { fontSize: 13, fontWeight: "700" },
   listItemRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginVertical: 3, paddingLeft: 1, width: "100%" },
   numBadge: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#1c2438",
     borderWidth: 1,
-    borderColor: "#2d3e66",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 1,
   },
-  numText: { color: "#8ab4f8", fontSize: 10.5, fontWeight: "700" },
+  numText: { fontSize: 10.5, fontWeight: "700" },
   bulletBadge: {
     width: 20,
     height: 20,
@@ -335,24 +412,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 1,
   },
-  bulletDot: { color: "#81c995", fontSize: 16, lineHeight: 18, textAlign: "center" },
+  bulletDot: { fontSize: 16, lineHeight: 18, textAlign: "center" },
   listItemText: { flex: 1, lineHeight: 21 },
   quoteBox: {
     borderLeftWidth: 3,
-    borderLeftColor: "#8ab4f8",
-    backgroundColor: "#161b22",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 4,
     marginVertical: 4,
   },
-  quoteText: { color: "#bdc1c6", fontSize: 12.5, lineHeight: 18, fontStyle: "italic" },
-  codeBlock: { marginVertical: 6, backgroundColor: "#0c0d10", borderRadius: 8, borderWidth: 1, borderColor: "#272a30", overflow: "hidden", width: "100%" },
-  codeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#191c22", paddingHorizontal: 10, paddingVertical: 5 },
-  codeLang: { color: "#9aa0a6", fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
+  quoteText: { fontSize: 12.5, lineHeight: 18, fontStyle: "italic" },
+  codeBlock: { marginVertical: 6, borderRadius: 8, borderWidth: 1, overflow: "hidden", width: "100%" },
+  codeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 10, paddingVertical: 5 },
+  codeLang: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
   codeActions: { flexDirection: "row", gap: 6 },
-  codeBtn: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#21262d", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4 },
-  runBtn: { backgroundColor: "#122a1c" },
-  codeBtnText: { color: "#8ab4f8", fontSize: 10.5, fontWeight: "600" },
-  codeBodyText: { color: "#d4d4d4", fontFamily: "monospace", fontSize: 11.5, padding: 8, lineHeight: 17 },
+  codeBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4 },
+  runBtn: { },
+  codeBtnText: { fontSize: 10.5, fontWeight: "600" },
+  codeBodyText: { fontFamily: "monospace", fontSize: 11.5, padding: 8, lineHeight: 17 },
+  linkText: { textDecorationLine: "underline", fontSize: 13.5, lineHeight: 21 },
 });

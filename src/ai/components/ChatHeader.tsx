@@ -176,23 +176,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#222429",
-    backgroundColor: "#131314",
     gap: 8,
   },
   iconBtn: {
     width: 34,
     height: 34,
     borderRadius: 9,
-    backgroundColor: "#1c1e22",
     borderWidth: 1,
-    borderColor: "#2b2e34",
     justifyContent: "center",
     alignItems: "center",
   },
   iconBtnActiveCli: {
-    borderColor: "rgba(52, 211, 153, 0.4)",
-    backgroundColor: "#16231c",
   },
   headerCenter: {
     flexDirection: "row",
@@ -205,9 +199,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: "#1a1d24",
     borderWidth: 1,
-    borderColor: "#282c35",
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -224,7 +216,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#f1f3f4",
   },
   subtitleRow: {
     flexDirection: "row",
@@ -235,22 +226,18 @@ const styles = StyleSheet.create({
   },
   subtitleWorkspace: {
     fontSize: 10.5,
-    color: "#8ab4f8",
     fontWeight: "500",
     maxWidth: 80,
   },
   dotSeparator: {
-    color: "#4e5258",
     fontSize: 9,
   },
   subtitleEngine: {
     fontSize: 10.5,
-    color: "#9aa0a6",
     fontWeight: "500",
     flexShrink: 1,
   },
   subtitleEngineCli: {
-    color: "#34d399",
   },
   headerActions: {
     flexDirection: "row",

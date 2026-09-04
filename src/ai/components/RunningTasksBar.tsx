@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   LayoutAnimation,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { runningTasksService, RunningTask } from "../services/runningTasksService";
@@ -37,8 +38,9 @@ export function RunningTasksBar({ onOpenUrl }: RunningTasksBarProps) {
 
   const handleKill = async (task: RunningTask) => {
     setKillingId(task.id);
-    await runningTasksService.killTask(task.id);
+    const stopped = await runningTasksService.killTask(task.id);
     setKillingId(null);
+    if (!stopped) Alert.alert("Could not stop task", "The server is still running. Please try again.");
   };
 
   const handleKillAll = async () => {

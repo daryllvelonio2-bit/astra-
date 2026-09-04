@@ -10,20 +10,24 @@ export interface OpenFilePayload {
   filePath: string;
   line?: number;
   workspaceId?: string;
+  userInitiated?: boolean;
 }
 
 export interface OpenBrowserPayload {
   url: string;
   port?: number;
+  userInitiated?: boolean;
 }
 
 export interface OpenTerminalPayload {
   sessionId?: string;
   workspaceId?: string;
+  userInitiated?: boolean;
 }
 
 export interface SwitchTabPayload {
   tab: "editor" | "terminal" | "browser";
+  userInitiated?: boolean;
 }
 
 export interface SwitchWorkspacePayload {
@@ -58,6 +62,7 @@ type GlobalActionListener = (event: IDEActionEvent) => void;
 class IDEActionServiceImpl {
   private listeners: Map<IDEActionType, Set<ActionListener<any>>> = new Map();
   private globalListeners: Set<GlobalActionListener> = new Set();
+  private pending: Map<IDEActionType, IDEActionEvent<any>> = new Map();
 
   /**
    * Subscribe to a specific IDE action event.
@@ -92,6 +97,8 @@ class IDEActionServiceImpl {
 
   /**
    * Emit an IDE action event to all subscribers.
+   * Navigation-bearing events are also stored as sticky pending actions so a
+   * screen mounted after the emit (e.g. editor after fullscreen chat) can consume them.
    */
   emit<T extends IDEActionType>(type: T, payload: IDEActionPayloadMap[T]) {
     const event: IDEActionEvent<T> = {
@@ -99,6 +106,10 @@ class IDEActionServiceImpl {
       payload,
       timestamp: Date.now(),
     };
+
+    if (type === "OPEN_FILE" || type === "OPEN_BROWSER" || type === "OPEN_TERMINAL" || type === "SWITCH_TAB") {
+      this.pending.set(type, event as IDEActionEvent<any>);
+    }
 
     const specificSet = this.listeners.get(type);
     if (specificSet) {
@@ -121,31 +132,44 @@ class IDEActionServiceImpl {
   }
 
   /**
-   * Helper: Instruct the IDE to open and display a file in the editor.
+   * Consume (read + clear) the last sticky event for a type.
+   * Returns null when absent or older than maxAgeMs (default 5 min).
    */
-  openFile(filePath: string, line?: number, workspaceId?: string) {
-    this.emit("OPEN_FILE", { filePath, line, workspaceId });
+  consumePendingAction<T extends IDEActionType>(type: T, maxAgeMs = 5 * 60 * 1000): IDEActionEvent<T> | null {
+    const event = this.pending.get(type) as IDEActionEvent<T> | undefined;
+    if (!event) return null;
+    this.pending.delete(type);
+    if (Date.now() - event.timestamp > maxAgeMs) return null;
+    return event;
+  }
+
+  /**
+   * Helper: Instruct the IDE to open and display a file in the editor.
+   * Pass userInitiated=true for explicit user taps so fullscreen chat can navigate.
+   */
+  openFile(filePath: string, line?: number, workspaceId?: string, userInitiated = false) {
+    this.emit("OPEN_FILE", { filePath, line, workspaceId, userInitiated });
   }
 
   /**
    * Helper: Instruct the IDE to navigate the Web Browser preview.
    */
-  openBrowser(url: string, port?: number) {
-    this.emit("OPEN_BROWSER", { url, port });
+  openBrowser(url: string, port?: number, userInitiated = false) {
+    this.emit("OPEN_BROWSER", { url, port, userInitiated });
   }
 
   /**
    * Helper: Instruct the IDE to switch to the terminal.
    */
-  openTerminal(sessionId?: string, workspaceId?: string) {
-    this.emit("OPEN_TERMINAL", { sessionId, workspaceId });
+  openTerminal(sessionId?: string, workspaceId?: string, userInitiated = false) {
+    this.emit("OPEN_TERMINAL", { sessionId, workspaceId, userInitiated });
   }
 
   /**
    * Helper: Instruct the IDE to switch bottom tabs.
    */
-  switchTab(tab: "editor" | "terminal" | "browser") {
-    this.emit("SWITCH_TAB", { tab });
+  switchTab(tab: "editor" | "terminal" | "browser", userInitiated = false) {
+    this.emit("SWITCH_TAB", { tab, userInitiated });
   }
 
   /**

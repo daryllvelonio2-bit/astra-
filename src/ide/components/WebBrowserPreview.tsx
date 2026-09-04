@@ -9,6 +9,7 @@ import { WebBrowserNavBar } from "./browser/WebBrowserNavBar";
 import { WebBrowserPortChips } from "./browser/WebBrowserPortChips";
 import { WebBrowserErrorView } from "./browser/WebBrowserErrorView";
 import { useTheme } from "../../theme/themeContext";
+import { useOrientation } from "../../theme/useOrientation";
 
 interface WebBrowserPreviewProps {
   initialUrl?: string;
@@ -24,6 +25,7 @@ export function WebBrowserPreview({
   workspaceId,
 }: WebBrowserPreviewProps) {
   const { theme } = useTheme();
+  const { isLandscape } = useOrientation();
   const [url, setUrl] = useState(initialUrl);
   const [inputUrl, setInputUrl] = useState(initialUrl);
   const [loading, setLoading] = useState(false);
@@ -155,30 +157,35 @@ export function WebBrowserPreview({
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
-      <WebBrowserNavBar
-        url={url}
-        inputUrl={inputUrl}
-        loading={loading}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        hasError={hasError}
-        onGoBack={() => webViewRef.current?.goBack()}
-        onGoForward={() => webViewRef.current?.goForward()}
-        onReload={handleReload}
-        onInputChange={setInputUrl}
-        onSubmit={() => handleNavigate()}
-        onClearInput={() => setInputUrl("")}
-        onOpenExternal={handleOpenExternal}
-      />
+      {/* Landscape: fullscreen content only — no nav bar, port chips, or loading bar. */}
+      {!isLandscape && (
+        <WebBrowserNavBar
+          url={url}
+          inputUrl={inputUrl}
+          loading={loading}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          hasError={hasError}
+          onGoBack={() => webViewRef.current?.goBack()}
+          onGoForward={() => webViewRef.current?.goForward()}
+          onReload={handleReload}
+          onInputChange={setInputUrl}
+          onSubmit={() => handleNavigate()}
+          onClearInput={() => setInputUrl("")}
+          onOpenExternal={handleOpenExternal}
+        />
+      )}
 
-      <WebBrowserPortChips
-        runningTasks={runningTasks}
-        currentPort={currentPort}
-        onSelectTask={(t) => handleNavigate(t.url || `http://127.0.0.1:${t.port || "8080"}`)}
-        onSelectPort={setPort}
-      />
+      {!isLandscape && (
+        <WebBrowserPortChips
+          runningTasks={runningTasks}
+          currentPort={currentPort}
+          onSelectTask={(t) => handleNavigate(t.url || `http://127.0.0.1:${t.port || "8080"}`)}
+          onSelectPort={setPort}
+        />
+      )}
 
-      {loading && (
+      {loading && !isLandscape && (
         <View style={[styles.loadingBar, { backgroundColor: theme.bgTertiary, borderBottomColor: theme.border }]}>
           <ActivityIndicator size="small" color={theme.accent} style={{ transform: [{ scale: 0.7 }] }} />
           <Text style={[styles.loadingText, { color: theme.accent }]} numberOfLines={1}>Loading {url}...</Text>
@@ -254,29 +261,23 @@ export function WebBrowserPreview({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#181818",
   },
   loadingBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e222e",
     paddingHorizontal: 12,
     paddingVertical: 3,
     gap: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#28324a",
   },
   loadingText: {
-    color: "#8ab4f8",
     fontSize: 11,
   },
   previewContainer: {
     flex: 1,
-    backgroundColor: "#181818",
   },
   webview: {
     flex: 1,
-    backgroundColor: "#181818",
   },
   centerLoading: {
     position: "absolute",
@@ -286,11 +287,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#181818",
     gap: 12,
   },
   loadingUrl: {
-    color: "#8ab4f8",
     fontSize: 12,
     fontFamily: "monospace",
   },

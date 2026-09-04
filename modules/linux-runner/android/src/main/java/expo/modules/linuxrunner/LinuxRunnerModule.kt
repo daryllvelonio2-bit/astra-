@@ -55,6 +55,10 @@ class LinuxRunnerModule : Module() {
             return@Function ProcessExecutor.stopAll()
         }
 
+        AsyncFunction("killProcessTree") { pid: Int ->
+            return@AsyncFunction ProcessTreeKiller.killTree(pid.toLong(), 800)
+        }
+
         AsyncFunction("startTerminalSession") { sessionId: String, workspaceId: String? ->
             val context = appContext.reactContext ?: return@AsyncFunction
             EnvironmentManager.initialize(context)

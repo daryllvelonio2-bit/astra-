@@ -61,12 +61,10 @@ export function ProjectCard({ item, onPress, onMorePress }: ProjectCardProps) {
 
 const styles = StyleSheet.create({
   projectCard: {
-    backgroundColor: '#252526',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#333',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -79,7 +77,6 @@ const styles = StyleSheet.create({
   projectName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#f0f0f0',
     flex: 1,
   },
   moreOptions: {
@@ -89,22 +86,18 @@ const styles = StyleSheet.create({
     marginLeft: 34,
   },
   pathBadge: {
-    backgroundColor: '#1e1e1e',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
     alignSelf: 'flex-start',
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#333',
   },
   pathText: {
-    color: '#8ab4f8',
     fontSize: 11,
     fontFamily: 'monospace',
   },
   cardDetails: {
     fontSize: 12,
-    color: '#a0a0a0',
   },
 });

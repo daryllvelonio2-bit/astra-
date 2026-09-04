@@ -13,6 +13,9 @@ interface EditorTabBarProps {
   onAskAi?: () => void;
   onExitProject?: () => void;
   onToggleSidebar?: () => void;
+  errorCount?: number;
+  warningCount?: number;
+  onShowProblems?: () => void;
 }
 
 export function EditorTabBar({
@@ -25,12 +28,25 @@ export function EditorTabBar({
   onAskAi,
   onExitProject,
   onToggleSidebar,
+  errorCount = 0,
+  warningCount = 0,
+  onShowProblems,
 }: EditorTabBarProps) {
   const { theme } = useTheme();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [barWidth, setBarWidth] = useState(0);
+
+  // Narrow editor (sidebar open / small screen): collapse secondary actions
+  // into the overflow menu so buttons never squeeze or overlap.
+  const hasOverflowMenu = !!onExitProject;
+  const narrow = barWidth > 0 && barWidth < 420;
+  const collapseActions = narrow && hasOverflowMenu;
 
   return (
-    <View style={[styles.tabBar, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}>
+    <View
+      style={[styles.tabBar, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}
+      onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+    >
       <View style={styles.tabLeft}>
         {onToggleSidebar && (
           <TouchableOpacity onPress={onToggleSidebar} style={styles.hamburgerBtn}>
@@ -38,11 +54,11 @@ export function EditorTabBar({
           </TouchableOpacity>
         )}
         <Ionicons name="document-text-outline" size={16} color={theme.accent} style={{ marginRight: 6 }} />
-        <Text style={[styles.tabTitle, { color: theme.textPrimary }]} numberOfLines={1}>
+        <Text style={[styles.tabTitle, { color: theme.textPrimary }]} numberOfLines={1} ellipsizeMode="middle">
           {fileName}
         </Text>
         <TouchableOpacity
-          style={[styles.modeBadge, { backgroundColor: theme.bgTertiary, borderColor: theme.border }, isEditing && styles.modeBadgeEditing]}
+          style={[styles.modeBadge, styles.noShrink, { backgroundColor: theme.bgTertiary, borderColor: theme.border }, isEditing && { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen }]}
           onPress={onToggleEdit}
           activeOpacity={0.7}
         >
@@ -51,23 +67,43 @@ export function EditorTabBar({
             size={11}
             color={isEditing ? theme.accentGreen : theme.textMuted}
           />
-          <Text style={[styles.modeBadgeText, isEditing ? { color: theme.accentGreen } : { color: theme.textMuted }]}>
-            {isEditing ? "Editing" : "View"}
-          </Text>
+          {!narrow && (
+            <Text style={[styles.modeBadgeText, isEditing ? { color: theme.accentGreen } : { color: theme.textMuted }]}>
+              {isEditing ? "Editing" : "View"}
+            </Text>
+          )}
         </TouchableOpacity>
+        {(errorCount > 0 || warningCount > 0) && (
+          <TouchableOpacity
+            style={[styles.problemBadge, styles.noShrink, { backgroundColor: errorCount > 0 ? `${theme.accentRed}18` : `${theme.accentGold}18`, borderColor: errorCount > 0 ? theme.accentRed : theme.accentGold }]}
+            onPress={onShowProblems}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={errorCount > 0 ? "alert-circle" : "warning-outline"}
+              size={11}
+              color={errorCount > 0 ? theme.accentRed : theme.accentGold}
+            />
+            <Text style={[styles.problemBadgeText, { color: errorCount > 0 ? theme.accentRed : theme.accentGold }]}>
+              {errorCount > 0 ? errorCount : warningCount}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Quick Toolbar */}
-      <View style={styles.tabActions}>
+      <View style={[styles.tabActions, styles.noShrink]}>
         {isEditing ? (
-          <TouchableOpacity style={styles.doneEditBtn} onPress={onDoneEdit}>
-            <Ionicons name="checkmark-outline" size={14} color="#81c995" />
-            <Text style={styles.doneEditText}>Done</Text>
+          <TouchableOpacity style={[styles.doneEditBtn, { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen }]} onPress={onDoneEdit}>
+            <Ionicons name="checkmark-outline" size={14} color={theme.accentGreen} />
+            <Text style={[styles.doneEditText, { color: theme.accentGreen }]}>Done</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.actionIconBtn} onPress={onFormatCode} activeOpacity={0.7}>
-            <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} />
-          </TouchableOpacity>
+          !collapseActions && (
+            <TouchableOpacity style={styles.actionIconBtn} onPress={onFormatCode} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} />
+            </TouchableOpacity>
+          )
         )}
 
         {onRunFile && (
@@ -75,7 +111,7 @@ export function EditorTabBar({
             <Ionicons name="play" size={16} color={theme.accentGreen} />
           </TouchableOpacity>
         )}
-        {onAskAi && (
+        {onAskAi && !collapseActions && (
           <TouchableOpacity style={styles.actionIconBtn} onPress={onAskAi}>
             <Ionicons name="sparkles" size={16} color={theme.accent} />
           </TouchableOpacity>
@@ -106,6 +142,18 @@ export function EditorTabBar({
               <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} style={{ marginRight: 8 }} />
               <Text style={[styles.dropdownItemText, { color: theme.accentGold }]}>Format Code (Prettier)</Text>
             </TouchableOpacity>
+            {collapseActions && onAskAi && (
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setShowDropdown(false);
+                  onAskAi();
+                }}
+              >
+                <Ionicons name="sparkles" size={16} color={theme.accent} style={{ marginRight: 8 }} />
+                <Text style={[styles.dropdownItemText, { color: theme.accent }]}>Ask AI About File</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.dropdownItem}
               onPress={() => {
@@ -126,13 +174,11 @@ export function EditorTabBar({
 const styles = StyleSheet.create({
   tabBar: {
     height: 40,
-    backgroundColor: "#252526",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#1e1e1e",
     zIndex: 10,
   },
   tabLeft: {
@@ -147,45 +193,52 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   tabTitle: {
-    color: "#ffffff",
     fontSize: 13,
     fontWeight: "500",
     maxWidth: 160,
+    flexShrink: 1,
+  },
+  noShrink: {
+    flexShrink: 0,
   },
   modeBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#1b1d22",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#333538",
   },
-  modeBadgeEditing: {
-    borderColor: "#1e3a2b",
-    backgroundColor: "#15241b",
-  },
+  modeBadgeEditing: {},
   modeBadgeText: {
-    color: "#9aa0a6",
     fontSize: 10.5,
     fontWeight: "500",
+  },
+  problemBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  problemBadgeText: {
+    fontSize: 10.5,
+    fontWeight: "700",
   },
   doneEditBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#15241b",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#1e3a2b",
     marginRight: 4,
   },
   doneEditText: {
-    color: "#81c995",
     fontSize: 11,
     fontWeight: "600",
   },
@@ -213,12 +266,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 40,
     right: 8,
-    backgroundColor: "#252526",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#3c3c3c",
     width: 190,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -232,7 +282,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   dropdownItemText: {
-    color: "#f48771",
     fontSize: 12.5,
     fontWeight: "500",
   },

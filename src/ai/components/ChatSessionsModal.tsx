@@ -53,7 +53,7 @@ export function ChatSessionsModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
         <View style={[styles.bottomSheet, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           <View style={styles.header}>
             <View>
@@ -66,8 +66,8 @@ export function ChatSessionsModal({
           </View>
 
           <TouchableOpacity style={[styles.newChatBtn, { backgroundColor: theme.accent }]} onPress={onCreateNewSession} activeOpacity={0.8}>
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.newChatText}>Start New Chat Thread</Text>
+            <Ionicons name="add" size={18} color={theme.sendButtonIcon} />
+            <Text style={[styles.newChatText, { color: theme.sendButtonIcon }]}>Start New Chat Thread</Text>
           </TouchableOpacity>
 
           <FlatList
@@ -137,16 +137,13 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   bottomSheet: {
-    backgroundColor: "#252526",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     maxHeight: "80%",
     borderWidth: 1,
-    borderColor: "#3c3c3c",
   },
   header: {
     flexDirection: "row",
@@ -157,25 +154,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#f0f0f0",
   },
   subtitle: {
     fontSize: 12,
-    color: "#8ab4f8",
     marginTop: 2,
   },
   newChatBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0e639c",
     paddingVertical: 12,
     borderRadius: 10,
     gap: 8,
     marginBottom: 16,
   },
   newChatText: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "700",
   },
@@ -186,16 +179,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#1e1e1e",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#333",
   },
   activeSessionItem: {
-    borderColor: "#8ab4f8",
-    backgroundColor: "rgba(138, 180, 248, 0.08)",
   },
   sessionLeft: {
     flexDirection: "row",
@@ -208,15 +197,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sessionTitle: {
-    color: "#e3e3e3",
     fontSize: 14,
     fontWeight: "600",
   },
   activeSessionTitle: {
-    color: "#8ab4f8",
   },
   sessionMeta: {
-    color: "#777",
     fontSize: 11,
     marginTop: 2,
   },
@@ -228,7 +214,6 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#777",
     fontSize: 13,
   },
 });

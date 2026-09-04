@@ -103,12 +103,12 @@ export function ApiKeyManager({ apiKeys, onChangeKeys, theme }: ApiKeyManagerPro
           <Ionicons
             name="add"
             size={18}
-            color={newKeyInput.trim() ? "#ffffff" : theme.textMuted}
+            color={newKeyInput.trim() ? theme.sendButtonIcon : theme.textMuted}
           />
           <Text
             style={[
               styles.addBtnText,
-              { color: newKeyInput.trim() ? "#ffffff" : theme.textMuted },
+              { color: newKeyInput.trim() ? theme.sendButtonIcon : theme.textMuted },
             ]}
           >
             Add Key
@@ -175,7 +175,7 @@ export function ApiKeyManager({ apiKeys, onChangeKeys, theme }: ApiKeyManagerPro
                     onPress={() => handleRemoveKey(index)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Ionicons name="trash-outline" size={17} color="#ef4444" />
+                    <Ionicons name="trash-outline" size={17} color={theme.accentRed} />
                   </TouchableOpacity>
                 </View>
               </View>

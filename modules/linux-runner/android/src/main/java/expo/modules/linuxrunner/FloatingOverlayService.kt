@@ -188,6 +188,18 @@ class FloatingOverlayService : Service() {
         return START_STICKY
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // Swiped away: stop agent one-shot commands + provisioning so nothing
+        // keeps burning CPU in the background. Interactive PTY shells stay.
+        try {
+            ProcessExecutor.stopAll()
+        } catch (_: Exception) {}
+        try {
+            EnvironmentManager.cancelProvisioning()
+        } catch (_: Exception) {}
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false

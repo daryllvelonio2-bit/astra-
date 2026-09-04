@@ -1,4 +1,5 @@
 import { PRootService } from "../../ide/services/prootService";
+import { killPidTree, findPidsOnPort, isServerAlive } from "./processTreeKill";
 
 export interface RunningTask {
   id: string;
@@ -14,6 +15,12 @@ export interface RunningTask {
 
 type TaskListener = (tasks: RunningTask[]) => void;
 type TriggerListener = (taskId?: string) => void;
+
+/** Banner meta line. PID omitted when unknown — never a placeholder word in the PID slot. */
+function buildTaskBanner(command: string, pid: number | undefined, dateStr: string, port?: number, url?: string): string {
+  const meta = [pid ? `PID: ${pid}` : null, `Started: ${dateStr}`, port ? `Port: ${port}` : null, url ? `URL: ${url}` : null].filter(Boolean).join(" | ");
+  return `\u001b[1;34m⚡ Background Task: \u001b[1;37m${command}\u001b[0m\r\n\u001b[90m${meta}\u001b[0m\r\n\u001b[90m--------------------------------------------------\u001b[0m\r\n`;
+}
 
 class RunningTasksServiceImpl {
   private tasks: Map<string, RunningTask> = new Map();
@@ -116,6 +123,11 @@ class RunningTasksServiceImpl {
       if (taskInfo.pid && !existingTask.pid) {
         existingTask.pid = taskInfo.pid;
         changed = true;
+        // The banner is baked into output at creation (before the PID was
+        // known) — patch it so it doesn't keep showing a PID-less line.
+        if (existingTask.output && existingTask.output.includes("PID: Active")) {
+          existingTask.output = existingTask.output.replace("PID: Active", `PID: ${taskInfo.pid}`);
+        }
       }
       if (url && !existingTask.url) {
         existingTask.url = url;
@@ -152,7 +164,7 @@ class RunningTasksServiceImpl {
       : `task-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
 
     const dateStr = new Date().toLocaleTimeString();
-    const initBanner = `\u001b[1;34m⚡ Background Task: \u001b[1;37m${command}\u001b[0m\r\n\u001b[90mPID: ${taskInfo.pid || "Active"} | Started: ${dateStr}${port ? ` | Port: ${port}` : ""}${url ? ` | URL: ${url}` : ""}\u001b[0m\r\n\u001b[90m--------------------------------------------------\u001b[0m\r\n`;
+    const initBanner = buildTaskBanner(command, taskInfo.pid, dateStr, port, url);
 
     const task: RunningTask = {
       id,
@@ -224,18 +236,22 @@ class RunningTasksServiceImpl {
     if (!task) return false;
 
     try {
-      if (task.pid) {
-        // Kill specific PID and its children
-        await PRootService.runCommand(
-          `kill -9 ${task.pid} 2>/dev/null || kill -TERM ${task.pid} 2>/dev/null`,
-          task.workspaceId
-        );
+      // Every pid that could be the server: tracked pid + port listeners.
+      const roots = new Set<number>();
+      if (task.pid) roots.add(task.pid);
+      if (task.port) {
+        for (const p of await findPidsOnPort(task.port, task.workspaceId)) roots.add(p);
+      }
+      // Kill whole trees — the tracked pid is often just the wrapper shell,
+      // and killing it alone orphans the real server on its port.
+      for (const pid of roots) {
+        await killPidTree(pid, task.workspaceId);
       }
 
       if (task.port) {
         // Kill any process bound to the port
         await PRootService.runCommand(
-          `fuser -k -n tcp ${task.port} 2>/dev/null || lsof -ti:${task.port} | xargs kill -9 2>/dev/null || true`,
+          `fuser -k ${task.port}/tcp 2>/dev/null || lsof -ti:${task.port} | xargs kill -9 2>/dev/null || true`,
           task.workspaceId
         );
       }
@@ -243,7 +259,11 @@ class RunningTasksServiceImpl {
       if (/expo/i.test(task.command)) {
         await PRootService.runCommand(`pkill -9 -f "expo" 2>/dev/null || true`, task.workspaceId);
       } else if (/artisan/i.test(task.command)) {
-        await PRootService.runCommand(`pkill -9 -f "artisan serve" 2>/dev/null || true`, task.workspaceId);
+        // artisan double-forks: the `php -S` child holds the socket (no "artisan" in cmdline).
+        await PRootService.runCommand(
+          `pkill -9 -f "artisan serve" 2>/dev/null; pkill -9 -f "php[0-9]* -S " 2>/dev/null || true`,
+          task.workspaceId
+        );
       } else if (/vite/i.test(task.command)) {
         await PRootService.runCommand(`pkill -9 -f "vite" 2>/dev/null || true`, task.workspaceId);
       } else {
@@ -253,12 +273,13 @@ class RunningTasksServiceImpl {
         }
       }
 
+      // Never silently leak: only untrack a server verified dead. On failure
+      // the task stays listed so the kill can be retried (still returns false).
+      if (await isServerAlive(task, task.workspaceId)) return false;
       this.tasks.delete(id);
       this.notify();
       return true;
     } catch (_) {
-      this.tasks.delete(id);
-      this.notify();
       return false;
     }
   }
@@ -428,8 +449,8 @@ class RunningTasksServiceImpl {
     }
 
     // Detect PID only when explicit Process ID pattern is present
-    const pidMatch = text.match(/(?:Process\s*ID\s*\(PID\)|\[PID:\s*(\d+)\]|PID\s*[:=]\s*`?(\d+)`?)/i);
-    const pid = pidMatch ? parseInt(pidMatch[1] || pidMatch[2], 10) : undefined;
+    const pidMatch = text.match(/(?:Process\s*ID\s*\(PID\)|\[PID:\s*(\d+)\]|\(\s*PID\s*[:=]?\s*`?(\d+)`?\s*\)|PID\s*[:=]\s*`?(\d+)`?)/i);
+    const pid = pidMatch ? parseInt(pidMatch[1] || pidMatch[2] || pidMatch[3], 10) : undefined;
 
     let command = "Background Server";
     let isServer = false;

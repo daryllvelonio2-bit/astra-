@@ -66,7 +66,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
         <View style={[styles.bottomSheet, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>New Workspace Project</Text>
@@ -99,7 +99,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                   <Text
                     style={[
                       styles.templateChipText,
-                      { color: selectedTemplate === template ? "#ffffff" : theme.textSecondary },
+                      { color: selectedTemplate === template ? theme.sendButtonIcon : theme.textSecondary },
                       selectedTemplate === template && { fontWeight: "700" },
                     ]}
                   >
@@ -181,8 +181,8 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                     style={[styles.browseBtn, { backgroundColor: theme.accent }]}
                     onPress={() => setDirectoryPickerVisible(true)}
                   >
-                    <Ionicons name="folder-open" size={16} color="#fff" />
-                    <Text style={styles.browseBtnText}>Browse</Text>
+                    <Ionicons name="folder-open" size={16} color={theme.sendButtonIcon} />
+                    <Text style={[styles.browseBtnText, { color: theme.sendButtonIcon }]}>Browse</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -207,7 +207,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                 <Text style={[styles.buttonTextCancel, { color: theme.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.accent }]} onPress={handleSubmit}>
-                <Text style={styles.buttonTextCreate}>Create & Open</Text>
+                <Text style={[styles.buttonTextCreate, { color: theme.sendButtonIcon }]}>Create & Open</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -232,16 +232,13 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   bottomSheet: {
-    backgroundColor: '#252526',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     maxHeight: '85%',
     borderWidth: 1,
-    borderColor: '#3c3c3c',
   },
   modalTitle: {
     fontSize: 18,
@@ -331,7 +328,6 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   browseBtnText: {
-    color: '#fff',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -372,7 +368,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   buttonTextCreate: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '700',
   },

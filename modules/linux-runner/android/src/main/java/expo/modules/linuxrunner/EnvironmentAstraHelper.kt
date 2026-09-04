@@ -8,7 +8,7 @@ import java.io.InputStream
 
 object EnvironmentAstraHelper {
     private const val TAG = "EnvironmentAstraHelper"
-    const val CURRENT_VERSION_MARKER = ".astra_cli_version_v12"
+    const val CURRENT_VERSION_MARKER = ".astra_cli_version_v14"
 
     fun ensureAstraCli(
         context: Context,

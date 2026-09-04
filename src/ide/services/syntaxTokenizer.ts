@@ -21,7 +21,7 @@ export interface TokenizedLine {
   indentWidth: number;
 }
 
-export const TOKEN_COLORS: Record<TokenType, string> = {
+export const TOKEN_COLORS_DARK: Record<TokenType, string> = {
   keyword: "#c678dd",   // Vibrant Purple
   string: "#98c379",    // Mint Green
   comment: "#5c6370",   // Slate Italic
@@ -33,6 +33,28 @@ export const TOKEN_COLORS: Record<TokenType, string> = {
   operator: "#abb2bf",  // Silver
   plain: "#abb2bf",     // Default Text
 };
+
+// Light-mode palette tuned for readability on near-white backgrounds.
+// Keeps the same hues, darkened for WCAG-friendly contrast.
+export const TOKEN_COLORS_LIGHT: Record<TokenType, string> = {
+  keyword: "#7c3aed",   // Deep Purple
+  string: "#15803d",    // Forest Green
+  comment: "#94a3b8",   // Slate
+  function: "#1d4ed8",  // Royal Blue
+  jsx_tag: "#be123c",   // Crimson
+  number: "#b45309",    // Burnt Orange
+  property: "#92400e",  // Saddle Brown
+  boolean: "#b45309",   // Burnt Orange
+  operator: "#475569",  // Slate Gray
+  plain: "#0f172a",     // Near-black
+};
+
+/** @deprecated Use getTokenColors(isDark) for theme-aware highlighting. */
+export const TOKEN_COLORS: Record<TokenType, string> = TOKEN_COLORS_DARK;
+
+export function getTokenColors(isDark: boolean): Record<TokenType, string> {
+  return isDark ? TOKEN_COLORS_DARK : TOKEN_COLORS_LIGHT;
+}
 
 const JS_KEYWORDS = new Set([
   "const", "let", "var", "function", "return", "import", "export", "default",
@@ -47,6 +69,10 @@ const BOOLEANS_AND_SPECIAL = new Set([
 ]);
 
 const MAX_TOKENIZE_LINES = 800;
+// Long minified lines explode into tens of thousands of <Text> nodes and can
+// stall slower regex engines — render them as a single plain token instead.
+const MAX_TOKENIZE_LINE_CHARS = 1500;
+const MAX_TOKENS_PER_LINE = 250;
 
 export function tokenizeCode(
   code: string,
@@ -69,6 +95,12 @@ export function tokenizeCode(
     // Detect indentation
     const indentMatch = rawLine.match(/^(\s+)/);
     const indentWidth = indentMatch ? indentMatch[1].length : 0;
+
+    // Long-line guard: skip regex tokenizing, keep the line as one plain token.
+    if (rawLine.length > MAX_TOKENIZE_LINE_CHARS) {
+      result.push({ lineNumber, tokens: [{ text: rawLine, type: "plain" }], indentWidth });
+      continue;
+    }
 
     if (inMultiComment) {
       const endIdx = rawLine.indexOf("*/");
@@ -137,6 +169,13 @@ function tokenizeLineFragment(line: string): CodeToken[] {
   let lastIndex = 0;
 
   while ((match = regex.exec(line)) !== null) {
+    // Token-count guard: collapse the unread remainder into one plain token
+    // so pathological lines can't create thousands of views.
+    if (tokens.length >= MAX_TOKENS_PER_LINE) {
+      tokens.push({ text: line.slice(lastIndex), type: "plain" });
+      lastIndex = line.length;
+      break;
+    }
     if (match.index > lastIndex) {
       tokens.push({ text: line.slice(lastIndex, match.index), type: "plain" });
     }

@@ -11,14 +11,26 @@ export async function checkAstraInteractiveApproval(toolName, toolInput, signal,
   }
 
   const name = (toolName || "").toLowerCase();
+  // Internal session bookkeeping: narrative only, zero side effects.
+  // Auto-approve so the agent never blocks 10 min with no UI to answer it
+  // (the app intentionally shows no modal for these).
+  if (name === "update_topic" || name === "set_topic") {
+    return { approved: true };
+  }
   const isReadOnly = (
     name === "read_file" ||
+    name === "read_many_files" ||
     name === "view_file" ||
     name === "list_dir" ||
+    name === "list_directory" ||
+    name === "glob" ||
     name === "find_by_name" ||
     name === "grep_search" ||
     name === "grep" ||
     name === "search" ||
+    name === "google_web_search" ||
+    name === "web_search" ||
+    name === "web_fetch" ||
     name === "cat" ||
     name === "ls" ||
     name === "find" ||

@@ -91,7 +91,7 @@ export async function getWorkspaceDirPath(workspaceId: string): Promise<string> 
 export async function listWorkspaces(): Promise<string[]> {
   await ensureWorkspacesDir();
   const idSet = new Set<string>();
-  try { (await readDir(WORKSPACES_DIR)).forEach((d) => idSet.add(d)); } catch (_) {}
+  try { (await readDir(WORKSPACES_DIR)).forEach((d) => { if (!d.includes("-deleting-") && !d.startsWith(".")) idSet.add(d); }); } catch (_) {}
   try { Object.keys(await loadWorkspaceRegistry()).forEach((id) => idSet.add(id)); } catch (_) {}
   return Array.from(idSet);
 }
@@ -138,12 +138,20 @@ export async function readFileContent(workspaceId: string, filePath: string): Pr
   return "";
 }
 
-export async function loadWorkspace(workspaceId: string): Promise<Workspace> {
+export type WorkspaceLoadProgress = (dirsScanned: number, currentPath: string) => void;
+
+const SCAN_TIMEOUT_MS = 45000;
+const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+  Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(label)), ms))]);
+
+export async function loadWorkspace(workspaceId: string, onProgress?: WorkspaceLoadProgress): Promise<Workspace> {
   await ensureWorkspacesDir();
   const workspacePath = await getWorkspaceDirPath(workspaceId);
   await makeDir(workspacePath);
 
-  const root = await readDirectoryRecursive(workspacePath, `${workspaceId}::root`, workspaceId, workspacePath);
+  const yieldCounter = { n: 0 };
+  const scan = readDirectoryRecursive(workspacePath, `${workspaceId}::root`, workspaceId, workspacePath, 0, yieldCounter, onProgress);
+  const root = await withTimeout(scan, SCAN_TIMEOUT_MS, "Workspace scan timed out after 45s");
   return {
     id: workspaceId,
     name: workspaceId,
@@ -156,13 +164,9 @@ export async function loadOrCreateDefaultWorkspace(): Promise<Workspace> {
   try {
     await ensureWorkspacesDir();
     const dirs = await listWorkspaces();
-    if (!dirs || dirs.length === 0) {
-      return await createWorkspace("MyFirstProject");
-    }
-    return await loadWorkspace(dirs[0]);
-  } catch (e) {
-    return await createWorkspace("MyFirstProject");
-  }
+    if (dirs?.length) return await loadWorkspace(dirs[0]);
+  } catch (_) {}
+  return await createWorkspace("MyFirstProject");
 }
 
 async function readDirectoryRecursive(
@@ -170,11 +174,22 @@ async function readDirectoryRecursive(
   parentId: string,
   workspaceId: string,
   baseDir: string,
-  depth = 0
+  depth = 0,
+  shared?: { n: number },
+  onProgress?: WorkspaceLoadProgress
 ): Promise<FileNode> {
   if (depth > 6) {
     return { id: parentId, name: parentId, type: "folder", path: "", children: [] };
   }
+
+  // Sync native listFiles() per dir blocks JS: yield so taps interleave.
+  if (shared) {
+    shared.n++;
+    if (shared.n % 12 === 0) {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
+  }
+  try { onProgress?.(shared?.n || 0, dirPath); } catch (_) {}
 
   const cleanBaseDir = normalizeCleanPath(baseDir).replace(/\/+$/, "");
   const cleanDirPath = normalizeCleanPath(dirPath).replace(/\/+$/, "");
@@ -198,7 +213,7 @@ async function readDirectoryRecursive(
       const id = `${workspaceId}::${relativePath}`;
 
       if (entry.isDirectory) {
-        const childFolder = await readDirectoryRecursive(`${cleanFullPath}/`, id, workspaceId, cleanBaseDir, depth + 1);
+        const childFolder = await readDirectoryRecursive(`${cleanFullPath}/`, id, workspaceId, cleanBaseDir, depth + 1, shared, onProgress);
         childFolder.path = relativePath;
         children.push(childFolder);
       } else {
@@ -450,26 +465,32 @@ export async function moveNodeInWorkspace(
 }
 
 export async function deleteWorkspace(workspaceId: string): Promise<void> {
+  const workspacePath = await getWorkspaceDirPath(workspaceId);
+  // 1. Remove registry first so list reloads instantly.
   try {
-    const workspacePath = await getWorkspaceDirPath(workspaceId);
-    await deletePath(workspacePath);
-
-    // Clean up registry
-    try {
-      const registry = await loadWorkspaceRegistry();
-      if (registry[workspaceId]) {
-        delete registry[workspaceId];
-        await writeFileText(REGISTRY_FILE, JSON.stringify(registry, null, 2));
-      }
-    } catch (_) {}
-
-    // Clean up isolated conversation storage for this workspace
-    try {
-      const safeId = (workspaceId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-      const convFile = `${FileSystem.documentDirectory}conversations/${safeId}.json`;
-      await deletePath(convFile);
-    } catch (_) {}
-
-    notifyWorkspaceChanged(workspaceId);
+    const registry = await loadWorkspaceRegistry();
+    if (registry[workspaceId]) {
+      delete registry[workspaceId];
+      await writeFileText(REGISTRY_FILE, JSON.stringify(registry, null, 2));
+    }
   } catch (_) {}
+  // 2. Instant O(1) rename, then slow recursive delete in background.
+  try {
+    const clean = normalizeCleanPath(workspacePath).replace(/\/+$/, "");
+    const trash = `${clean}-deleting-${Date.now()}/`;
+    const renamed = await movePath(`${clean}/`, trash);
+    if (renamed) {
+      deletePath(trash).catch(() => {});
+    } else {
+      deletePath(workspacePath).catch(() => {});
+    }
+  } catch (_) {
+    try { await deletePath(workspacePath); } catch (_) {}
+  }
+  // 3. Tiny conversation file + notify (fast).
+  try {
+    const safeId = (workspaceId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+    await deletePath(`${FileSystem.documentDirectory}conversations/${safeId}.json`);
+  } catch (_) {}
+  notifyWorkspaceChanged(workspaceId);
 }

@@ -16,6 +16,36 @@ export interface StreamEventHandlerOptions {
   onResolveEarly?: (reply: string) => void;
 }
 
+/**
+ * Tools the CLI approval gate lets through without waiting (pure reads).
+ * MUST mirror astraInteractiveApproval.js: every tool NOT in this set blocks
+ * the CLI until the user answers, so every one of them needs a UI modal here.
+ * An unpaired wait = silent 10-minute stall with zero UI.
+ */
+const READ_ONLY_TOOLS = new Set([
+  "read_file",
+  "read_many_files",
+  "view_file",
+  "list_dir",
+  "list_directory",
+  "glob",
+  "find_by_name",
+  "grep_search",
+  "grep",
+  "search",
+  "google_web_search",
+  "web_search",
+  "web_fetch",
+  "cat",
+  "ls",
+  "find",
+  "get_file",
+  "file_search",
+  "read",
+  "look",
+  "inspect",
+]);
+
 export class AstraStreamParser {
   private steps: AgentStep[] = [];
   private modifiedFiles: string[] = [];
@@ -56,6 +86,21 @@ export class AstraStreamParser {
   handleLine(rawLine: string): void {
     const trimmed = rawLine.trim();
     if (!trimmed) return;
+
+    // Surface engine progress notes (rate-limit cooldowns, key rolls) as live
+    // status so long backoff waits never look like a stuck spinner.
+    if (
+      trimmed.startsWith("[Astra RateGuard]") ||
+      trimmed.startsWith("[Astra Key Rolling]") ||
+      trimmed.startsWith("[Astra Rate Limit]")
+    ) {
+      this.opts.onLiveStatus?.({
+        status: "reasoning",
+        detail: trimmed.slice(0, 80),
+        icon: "time-outline",
+      });
+      return;
+    }
 
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
       try {
@@ -100,14 +145,9 @@ export class AstraStreamParser {
 
       const { title, detail, icon } = formatToolAction(toolName, args);
 
-      const isDangerousAction =
-        toolName.includes("write") ||
-        toolName.includes("edit") ||
-        toolName.includes("replace") ||
-        toolName.includes("command") ||
-        toolName.includes("shell") ||
-        toolName.includes("delete") ||
-        toolName.includes("patch");
+      // Paired with the CLI gate: anything not read-only blocks the engine
+      // until the user answers, so it must raise a modal here.
+      const isDangerousAction = !READ_ONLY_TOOLS.has(toolName.toLowerCase());
 
       const fullStep = this.addStep({
         type: "tool_call",
@@ -118,6 +158,8 @@ export class AstraStreamParser {
       });
 
       if (isInteractive && isDangerousAction && onApprovalRequest) {
+        // Hold the waiting state until the user decides — do NOT emit
+        // executing_tool here or the UI looks busy while blocked on approval.
         onStatusChange?.("waiting_approval");
         onLiveStatus?.({
           status: "waiting_approval",
@@ -134,6 +176,8 @@ export class AstraStreamParser {
             try {
               await executeCommand(`echo '{"outcome":"cancel","approved":false}' > /tmp/astra-approval.json`, workspaceId);
             } catch (_) {}
+            onStatusChange?.("thinking");
+            onLiveStatus?.({ status: "thinking", detail: "Continuing...", icon: "sparkles" });
             return;
           }
           fullStep.approvalStatus = "approved";
@@ -141,11 +185,13 @@ export class AstraStreamParser {
           try {
             await executeCommand(`echo '{"outcome":"proceed_once","approved":true}' > /tmp/astra-approval.json`, workspaceId);
           } catch (_) {}
+          onStatusChange?.("executing_tool");
+          onLiveStatus?.({ status: "executing", detail, icon });
         });
+      } else {
+        onStatusChange?.("executing_tool");
+        onLiveStatus?.({ status: "executing", detail, icon });
       }
-
-      onStatusChange?.("executing_tool");
-      onLiveStatus?.({ status: "executing", detail, icon });
 
       const isFileModification = /write|edit|replace|create_file/i.test(toolName);
       const targetFilePath = args.file_path || args.TargetFile || args.path || args.file;

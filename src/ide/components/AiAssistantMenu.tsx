@@ -34,9 +34,9 @@ export function AiAssistantMenu({
             <AstraLogo width={18} height={18} />
             <Text style={[styles.aiMenuTitle, { color: theme.textPrimary }]}>Astra AI Assistant</Text>
             {isOverlayRunning && (
-              <View style={styles.activeTag}>
-                <View style={styles.activeDot} />
-                <Text style={styles.activeTagText}>Chathead Active</Text>
+              <View style={[styles.activeTag, { backgroundColor: `${theme.accentGreen}20` }]}>
+                <View style={[styles.activeDot, { backgroundColor: theme.accentGreen }]} />
+                <Text style={[styles.activeTagText, { color: theme.accentGreen }]}>Chathead Active</Text>
               </View>
             )}
           </View>
@@ -106,7 +106,7 @@ export function AiAssistantMenu({
             shadowOpacity: 0.3,
             shadowRadius: 10,
           },
-          isWorking && styles.floatingAiBtnRunning,
+          isWorking && { borderColor: theme.accentGreen, backgroundColor: `${theme.accentGreen}20` },
         ]}
         onPress={onToggleAiMenu}
         onLongPress={onLaunchSystemOverlay}
@@ -114,8 +114,8 @@ export function AiAssistantMenu({
       >
         <AstraLogo width={42} height={42} />
         {isWorking && (
-          <View style={[styles.floatingBtnBadge, { borderColor: theme.bgSecondary }]}>
-            <View style={styles.floatingBtnPulse} />
+          <View style={[styles.floatingBtnBadge, { backgroundColor: theme.accentGreen, borderColor: theme.bgSecondary }]}>
+            <View style={[styles.floatingBtnPulse, { backgroundColor: theme.sendButtonIcon }]} />
           </View>
         )}
       </TouchableOpacity>
@@ -131,23 +131,17 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: "#16171b",
     borderWidth: 1.5,
-    borderColor: "#3b82f6",
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
     zIndex: 999,
-    shadowColor: "#000000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 10,
   },
-  floatingAiBtnRunning: {
-    borderColor: "#10b981",
-    backgroundColor: "#0d2818",
-  },
+  floatingAiBtnRunning: {},
   floatingBtnBadge: {
     position: "absolute",
     top: 2,
@@ -155,27 +149,21 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: "#10b981",
     borderWidth: 2,
-    borderColor: "#16171b",
   },
   floatingBtnPulse: {
     flex: 1,
     borderRadius: 6,
-    backgroundColor: "#34d399",
   },
   aiMenuPopup: {
     position: "absolute",
     bottom: 84,
     right: 16,
     width: 270,
-    backgroundColor: "#181a20",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2d3342",
     padding: 12,
     zIndex: 1000,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.6,
     shadowRadius: 16,
@@ -188,10 +176,8 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     marginBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#262b36",
   },
   aiMenuTitle: {
-    color: "#f1f5f9",
     fontSize: 13,
     fontWeight: "700",
     flex: 1,
@@ -199,7 +185,6 @@ const styles = StyleSheet.create({
   activeTag: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#064e3b",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
@@ -209,10 +194,8 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#34d399",
   },
   activeTagText: {
-    color: "#a7f3d0",
     fontSize: 9,
     fontWeight: "600",
   },
@@ -227,7 +210,6 @@ const styles = StyleSheet.create({
   aiMenuStopItem: {
     marginTop: 4,
     borderTopWidth: 1,
-    borderTopColor: "#262b36",
     paddingTop: 10,
   },
   aiMenuIcon: {
@@ -241,12 +223,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   aiMenuItemTitle: {
-    color: "#f8fafc",
     fontSize: 12.5,
     fontWeight: "600",
   },
   aiMenuItemSubtitle: {
-    color: "#64748b",
     fontSize: 10,
     marginTop: 1,
   },

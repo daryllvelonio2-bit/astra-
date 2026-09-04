@@ -20,6 +20,21 @@ export {
   NativeFileInfo,
 };
 
+const FS_OP_TIMEOUT_MS = 3000;
+
+/**
+ * Sync native calls settle instantly and can never pend, so they go first;
+ * expo is only a fallback raced against a timeout. (expo stalls mid-session
+ * while tasks run — expo-first cost ~24s of dead waiting on every open.)
+ * expo resolves void for writes: success is `undefined`, timeout is `null`.
+ */
+function fsRace<T>(promise: Promise<T>, ms = FS_OP_TIMEOUT_MS): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 function isExternalPath(path: string): boolean {
   const clean = path.replace(/^file:\/\//, "");
   if (!clean.startsWith("/")) return false;
@@ -34,18 +49,16 @@ function isExternalPath(path: string): boolean {
 
 export async function readDir(dirPath: string): Promise<string[]> {
   const cleanPath = dirPath.endsWith("/") ? dirPath : `${dirPath}/`;
-  if (isExternalPath(cleanPath)) {
-    const nativeList = readDirectoryNative(cleanPath);
-    return nativeList.map((e) => e.name);
+  const nativeFirst = readDirectoryNative(cleanPath);
+  if (nativeFirst.length > 0 || isExternalPath(cleanPath)) {
+    return nativeFirst.map((e) => e.name);
   }
 
   try {
-    const res = await FileSystem.readDirectoryAsync(cleanPath);
-    return res || [];
-  } catch (_) {
-    const nativeList = readDirectoryNative(cleanPath);
-    return nativeList.map((e) => e.name);
-  }
+    const res = await fsRace(FileSystem.readDirectoryAsync(cleanPath));
+    if (res) return res;
+  } catch (_) {}
+  return nativeFirst.map((e) => e.name);
 }
 
 export async function readDirEntries(dirPath: string): Promise<NativeDirEntry[]> {
@@ -57,12 +70,14 @@ export async function readDirEntries(dirPath: string): Promise<NativeDirEntry[]>
 
   if (!isExternalPath(cleanPath)) {
     try {
-      const files = await FileSystem.readDirectoryAsync(cleanPath);
+      const files = await fsRace(FileSystem.readDirectoryAsync(cleanPath));
+      if (!files) return [];
       const entries: NativeDirEntry[] = [];
       for (const item of files) {
         try {
           const itemPath = `${cleanPath}${item}`;
-          const info = await FileSystem.getInfoAsync(itemPath);
+          const info = await fsRace(FileSystem.getInfoAsync(itemPath));
+          if (!info) continue;
           entries.push({
             name: item,
             path: itemPath,
@@ -79,100 +94,64 @@ export async function readDirEntries(dirPath: string): Promise<NativeDirEntry[]>
 }
 
 export async function getFileInfo(filePath: string): Promise<NativeFileInfo> {
-  if (isExternalPath(filePath)) {
-    return getFileInfoNative(filePath);
-  }
-
-  try {
-    const info = await FileSystem.getInfoAsync(filePath);
-    if (info.exists) {
-      return {
-        exists: true,
-        isDirectory: !!info.isDirectory,
-        size: info.size || 0,
-        path: filePath,
-        lastModified: info.modificationTime ? info.modificationTime * 1000 : undefined,
-      };
-    }
-    return {
-      exists: false,
-      isDirectory: false,
-      size: 0,
-      path: filePath,
-    };
-  } catch (_) {
-    return getFileInfoNative(filePath);
-  }
+  return getFileInfoNative(filePath);
 }
 
 export async function readFileText(filePath: string): Promise<string> {
-  if (isExternalPath(filePath)) {
+  if (!isExternalPath(filePath)) {
+    const nativeText = readFileNative(filePath);
+    if (nativeText) return nativeText;
+  } else {
     return readFileNative(filePath);
   }
 
   try {
-    return await FileSystem.readAsStringAsync(filePath);
-  } catch (_) {
-    return readFileNative(filePath);
-  }
+    const text = await fsRace(FileSystem.readAsStringAsync(filePath));
+    if (text !== null) return text;
+  } catch (_) {}
+  return readFileNative(filePath);
 }
 
 export async function writeFileText(filePath: string, content: string): Promise<boolean> {
-  if (isExternalPath(filePath)) {
-    return writeFileNative(filePath, content);
-  }
+  if (!isExternalPath(filePath) && writeFileNative(filePath, content)) return true;
 
   try {
     const parentDir = filePath.substring(0, filePath.lastIndexOf("/"));
     if (parentDir) {
-      await FileSystem.makeDirectoryAsync(parentDir, { intermediates: true });
+      await fsRace(FileSystem.makeDirectoryAsync(parentDir, { intermediates: true }));
     }
-    await FileSystem.writeAsStringAsync(filePath, content);
-    return true;
-  } catch (_) {
-    return writeFileNative(filePath, content);
-  }
+    if ((await fsRace(FileSystem.writeAsStringAsync(filePath, content))) !== null) return true;
+  } catch (_) {}
+  return isExternalPath(filePath) ? writeFileNative(filePath, content) : false;
 }
 
 export async function makeDir(dirPath: string): Promise<boolean> {
-  if (isExternalPath(dirPath)) {
-    return makeDirectoryNative(dirPath);
-  }
+  if (makeDirectoryNative(dirPath)) return true;
 
   try {
-    await FileSystem.makeDirectoryAsync(dirPath, { intermediates: true });
-    return true;
-  } catch (_) {
-    return makeDirectoryNative(dirPath);
-  }
+    if ((await fsRace(FileSystem.makeDirectoryAsync(dirPath, { intermediates: true }))) !== null) return true;
+  } catch (_) {}
+  return false;
 }
 
 export async function deletePath(targetPath: string): Promise<boolean> {
-  if (isExternalPath(targetPath)) {
-    return deletePathNative(targetPath);
-  }
+  if (deletePathNative(targetPath)) return true;
 
   try {
-    await FileSystem.deleteAsync(targetPath, { idempotent: true });
-    return true;
-  } catch (_) {
-    return deletePathNative(targetPath);
-  }
+    if ((await fsRace(FileSystem.deleteAsync(targetPath, { idempotent: true }))) !== null) return true;
+  } catch (_) {}
+  return false;
 }
 
 export async function movePath(fromPath: string, toPath: string): Promise<boolean> {
-  if (isExternalPath(fromPath) || isExternalPath(toPath)) {
-    return movePathNative(fromPath, toPath);
-  }
+  if (movePathNative(fromPath, toPath)) return true;
 
   try {
     const parentTargetDir = toPath.substring(0, toPath.lastIndexOf("/"));
     if (parentTargetDir) {
-      await FileSystem.makeDirectoryAsync(parentTargetDir, { intermediates: true });
+      await fsRace(FileSystem.makeDirectoryAsync(parentTargetDir, { intermediates: true }));
     }
-    await FileSystem.moveAsync({ from: fromPath, to: toPath });
-    return true;
-  } catch (_) {
-    return movePathNative(fromPath, toPath);
-  }
+    if ((await fsRace(FileSystem.moveAsync({ from: fromPath, to: toPath }))) !== null) return true;
+  } catch (_) {}
+  return false;
 }

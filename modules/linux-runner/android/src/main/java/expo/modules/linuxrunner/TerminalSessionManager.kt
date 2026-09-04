@@ -26,7 +26,11 @@ class TerminalSession(
                 val inputStream = process.inputStream
                 var bytesRead: Int
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    val data = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                    val raw = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                    // Strip the non-tty warning once here so history length and
+                    // live stream bytes stay identical for JS delta-merging.
+                    val data = raw.replace("/bin/sh: can't access tty; job control turned off", "")
+                    if (data.isEmpty()) continue
                     synchronized(lock) {
                         historyBuffer.append(data)
                         if (historyBuffer.length > 100000) {
@@ -68,7 +72,11 @@ class TerminalSession(
         try {
             isRunning = false
             outputStream.close()
-            process.destroyForcibly()
+            try {
+                process.destroyForcibly()
+            } catch (_: Exception) {}
+            // Kill the whole PTY subtree so no child outlives the session.
+            ProcessTreeKiller.killTreeOf(process)
         } catch (e: Exception) {
             Log.e("TerminalSession", "Error stopping session $sessionId", e)
         }
@@ -158,6 +166,9 @@ object TerminalSessionManager {
         }
         pbArgs.add("/bin/sh")
         pbArgs.add("-l")
+        // -i keeps the shell interactive on pipe stdin so it reprints the
+        // dynamic PS1 (astra:<cwd>#) after every command instead of going silent.
+        pbArgs.add("-i")
 
         val pb = ProcessBuilder(pbArgs)
         pb.directory(File(alpineDir))
@@ -175,7 +186,7 @@ object TerminalSessionManager {
         env["LANG"] = "C.UTF-8"
         env["LC_ALL"] = "C.UTF-8"
         env["ENV"] = "/root/.profile"
-        env["PS1"] = "\u001b[1;32mastra\u001b[0m:\u001b[1;34m$targetDir\u001b[0m# "
+        env["PS1"] = "\u001b[1;32mastra\u001b[0m:\u001b[1;34m\\w\u001b[0m# "
         env["PROOT_TMP_DIR"] = tmpDir
         env["PROOT_LOADER"] = loaderPath
         env["PROOT_LOADER_32"] = loader32Path

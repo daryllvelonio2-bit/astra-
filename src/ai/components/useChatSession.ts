@@ -17,8 +17,8 @@ import {
   loadOrCreateDefaultWorkspace,
   saveFileContent,
   notifyWorkspaceChanged,
-  subscribeWorkspaceChanges,
 } from "../../ide/services/workspaceService";
+import { useWorkspaceAutoRefresh } from "../../ide/components/useWorkspaceAutoRefresh";
 import {
   loadSelectedModel,
   saveSelectedModel,
@@ -33,6 +33,7 @@ import {
 import { AstraCognitiveMode, AstraEffort } from "../astra/astraModes";
 import { executeCode } from "../runner";
 import { runningTasksService } from "../services/runningTasksService";
+import { reconcileStaleMessages } from "./sessionReconcile";
 
 export interface UseChatSessionProps {
   workspaceId?: string;
@@ -41,8 +42,7 @@ export interface UseChatSessionProps {
   onRefreshWorkspace?: () => void;
 }
 
-export function useChatSession({
-  workspaceId: initialWorkspaceId,
+export function useChatSession({ workspaceId: initialWorkspaceId,
   activeFileName,
   activeFileContent,
   onRefreshWorkspace,
@@ -118,7 +118,7 @@ export function useChatSession({
       if (!isMounted) return;
       setCurrentSession(active);
       currentSessionRef.current = active;
-      setMessages(active.messages || []);
+      setMessages(reconcileStaleMessages(active.messages || []));
       setRenderLimit(100);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 80);
     }
@@ -139,7 +139,7 @@ export function useChatSession({
           setCurrentSession(fresh);
           currentSessionRef.current = fresh;
           if (messagesRef.current.length === 0 && fresh.messages && fresh.messages.length > 0) {
-            setMessages(fresh.messages);
+            setMessages(reconcileStaleMessages(fresh.messages));
           }
         }
       }
@@ -152,18 +152,15 @@ export function useChatSession({
       if (cfg.interactiveApproval !== undefined) setInteractiveApproval((prev) => prev !== cfg.interactiveApproval ? cfg.interactiveApproval : prev);
     });
 
-    const unsubWs = subscribeWorkspaceChanges(async (wsId) => {
-      if (workspace && workspace.id === wsId) {
-        try { setWorkspace(await loadWorkspace(wsId)); } catch {}
-      }
-    });
-
     return () => {
       unsubSessions();
       unsubConfig();
-      unsubWs();
     };
   }, [workspace?.id]);
+
+  // Workspace tree follows agent/saves writes via a debounced coalesced
+  // reload (see hook) — a direct loadWorkspace per notify wedges the UI.
+  useWorkspaceAutoRefresh(workspace?.id, setWorkspace);
 
   // 3. Auto-save messages to active session
   useEffect(() => {
@@ -345,7 +342,7 @@ export function useChatSession({
     setRenderLimit(100);
     currentSessionRef.current = session;
     setCurrentSession(session);
-    setMessages(session.messages || []);
+    setMessages(reconcileStaleMessages(session.messages || []));
     setShowSessionsModal(false);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 80);
   }, []);

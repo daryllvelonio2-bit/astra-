@@ -36,7 +36,7 @@ export function FileExplorer({
   resizerPanHandlers,
   isDraggingSidebar,
 }: FileExplorerProps) {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const touchCoordsRef = useRef({ x: 50, y: 100 });
   const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>({});
   const expandedFoldersRef = useRef<Record<string, boolean>>({});
@@ -121,7 +121,7 @@ export function FileExplorer({
             collapsable={false}
             ref={(el) => registerFolderHeaderRef(node.id, el, node)}
             onLayout={() => measureAllFolders()}
-            style={[styles.folderHeader, isHovered && styles.folderHoverTarget]}
+            style={[styles.folderHeader, isHovered && { backgroundColor: `${theme.accent}25`, borderColor: theme.accent, borderWidth: 1 }]}
           >
             <TouchableOpacity
               style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
@@ -187,7 +187,7 @@ export function FileExplorer({
           style={[
             styles.fileItem,
             isActive && {
-              backgroundColor: isDark ? "rgba(138, 180, 248, 0.15)" : "rgba(37, 99, 235, 0.12)",
+              backgroundColor: `${theme.accent}26`,
               borderColor: theme.accent,
               borderWidth: 1,
             },
@@ -324,18 +324,20 @@ export function FileExplorer({
             onLayout={measureAllFolders}
             style={[
               styles.rootDropZone,
-              hoveredTargetId === "ROOT_WORKSPACE" && styles.rootDropZoneActive,
+              { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+              hoveredTargetId === "ROOT_WORKSPACE" && { borderColor: theme.accent, backgroundColor: `${theme.accent}25` },
             ]}
           >
             <Ionicons
               name="home-outline"
               size={14}
-              color={hoveredTargetId === "ROOT_WORKSPACE" ? "#8ab4f8" : "#777"}
+              color={hoveredTargetId === "ROOT_WORKSPACE" ? theme.accent : theme.textMuted}
             />
             <Text
               style={[
                 styles.rootDropZoneText,
-                hoveredTargetId === "ROOT_WORKSPACE" && styles.rootDropZoneTextActive,
+                { color: hoveredTargetId === "ROOT_WORKSPACE" ? theme.accent : theme.textMuted },
+                hoveredTargetId === "ROOT_WORKSPACE" && { fontWeight: "700" },
               ]}
             >
               Move to workspace root
@@ -350,6 +352,7 @@ export function FileExplorer({
           pointerEvents="none"
           style={[
             styles.dragGhost,
+            { backgroundColor: theme.bgElevated, borderColor: theme.accent },
             {
               top: Math.max(0, dragPos.y - containerOffset.y - 30),
               left: Math.max(0, dragPos.x - containerOffset.x - 20),
@@ -358,12 +361,12 @@ export function FileExplorer({
         >
           <View style={styles.dragGhostIcon}>
             {draggingNode.type === "folder" ? (
-              <Ionicons name="folder" size={15} color="#dcb67a" />
+              <Ionicons name="folder" size={15} color={theme.accentGold} />
             ) : (
               getFileIcon(draggingNode.name)
             )}
           </View>
-          <Text style={styles.dragGhostText} numberOfLines={1}>
+          <Text style={[styles.dragGhostText, { color: theme.textPrimary }]} numberOfLines={1}>
             {draggingNode.name}
           </Text>
         </View>
@@ -371,10 +374,10 @@ export function FileExplorer({
 
       {/* Lower Resize Box */}
       <View
-        style={[styles.bottomResizeBox, { backgroundColor: theme.bgSecondary }, isDraggingSidebar && styles.bottomResizeBoxActive]}
+        style={[styles.bottomResizeBox, { backgroundColor: theme.bgSecondary }, isDraggingSidebar && { backgroundColor: `${theme.accent}14` }]}
         {...(resizerPanHandlers || {})}
       >
-        <View style={[styles.resizeIndicator, isDraggingSidebar && styles.resizeIndicatorActive]} />
+        <View style={[styles.resizeIndicator, isDraggingSidebar && { backgroundColor: theme.accent }]} />
       </View>
     </View>
   );

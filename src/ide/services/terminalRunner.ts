@@ -1,4 +1,5 @@
 import { readFileContent, saveFileContent } from "./workspaceService";
+import { readDir } from "./nativeFs";
 import { PhpEngineService } from "./phpEngineService";
 import { PRootService } from "./prootService";
 import { runPistonCode } from "../../ai/runner/pistonRunner";
@@ -36,7 +37,7 @@ export async function dispatchTerminalCommand(
   // 2. Local Fallback Filesystem Utilities (ls, cat, echo)
   if (trimmed === "ls" || trimmed === "dir") {
     try {
-      const files = await FileSystem.readDirectoryAsync(`${WORKSPACES_DIR}${workspaceId}/`);
+      const files = await readDir(`${WORKSPACES_DIR}${workspaceId}/`);
       return { text: files.length > 0 ? files.join("   ") : "(Empty workspace directory)" };
     } catch (e: any) {
       return { error: `Error listing directory: ${e.message}` };

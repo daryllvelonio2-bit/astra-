@@ -6,12 +6,10 @@ import {
   StatusBar,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   Animated,
   PanResponder,
   Keyboard,
   Platform,
-  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -21,6 +19,7 @@ import { FileActionModal } from "./FileActionModal";
 import { TerminalView } from "./TerminalView";
 import { WebBrowserPreview } from "./WebBrowserPreview";
 import { IDEBottomBar } from "./IDEBottomBar";
+import { WorkspaceLoadingScreen } from "./WorkspaceLoadingScreen";
 import { AiAssistantMenu } from "./AiAssistantMenu";
 import { AstraLogo } from "../../ai/components/AstraLogo";
 import { FloatingOverlay } from "../../ai/services/floatingOverlayService";
@@ -34,11 +33,13 @@ import {
   loadOrCreateDefaultWorkspace,
   loadWorkspace,
   saveFileContent,
-  subscribeWorkspaceChanges,
   Workspace,
 } from "../services/workspaceService";
+import { useWorkspaceAutoRefresh } from "./useWorkspaceAutoRefresh";
 import { useTheme } from "../../theme/themeContext";
+import { useOrientation } from "../../theme/useOrientation";
 import { ideActionService } from "../services/ideActionService";
+import { resolveChatPathToRelative } from "../services/chatFileLinkService";
 
 interface IDELayoutProps {
   workspaceId?: string;
@@ -46,9 +47,12 @@ interface IDELayoutProps {
   onOpenFullChat?: () => void;
 }
 
+const shortLoadPath = (p: string) =>
+  (p || "").replace(/^file:\/\//, "").split("/").filter(Boolean).slice(-2).join("/");
+
 export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELayoutProps) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { isLandscape } = useOrientation();
   const { theme } = useTheme();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
@@ -60,6 +64,16 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [showAiMenu, setShowAiMenu] = useState(false);
   const [isOverlayRunning, setIsOverlayRunning] = useState(false);
   const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
+  const [loadStatus, setLoadStatus] = useState("Starting…");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadSeq, setLoadSeq] = useState(0);
+  const lastLoadStatusRef = useRef(0);
+
+  // Landscape leaves little horizontal room: park the file sidebar on rotate
+  // (user can still reopen it manually; only fires on orientation change).
+  useEffect(() => {
+    setIsSidebarOpen(!isLandscape);
+  }, [isLandscape]);
 
   useEffect(() => {
     const unsubTasks = runningTasksService.subscribe(setRunningTasks);
@@ -73,24 +87,36 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     };
   }, []);
 
+  // Open a raw agent/chat file path inside the given workspace, normalizing
+  // PRoot (/workspace, /workspaces/<id>) and file:// prefixes to relative paths.
+  const applyOpenFile = async (targetWs: Workspace, rawPath: string) => {
+    const relative = resolveChatPathToRelative(rawPath, targetWs.id);
+    if (!relative) return;
+    try {
+      const content = await readFileContent(targetWs.id, relative);
+      const fileName = relative.split("/").pop() || relative;
+      setActiveFile({
+        id: `${targetWs.id}::${relative}`,
+        name: fileName,
+        type: "file",
+        path: relative,
+        content: content || "",
+      });
+      setBottomTab("editor");
+      if (!content) {
+        Alert.alert("File opened", `${fileName} is empty or could not be read at:\n${relative}`);
+      }
+    } catch (e: any) {
+      Alert.alert("Could not open file", e?.message || relative);
+    }
+  };
+
   // Subscribe to Astra CLI App UI Control Bridge actions
   useEffect(() => {
     const unsubOpenFile = ideActionService.subscribe("OPEN_FILE", async ({ filePath, workspaceId: targetWsId }) => {
       if (targetWsId && workspace && targetWsId !== workspace.id) return;
       if (!workspace || !filePath) return;
-
-      const cleanTarget = filePath.replace(/^file:\/\//, "");
-      const fileName = cleanTarget.split("/").pop() || cleanTarget;
-      const content = await readFileContent(workspace.id, cleanTarget);
-
-      setActiveFile({
-        id: `${workspace.id}::${cleanTarget}`,
-        name: fileName,
-        type: "file",
-        path: cleanTarget,
-        content: content || "",
-      });
-      setBottomTab("editor");
+      await applyOpenFile(workspace, filePath);
     });
 
     const unsubOpenBrowser = ideActionService.subscribe("OPEN_BROWSER", ({ url }) => {
@@ -140,13 +166,26 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const { sidebarWidthAnim, isDraggingSidebar, resizerPanHandlers } = useSidebarResizer(130);
 
   useEffect(() => {
+    let cancelled = false;
+    const onProgress = (dirs: number, path: string) => {
+      const now = Date.now();
+      if (now - lastLoadStatusRef.current > 300) {
+        lastLoadStatusRef.current = now;
+        if (!cancelled) setLoadStatus(`Scanning ${dirs} folders… ${shortLoadPath(path)}`);
+      }
+    };
     const loadWs = async () => {
       let ws: Workspace;
       try {
-        ws = workspaceId ? await loadWorkspace(workspaceId) : await loadOrCreateDefaultWorkspace();
-      } catch (e) {
-        ws = await loadOrCreateDefaultWorkspace();
+        ws = workspaceId
+          ? await loadWorkspace(workspaceId, onProgress)
+          : await loadOrCreateDefaultWorkspace();
+      } catch (e: any) {
+        // Surface instead of silently opening the wrong workspace.
+        if (!cancelled) setLoadError(e?.message || "Failed to load workspace");
+        return;
       }
+      if (cancelled) return;
       setWorkspace(ws);
 
       const findFirstFile = (node: FileNode): FileNode | null => {
@@ -166,21 +205,40 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
         if (!content) {
           content = await readFileContent(ws.id, initialFile.path || initialFile.name);
         }
-        setActiveFile({ ...initialFile, content });
+        if (!cancelled) setActiveFile({ ...initialFile, content });
       }
+
+      // Consume sticky actions emitted while the editor was unmounted
+      // (e.g. file taps in fullscreen chat that navigated here).
+      // Explicit user taps win over stale auto-emitted actions from scaffolding.
+      try {
+        const pendingFile = ideActionService.consumePendingAction("OPEN_FILE");
+        const pendingBrowser = ideActionService.consumePendingAction("OPEN_BROWSER");
+        const pendingTerminal = ideActionService.consumePendingAction("OPEN_TERMINAL");
+        const pendingTab = ideActionService.consumePendingAction("SWITCH_TAB");
+        if (pendingBrowser?.payload?.userInitiated && pendingBrowser.payload.url) {
+          setBrowserUrl(pendingBrowser.payload.url);
+          setBottomTab("browser");
+        } else if (pendingTerminal?.payload?.userInitiated) {
+          setBottomTab("terminal");
+        } else if (pendingTab?.payload?.userInitiated) {
+          setBottomTab(pendingTab.payload.tab);
+        } else if (pendingBrowser?.payload?.url) {
+          setBrowserUrl(pendingBrowser.payload.url);
+          setBottomTab("browser");
+        } else if (pendingFile?.payload?.filePath) {
+          const targetWsId = pendingFile.payload.workspaceId;
+          if (!targetWsId || targetWsId === ws.id) {
+            await applyOpenFile(ws, pendingFile.payload.filePath);
+          }
+        }
+      } catch (_) {}
     };
     loadWs();
-  }, [workspaceId]);
+    return () => { cancelled = true; };
+  }, [workspaceId, loadSeq]);
 
-  useEffect(() => {
-    if (!workspace?.id) return;
-    const unsub = subscribeWorkspaceChanges((changedWsId) => {
-      if (changedWsId === workspace.id) {
-        refreshWorkspace();
-      }
-    });
-    return unsub;
-  }, [workspace?.id]);
+  useWorkspaceAutoRefresh(workspace?.id, setWorkspace);
 
   const refreshWorkspace = async () => {
     if (!workspace) return;
@@ -281,10 +339,13 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
 
   if (!workspace) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.bgPrimary }]}>
-        <ActivityIndicator size="large" color={theme.accent} style={{ marginBottom: 12 }} />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Opening Workspace...</Text>
-      </View>
+      <WorkspaceLoadingScreen
+        key={loadSeq}
+        statusText={loadError ? `Couldn't open workspace: ${loadError}` : loadStatus}
+        isError={!!loadError}
+        onBack={onBackToPicker}
+        onRetry={() => { setLoadError(null); setLoadStatus("Retrying…"); setLoadSeq((s) => s + 1); }}
+      />
     );
   }
 
@@ -368,6 +429,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
           bottomTab={bottomTab}
           onChangeTab={setBottomTab}
           runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
+          compact={isLandscape}
         />
       )}
 
@@ -416,17 +478,6 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#181818",
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: "#181818",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "#ffffff",
-    fontSize: 15,
   },
   workspace: {
     flex: 1,

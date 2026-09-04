@@ -44,7 +44,7 @@ export function OverlayPermissionModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
         <View style={[styles.card, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           <View style={styles.headerIcon}>
             <AstraLogo width={48} height={48} />
@@ -98,7 +98,6 @@ export function OverlayPermissionModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.72)",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../theme/themeContext';
+import { useTheme, ThemeColors, THEMES } from '../../theme/themeContext';
 
 export interface ParsedFileItem {
   name: string;
@@ -25,7 +25,7 @@ export function isDirectoryListingText(text: string): boolean {
   return matchCount >= 2 || (lines.length === 1 && /^([dcbsp-])[rwxstST-]{9}/.test(lines[0].trim()));
 }
 
-export function parseDirectoryListing(text: string): ParsedFileItem[] {
+export function parseDirectoryListing(text: string, theme: ThemeColors = THEMES.dark): ParsedFileItem[] {
   const lines = text.trim().split('\n');
   const items: ParsedFileItem[] = [];
 
@@ -45,7 +45,7 @@ export function parseDirectoryListing(text: string): ParsedFileItem[] {
       if (name === '.' || name === '..') continue;
 
       const isDirectory = typeChar === 'd';
-      const { icon, iconColor } = getFileIconInfo(name, isDirectory);
+      const { icon, iconColor } = getFileIconInfo(name, isDirectory, theme);
 
       items.push({
         name,
@@ -62,7 +62,7 @@ export function parseDirectoryListing(text: string): ParsedFileItem[] {
     if (line !== '.' && line !== '..') {
       const isDir = line.endsWith('/') || !line.includes('.');
       const cleanName = line.replace(/\/+$/, '');
-      const { icon, iconColor } = getFileIconInfo(cleanName, isDir);
+      const { icon, iconColor } = getFileIconInfo(cleanName, isDir, theme);
       items.push({
         name: cleanName,
         isDirectory: isDir,
@@ -80,11 +80,11 @@ export function parseDirectoryListing(text: string): ParsedFileItem[] {
   });
 }
 
-function getFileIconInfo(name: string, isDirectory: boolean): { icon: string; iconColor: string } {
+function getFileIconInfo(name: string, isDirectory: boolean, theme: ThemeColors): { icon: string; iconColor: string } {
   if (isDirectory) {
-    if (name.toLowerCase().includes('godot')) return { icon: 'game-controller', iconColor: '#8ab4f8' };
-    if (name.toLowerCase().includes('doc')) return { icon: 'folder', iconColor: '#fdd663' };
-    return { icon: 'folder', iconColor: '#facc15' };
+    if (name.toLowerCase().includes('godot')) return { icon: 'game-controller', iconColor: theme.accent };
+    if (name.toLowerCase().includes('doc')) return { icon: 'folder', iconColor: theme.accentGold };
+    return { icon: 'folder', iconColor: theme.accentGold };
   }
 
   const ext = name.split('.').pop()?.toLowerCase() || '';
@@ -94,13 +94,13 @@ function getFileIconInfo(name: string, isDirectory: boolean): { icon: string; ic
     case 'gd':
     case 'tres':
     case 'res':
-      return { icon: 'game-controller-outline', iconColor: '#8ab4f8' };
+      return { icon: 'game-controller-outline', iconColor: theme.accent };
     case 'docx':
     case 'doc':
     case 'pdf':
     case 'txt':
     case 'md':
-      return { icon: 'document-text-outline', iconColor: '#60a5fa' };
+      return { icon: 'document-text-outline', iconColor: theme.accent };
     case 'js':
     case 'ts':
     case 'tsx':
@@ -109,20 +109,20 @@ function getFileIconInfo(name: string, isDirectory: boolean): { icon: string; ic
     case 'py':
     case 'php':
     case 'sh':
-      return { icon: 'code-slash-outline', iconColor: '#34d399' };
+      return { icon: 'code-slash-outline', iconColor: theme.accentGreen };
     case 'png':
     case 'jpg':
     case 'jpeg':
     case 'gif':
     case 'webp':
     case 'svg':
-      return { icon: 'image-outline', iconColor: '#c084fc' };
+      return { icon: 'image-outline', iconColor: theme.accentPurple };
     case 'zip':
     case 'tar':
     case 'gz':
-      return { icon: 'archive-outline', iconColor: '#f87171' };
+      return { icon: 'archive-outline', iconColor: theme.accentRed };
     default:
-      return { icon: 'document-outline', iconColor: '#9ca3af' };
+      return { icon: 'document-outline', iconColor: theme.textMuted };
   }
 }
 
@@ -142,7 +142,7 @@ interface DirectoryListRendererProps {
 export function DirectoryListRenderer({ rawOutput, title = 'Directory Contents' }: DirectoryListRendererProps) {
   const { theme } = useTheme();
   const [showAll, setShowAll] = useState(false);
-  const items = parseDirectoryListing(rawOutput);
+  const items = parseDirectoryListing(rawOutput, theme);
 
   if (items.length === 0) {
     return (

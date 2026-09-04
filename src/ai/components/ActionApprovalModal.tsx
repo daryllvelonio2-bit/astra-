@@ -49,7 +49,7 @@ export function ActionApprovalModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onReject}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.overlay }]}>
         <View style={[styles.card, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: theme.border }]}>
@@ -119,8 +119,8 @@ export function ActionApprovalModal({
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.approveBtn, { backgroundColor: theme.accent }]} onPress={onApprove} activeOpacity={0.7}>
-              <Ionicons name="checkmark" size={16} color="#ffffff" />
-              <Text style={styles.approveText}>Approve</Text>
+              <Ionicons name="checkmark" size={16} color={theme.sendButtonIcon} />
+              <Text style={[styles.approveText, { color: theme.sendButtonIcon }]}>Approve</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -132,7 +132,6 @@ export function ActionApprovalModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
@@ -140,13 +139,10 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: "#181a20",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2d3342",
     padding: 16,
     maxHeight: "80%",
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5,
     shadowRadius: 16,
@@ -158,7 +154,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#262b36",
     paddingBottom: 10,
   },
   headerLeft: {
@@ -170,17 +165,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#1e293b",
     justifyContent: "center",
     alignItems: "center",
   },
   title: {
-    color: "#f1f5f9",
     fontSize: 14.5,
     fontWeight: "700",
   },
   subtitle: {
-    color: "#94a3b8",
     fontSize: 11,
     marginTop: 1,
   },
@@ -191,15 +183,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   actionBox: {
-    backgroundColor: "#121418",
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#222733",
     gap: 8,
   },
   actionName: {
-    color: "#e2e8f0",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -207,40 +196,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#1c2e24",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     alignSelf: "flex-start",
   },
   pathText: {
-    color: "#81c995",
     fontSize: 11.5,
     fontFamily: "monospace",
   },
   codeBox: {
     flexDirection: "row",
-    backgroundColor: "#0d0f12",
     borderRadius: 6,
     padding: 8,
     gap: 6,
     borderWidth: 1,
-    borderColor: "#1e222b",
   },
   promptSign: {
-    color: "#34d399",
     fontSize: 12,
     fontFamily: "monospace",
     fontWeight: "700",
   },
   commandText: {
-    color: "#f8fafc",
     fontSize: 12,
     fontFamily: "monospace",
     flex: 1,
   },
   contentText: {
-    color: "#cbd5e1",
     fontSize: 11.5,
     fontFamily: "monospace",
   },
@@ -254,15 +236,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#3b1e08",
     paddingVertical: 9,
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#7c2d12",
   },
   rejectText: {
-    color: "#fb923c",
     fontSize: 11.5,
     fontWeight: "600",
   },
@@ -270,15 +249,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#450a0a",
     paddingVertical: 9,
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#7f1d1d",
   },
   stopText: {
-    color: "#f87171",
     fontSize: 11.5,
     fontWeight: "600",
   },
@@ -288,15 +264,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#1e293b",
     paddingVertical: 9,
     paddingHorizontal: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#334155",
   },
   sessionText: {
-    color: "#cbd5e1",
     fontSize: 11,
     fontWeight: "600",
   },
@@ -304,13 +277,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#2563eb",
     paddingVertical: 9,
     paddingHorizontal: 14,
     borderRadius: 8,
   },
   approveText: {
-    color: "#ffffff",
     fontSize: 12,
     fontWeight: "600",
   },

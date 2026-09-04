@@ -2,7 +2,188 @@
 
 ## Status
 - **Current Phase:** Production Release Build Verified
-- **Last Updated:** September 2, 2026
+- **Last Updated:** September 4, 2026
+
+### [2026-09-04] - Kill Leaves Server Alive (Guest ps/pkill Gaps, Now Native Kill)
+- **Symptom:** Kill Activity spun (↻) but `http://127.0.0.1:8000` still loaded in browser.
+- **On-device root cause:** `php artisan serve` double-forks — `bash(16850) → bash → php artisan → php83 -S` holds the socket. Old kill relied on guest `ps` PPID parsing (fragile busybox/procps flavors) so only the wrapper died; `pkill -f "artisan serve"` never matches the `php83 -S` child cmdline; `fuser -k -n tcp` syntax wrong for psmisc. Plus 6 sequential proot spawns made kill take 30s+.
+- **Fix:** Exposed native `ProcessTreeKiller.killTree` to JS (`killProcessTree`, TERM→800ms→KILL, /proc-accurate, own UID); `killPidTree` native-first with guest fallback; `fuser -k PORT/tcp`; artisan branch also `pkill -f "php[0-9]* -S "`.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines. NATIVE change — rebuilt + reinstalled (install force-stop reaped the stray server; fresh run+kill needed to verify).
+
+### [2026-09-04] - Chat Shows Empty While Tasks Run (Raw Expo in Sessions/Config)
+- **Symptom:** Fullscreen chat opened to a clean slate while tasks ran; conversations reappeared after restart (disk was fine — `rff.json` intact).
+- **Root cause:** `conversationService.ts` used raw expo-file-system promises (no timeout/fallback) for `listSessions`/`saveAllSessions` — chat remount pends on load, showing empty `[]`. Same stall class in `configService` (settings) and terminal `ls` fallback.
+- **Fix:** Routed all three through the hardened `nativeFs` layer (`getFileInfo`/`readFileText`/`writeFileText`/`makeDir`/`deletePath`; legacy migration copy via read+write). Config saves/loads and terminal `ls` included.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - 30s Open: Native-First FS (Kill the Timeout Wait)
+- **Evidence:** workspace opened after ~30s = three 8s expo timeouts firing in sequence before fallbacks. Confirms expo stalls mid-session while tasks run.
+- **Fix (`nativeFs.ts`, 157 lines):** flipped to sync-native-first for all ops (reads and writes) with expo only as a 3s-raced fallback. Opens no longer wait out timeouts — expect ~1–2s even with tasks running.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Stuck "Starting…" Gate + Empty Picker: Bounded FS Layer
+- **Evidence (screenshot):** gate frozen at `Starting…` = scan never began (pre-scan zone); Back works (JS alive); picker empty without restart (same shared FS calls degrade mid-session). Every pre-scan await was an unbounded expo-file-system promise.
+- **Fix (`nativeFs.ts`, 187 lines):** new `fsRace` 8s timeout on every expo call — `readDir`, `readDirEntries`, `getFileInfo`, `readFileText`, `writeFileText`, `makeDir`, `deletePath`, `movePath` — falling back to the synchronous native implementation that cannot pend. Gate + picker now settle even if expo stalls.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Loading Gate Hardening: Timeout + Surfaced Errors
+- **Context:** Gate is responsive (Back works) but never finishes — every `await` in the path provably settles, so the remaining suspects are a swallowed error (old code silently opened the *wrong* workspace on failure) or an over-long scan.
+- **Fix:** `loadWorkspace` races the recursive scan against a 45s timeout (`withTimeout`); `IDELayout` no longer falls back silently — load failures render red in the gate with immediate Retry (`isError` prop on `WorkspaceLoadingScreen`); path shortening moved to the UI callback.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines (IDELayout 499, workspaceService 496). JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - "Opening Workspace" Hang: Instrumented Loading Gate
+- **Findings (on-device):** `rff` holds 18,781 files, but `vendor/` (10,106) + `node_modules/` (8,525) are both skipped by name — effective scan is ~150 files, so the scan itself can't hang; app process sat at ~19% CPU with agent + artisan server alive, i.e. JS busy elsewhere while the gate shows no info and no escape.
+- **Fix:** new `WorkspaceLoadingScreen.tsx` (96 lines) — live throttled readout (`Scanning N folders… <path>`) pinpoints the stuck folder, Back is always available, Retry appears after a 20s timeout (remount per attempt via `key`). `loadWorkspace`/`readDirectoryRecursive` accept an `onProgress` callback (`workspaceService.ts` 499/500, `IDELayout.tsx` 498/500).
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Tab Switches Frozen While Agent Codes (Sync-Scan Yield)
+- **Symptom:** Couldn't switch to Terminal/Editor tabs while a task ran — the refresh-storm debounce helped but switches still wedged.
+- **Root cause:** `readDirectory` is a *synchronous* native call (`listFiles()` on the JS thread). Each debounced reload still ran hundreds of back-to-back sync bridge crossings with no breathing room, so taps queued behind multi-second stretches of blocked JS.
+- **Fix (`workspaceService.ts`, 493/500):** `readDirectoryRecursive` yields to the event loop every 12 directories via a shared counter threaded through `loadWorkspace` — total scan time unchanged, but worst-case tap latency drops to milliseconds.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Debug Rebuild + Reinstall (Refresh-Storm / PID-Banner / Tree-Kill Fixes)
+- **Build:** `./build-debug-apk.sh` → BUILD SUCCESSFUL in 2m 12s (349 MB `app-debug.apk`), `adb install -r` Success on `AUDUT20616012479`, app launched. Bundle includes: coalesced workspace auto-refresh, `PID: Active` banner fix, process-tree kill with verified death.
+- **Still to do on-device:** kill the pre-existing orphaned `artisan serve` once via terminal (`pkill -9 -f "artisan serve"`), since it was untracked before this build.
+
+### [2026-09-04] - Closed Tasks Kept Serving (Orphaned Server Processes)
+- **Symptom:** X on a terminal task tab removed it and CLI scans reported no background tasks, yet the browser URL still served.
+- **Root cause:** `killTask` only SIGKILLed the single tracked pid — usually just the wrapper shell — orphaning the real `php` child on the port; `fuser`/`lsof`/`pkill` fallbacks are often absent in proot and every step was fire-and-forget with zero verification, and the task was untracked even on failure (catch deleted it).
+- **Fix:** New `processTreeKill.ts` (134 lines: ps parsing, descendant collection, whole-tree SIGKILL, port-listener discovery, `isServerAlive` ground-truth check via port probe → listeners → pid → name heuristics). `killTask` now tree-kills tracked + port-listener pids, keeps old fallbacks, and only untracks on verified death (returns false otherwise, task stays for retry). All four kill call sites (terminal X, restart, two status bars) report failure instead of lying "stopped".
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Terminal "PID: Active" Banner Bug (Stale Baked Banner)
+- **Symptom (screenshot):** Background-task banner read `PID: Active` while the output below it said `(PID: 24978)`.
+- **Root cause:** `addTask` bakes the banner into `output` at creation — and creation happens at the `tool_call` (`is_background`), before any PID exists, so the fallback printed the literal word "Active" in the PID slot. When the `tool_result` later delivered the real PID, the merge path updated the record but never the baked banner.
+- **Fix (`runningTasksService.ts`, still 489/500):** PID segment omitted when unknown (new `buildTaskBanner`); merge path patches `PID: Active`→`PID: <n>` in the baked banner when the PID arrives; PID regex also catches `(PID 24978)` no-colon form (verified via node one-liner).
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Workspace-Open Freeze While Agent Codes (Refresh-Storm Fix)
+- **Problem:** Opening a workspace while Astra was actively coding wedged on "Opening Workspace..." — every agent file write fires `notifyWorkspaceChanged`, and both `IDELayout` and `useChatSession` answered each one with an immediate full recursive `loadWorkspace` scan. Overlapping scans + tree re-renders starved the initial load.
+- **Fix:** New `useWorkspaceAutoRefresh.ts` hook (85 lines) — 700ms trailing debounce, never-overlapping loads, 30s hung-load timeout, stale-result drop via sequence guard. Wired into both consumers; manual refresh button stays immediate; initial `IDELayout` load got unmount guards.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines (IDELayout 488, useChatSession 489). JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Self-Healing Stuck Chat Turns (Stale Status Reconciliation)
+- **Problem:** Dead turns (killed engine, JS reload, restart) left persisted `executing_tool` messages + `pending` approval badges frozen forever — verified in live `rff.json` (assistant stuck `executing_tool`, `write_file` step `pending`, no engine process running).
+- **Fix:** New `sessionReconcile.ts` (21 lines): on session load/select, in-flight message statuses reset to `idle` and stale `pending` approvals become `expired` (new `AgentStatus` value, muted StepCard row "Approval expired — send again to retry"). Extracted to its own file to keep `useChatSession.ts` at 492/500 lines.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, all files <500 lines. JS-only — Metro reload required, no rebuild.
+
+### [2026-09-04] - Settings Restructure: Tabbed + Modular + Auto-Save
+- **Problem:** `SettingsModal` was one 428-line scrolling sheet stacking theme cards, key manager, approval toggle, and model grid — plus a Cancel/Save row and a blocking "Settings Saved" alert.
+- **Fix:** tabbed layout (`Theme` / `Keys` / `Agent` / `Model`, key-count badge on the Keys tab) showing one section at a time. Extracted `src/ide/components/settings/` modules — `SettingsTabBar` (90), `AppearanceSection` (74), `AgentSection` (80), `ModelSection` (55) — with `ApiKeyManager` (327, untouched) rendered directly for Keys; modal shell slimmed to 182 lines.
+- **Declutter:** Cancel/Save buttons and the alert are gone — debounced (800ms) auto-save with a subtle header `✓ Saved` tick; pending edits flush on close (never dropped); first-load no-op guarded; theme still applies instantly and all saves broadcast via existing `subscribeConfigChanges` so chat picks them up live.
+- **Verification:** `tsc --noEmit` 0 errors, every file <500 lines (combined settings code 481 lines vs 755 before).
+
+### [2026-09-04] - Terminal Output Loss + Frozen Prompt Fix (Delta-Only Merges)
+- **Symptoms (screenshot):** doubled `astra:/workspaces/rff#` prompt, typed commands/output vanishing, prompt directory never updating after `cd`.
+- **Root causes:** (1) the JS banner faked a trailing `# ` prompt while the shell printed its own → permanent double prompt; `clearActiveSession` reset to another frozen fake prompt, so the directory display could never update. (2) Every init/tab-switch REPLACED the buffer with native history when longer — but the shell has no tty echo on pipes, so native history lacks typed command lines and the replacement wiped them (output "disappeared").
+- **Fix:** new `terminalBuffer.ts` (47 lines, pure/testable) — title-only banner (no fake prompt), capped appends, and `mergeNativeHistory()` delta-only appends tracked per session (`seenNativeLen`), with quiet resync on native trims and fresh adopt on restarts. `useTerminalSession` rewired to it (live chunks also advance `seen` so snapshots never re-append); native `TerminalSessionManager` strips the non-tty warning once so history/stream lengths stay identical; clear now resets to the title banner + sends `\n` for a truthful fresh prompt; `AnsiRenderer` empty fallback no longer fakes a prompt.
+- **Verification:** 10 headless checks green (incl. echo-preservation and no-duplication regressions), `tsc --noEmit` 0 errors, all files <500 lines. Native change review-checked — needs `./build-debug-apk.sh` + reinstall (no JVM in this env).
+
+### [2026-09-04] - Approval-Gate Pairing Fix (Silent Stalls on Unpaired Tools)
+- **Problem:** Interactive mode stalled with zero UI (e.g. Step 1 "analyzing…" forever); user also saw step cards pile up while a modal sat untapped. Proven on-device via debug logs: policy ALLOWED the tools, but the CLI file-gate waited on `/tmp/astra-approval.json` while the app showed no modal.
+- **Root cause:** The CLI gate waits on every tool except 15 read-only names, but the app only raised modals for 7 substrings (write/edit/…​). Tools in the gap (`list_directory` — note `list_dir` ≠ `list_directory` — plus `glob`, `read_many_files`, web tools) hung silently up to 10 min each. Step cards appear at model-request time (pre-execution), which is why "everything" seemed to keep going with no side effects.
+- **Fix:** Mirrored `READ_ONLY_TOOLS` set on both sides — CLI gate lets the pure-read tools through, app raises a modal for everything else (`astraStreamParser.ts` + `astraInteractiveApproval.js`). Repacked tarballs (3 asset dirs), marker v13→v14, verified live on-device (v14 marker + gate content + YOLO smoke test exit 0), workspace cleaned, probe processes reaped.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, files <500 lines.
+
+### [2026-09-04] - Interactive-Mode Step-1 Stall Fix (update_topic Auto-Approval)
+- **Problem (screenshot):** Interactive mode stuck 264s at "Agent Active / analyzing…" with zero thoughts, steps, or approval modal.
+- **Root cause:** Every turn starts with `update_topic` (narrative bookkeeping). The CLI gate waited up to 10 min on `/tmp/astra-approval.json` for it, but the app intentionally shows no modal for it — unpaired wait, dead spinner. (YOLO never hit this; auto-approved.)
+- **Fix:** `astraInteractiveApproval.js` auto-approves `update_topic`/`set_topic` (zero side effects). `exit_plan_mode` stays gated but is now paired: parser treats `*plan*` tools as approval-worthy so the modal appears. Repacked `astra-cli.tar.gz` (all 3 asset dirs) and bumped provision marker v12→v13 to force on-device re-unpack. Thoughts/steps/reasoning stream normally once unblocked (collapsible Thought view + StepCards + live status).
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, files <500 lines.
+- **Build repair (native):** First full Kotlin recompile since earlier edits exposed two pre-existing breakages (previously masked by Gradle UP-TO-DATE): `EnvironmentManager.kt` was missing its final object-closing `}` (restored), and `ProcessTreeKiller.kt` called `Process.pid()` directly (unresolvable on this compile SDK — switched to reflection-only lookup). Debug APK rebuilt, installed, launched.
+
+### [2026-09-04] - Lingering Background Tasks: ADB Kill + Responsive Stop (Process Trees)
+- **ADB scan (device `AUDUT20616012479`):** found a runaway provisioning tree alive 74+ min — proot provisioner @55% CPU → `npm rebuild` → `npm run build` → `npm exec tsc -b` fanning out to 45+ `tsc` workers. No orphaned dev servers (ports 8081/8000/5173 clean); live IDE terminal untouched. ADB `kill` is denied cross-UID and `run-as kill` is blocked, so the tree was cleared with `am force-stop` (whole UID tree gone, ~800MB RAM freed).
+- **Root cause:** `Process.destroyForcibly()` only signals the proot binary; the guest subtree (sh → npm → tsc) orphans and survives both stop requests and app close. Provisioning stages additionally ran untracked (not in `activeProcesses`) with unbounded `waitFor()`.
+- **Fix (native, `modules/linux-runner`):**
+  - New `ProcessTreeKiller.kt` (165 lines): `/proc`-based descendant enumeration (parses PPID after last `)` so space-bearing comms don't break it), UID-scoped, SIGTERM → 1.5s grace → SIGKILL, plus `pidOf()` (API 26+ with reflection fallback) and `reapOrphanedProot()` for stale PPID==1 trees.
+  - `ProcessExecutor.kt`: `stopCommand`/`stopAll` now tree-kill after destroy; one-shot `execute()` calls auto-register under `sync-<nanos>` ids so `stopAllCommands()` can reach in-flight sync commands; `stopAll` also cancels provisioning.
+  - New `ToolchainProvisioner.kt` (170 lines, extracted from `EnvironmentManager`): 10-min per-stage timeout with tree-kill, tracked stage process, orphan reaping on start. `EnvironmentManager` back to 372 lines with thin delegates (was 523).
+  - `TerminalSessionManager.kt`: session `stop()` tree-kills the PTY subtree.
+  - `FloatingOverlayService.kt`: `onTaskRemoved()` stops one-shot commands + provisioning on swipe-away (interactive PTY shells intentionally survive).
+- **Rule compliance (`agent.md`):** all touched files <500 lines (FloatingOverlayService's pre-existing 2392-line size untouched), `tsc --noEmit` 0 errors, Kotlin review-checked (no JVM/Gradle in this env — rebuild via `./build-debug-apk.sh` on a machine with Java to compile + deploy).
+
+### [2026-09-04] - Interactive Approval Waiting-State Fix
+- **Problem:** In interactive mode the agent correctly blocked on permission, but the UI kept showing thinking/executing while awaiting the decision.
+- **Root cause (`astraStreamParser.ts`):** `onStatusChange("waiting_approval")` fired, then the same handler unconditionally emitted `onStatusChange("executing_tool")` right after — overwriting the wait state. Separately, `LiveAgentStatusBar` didn't count `waiting_approval` as busy, so the bar could hide mid-wait.
+- **Fix:** `executing_tool` now emits only when no approval is pending; after the decision it emits `executing_tool` (approved) or back to `thinking` (denied). Status bar treats `waiting_approval` as busy, showing the shield + "Approval Needed: …" detail with timer and Stop.
+- **Rule Compliance (`agent.md`):** `tsc --noEmit` 0 errors, files <500 lines.
+
+### [2026-09-04] - Editor Freeze Fix on welcome.blade.php (Tokenizer Guards)
+- **Symptom:** tapping `welcome.blade.php` froze the app. Blade pages carry very long lines (inline SVG paths, minified scripts, dense Tailwind attributes) that the highlighter regex split into tens of thousands of `<Text>` tokens — stalling the JS thread (worse on Hermes/low-end devices) and choking the renderer.
+- **Reproduction:** synthetic Blade files (91KB/890KB/490KB + fuzz + 50K-deep nesting + 240KB quote runs) showed the analysis logic itself terminates fast — isolating the blowup to per-line regex tokenizing and view-node explosion.
+- **Fix (`syntaxTokenizer.ts`):** lines over 1500 chars render as one plain token (no regex, 1 view); any line caps at 250 tokens with the remainder collapsed to plain. Normal code highlighting unchanged.
+- **Verification:** long minified line → 1 token (was ~120K), token cap holds, normal keyword/function/comment colors intact, Blade timing flat, `tsc --noEmit` 0 errors (235 lines, within limit).
+
+### [2026-09-04] - Landscape Support + Fullscreen Landscape Browser
+- **Rotation unlocked:** `app.json` `orientation` → `default`, removed `android:screenOrientation="portrait"` from `AndroidManifest.xml` (both required; bare workflow).
+- **New `useOrientation()` (`src/theme/useOrientation.ts`, 11 lines):** `useWindowDimensions` → `{ isLandscape, width, height }`.
+- **Responsive adaptations:** `IDELayout` parks the file sidebar on rotate-to-landscape (manual reopen still works); `IDEBottomBar` compact mode (34px, smaller labels); `ProjectPicker` 2-column grid in landscape; chat/terminal/modals already flex — untouched.
+- **Landscape browser (`WebBrowserPreview.tsx`):** fullscreen content only — nav bar, port/suggestion chips, and loading bar hidden; error view kept so recovery buttons stay reachable.
+- **Editor header responsiveness (`EditorTabBar.tsx`, prev session):** header measures its width; below 420px the mode badge goes icon-only, format/Ask-AI collapse into the ⋮ overflow menu (Ask-AI item added), filename gets `flexShrink` + middle ellipsis, buttons `flexShrink:0` — no more overlap.
+- **Rule Compliance (`agent.md`):** all files <500 lines (IDELayout 491), `tsc --noEmit` 0 errors.
+
+### [2026-09-04] - Manual Editor IDE Pack: Real Diagnostics, Bracket Matching, Typing Assists
+- **Syntax error detection (`codeDiagnosticsService.ts`, new 461-line module):** `analyzeCode()` dispatches by extension — TS/JS/JSX/TSX get a TRUE parse via the TypeScript 5.9 compiler (`transpileModule`, syntax-only so zero false type errors) with line/col mapping; JSON via native parse with position mapping; Python gets missing-colon + mixed-tabs checks plus a triple-quote-aware bracket scan; everything else gets a string/comment/template-aware bracket scan (unclosed/mismatched brackets, unterminated strings, unclosed block comments). Results capped (150KB / 50 diags) for mobile perf.
+- **On-device compiler bundling (`metro.config.js` + `metro-shims/empty.js`):** TypeScript's lib contains literal `require("fs"/"os"/...)` calls that Metro cannot resolve — stubbed to empty shims (never executed on-device; lazy `require` + try/catch falls back to the bracket scanner if the compiler is ever unavailable). Verified with `npx expo export` (bundle builds, `transpileModule` present in the 8.5MB .hbc).
+- **Bracket partner highlight (`findMatchingBracket` + `useEditorAssists.ts` hook):** cursor-adjacent bracket lookup; gutter numbers tint accent on both pair lines (red when unmatched) with a `{ } L4 ↔ L9` / `Unmatched bracket · L4` status strip while editing.
+- **Typing assists (same hook):** auto-close `()[]{}` + quotes/backticks, skip-over closers/quotes, VSCode-style Enter (keeps indent, extra level after openers/`:` in Python, splits `{\n}`), pair-delete on backspace. Cursor-anchored diffing so insertions next to identical chars don't misfire. TextInput stays children-driven so token colors keep rendering; only `selection` is controlled.
+- **Problems UI (`ProblemsPanel.tsx`, gutter markers, tab badge):** error gutter dots (`●12`), red line tints, collapsible error/warning list with tap-to-jump (window-aware scroll), error-count badge in `EditorTabBar` that opens the panel and jumps to the first error.
+- **Verification:** `tsc --noEmit` 0 errors, all files <500 lines, 30 headless checks green (17 diagnostics incl. TSX/generics/template-literal edge cases, 13 typing-assist transforms), `expo export` bundle proven.
+
+### [2026-09-04] - Preview-Tap Priority Fix (Stale OPEN_FILE Shadowed Browser)
+- **Problem:** After AI scaffolds a project, tapping the preview link landed in the editor (or a stuck-looking state) instead of the built-in browser.
+- **Root cause (`IDELayout.tsx`):** Pending-action consumption was an else-chain starting with `OPEN_FILE`. Every file the AI creates auto-emits a sticky `OPEN_FILE`, so any stale one shadowed the user's explicit `OPEN_BROWSER` tap — and `applyOpenFile` forces the editor tab. Verified live server healthy on-device (`php artisan serve :8000` serving the Laravel page, workspace small) — navigation, not loading, was broken.
+- **Fix:** Consume all pending actions up front; explicit user taps win (`OPEN_BROWSER` → browser tab, `OPEN_TERMINAL` → terminal, `SWITCH_TAB` → tab), then auto-preview fallback, then stale auto `OPEN_FILE` last.
+- **Rule Compliance (`agent.md`):** `IDELayout.tsx` 484 lines (<500), `tsc --noEmit` 0 errors.
+
+### [2026-09-04] - Terminal Missing-Prompt Fix (Interactive Shell `-i`)
+- **Problem (screenshot):** After the first command, follow-up prompt lines lost the `astra:/workspaces/rff#` directory prefix (bare cursor on a fresh line).
+- **Root cause (proven on-device):** The terminal shell ran as `/bin/sh -l` with pipe stdin = non-interactive ash → emits zero PS1 prompts. The only directory prompt ever shown was the one-shot JS banner. Hexdump repro confirmed no prompts without `-i`.
+- **Fix (`TerminalSessionManager.kt`):** Launch `/bin/sh -l -i`. Verified on-device via PRoot: persistent `astra:<dir>#` prompt after every command, dynamic `\w` (shows `/tmp` after `cd /tmp`). The `can't access tty; job control turned off` startup line was already filtered in `useTerminalSession.ts` (×2) and `AnsiRenderer.tsx`. One-shot `ProcessExecutor` commands intentionally unchanged (prompts would pollute output).
+- **Rule Compliance (`agent.md`):** native-only change, `tsc --noEmit` 0 errors.
+
+### [2026-09-04] - Astra-CLI .md Stall Diagnosis & RateGuard Live-Status Surfacing
+- **On-device diagnosis (YOLO, workspace `rff`):** Ran the real PRoot CLI engine directly: baseline reply (2.3s), small `.md` write (5.5s), 150-line plan write (12.8s), session resume + edit (11s), multi-step explore→plan (92s) — all completed exit 0. Engine is healthy; no infinite hang reproduced. Big plan turns carry 50-90k input tokens, so multi-step plans legitimately take minutes.
+- **Real black hole fixed (`astraStreamParser.ts`):** `[Astra RateGuard]` / `[Astra Key Rolling]` backoff notes arrived over the stream but were silently dropped (`handleLine` ignored non-JSON lines, fallback strips them) — during quota backoffs the chat showed a dead spinner with zero explanation. These are now surfaced via `onLiveStatus` (80-char detail, `time-outline` icon).
+- **Cleanup:** Removed all on-device diag artifacts (`diag-*.md`, `dplan.md`) and the diag script; workspace restored to `welcome.md`.
+- **Rule Compliance (`agent.md`):** `astraStreamParser.ts` 324 lines (<500), `tsc --noEmit` 0 errors.
+
+### [2026-09-04] - StepCard Button UI Fix (Clipping, Raw Paths, Dir-Listing Buttons)
+- **Problem (screenshot):** "View" buttons clipped off the right edge, full internal `/data/user/0/.../files/workspaces/rff` paths shown raw in titles/badges, and an "Inspect Changes" button on a `list_directory` step ("Directory is empty.") that opens a directory as a file.
+- **`prettyChatPath()` (`chatFileLinkService.ts`):** strips internal app-storage prefixes to relative paths, keeps at most the last 2 segments (`…/rff` style) with max-length guard. Used for step titles (30 chars) and path badges (40 chars); command titles keep the original 35-char slice untouched.
+- **No More Clipped Buttons (`StepCard.tsx`):** path badge is now `flex:1` + `ellipsizeMode="middle"` so it shrinks instead of pushing buttons off-screen; all action buttons (`actionNavigateBtn`, `miniNavigateBtn`, header `stepHeaderRight`) are `flexShrink:0`; header title gets `flex:1` ellipsis. "View File in Editor" shortened to "View".
+- **Directory-Aware Buttons:** new `isDirListingTool` flag (`list_directory`, `glob_files`, `glob`, `list_dir`, `find_by_name`) hides "View" / "Inspect Changes" file buttons on directory steps and swaps the badge icon to `folder-outline`.
+- **Rule Compliance (`agent.md`):** All files <500 lines (StepCard 430, chatFileLinkService 67), `tsc --noEmit` 0 errors.
+
+### [2026-09-04] - Fullscreen Chat File-Link Tap Fix
+- **Root Causes:** (1) `AstraChatScreen` (fullscreen) had zero `ideActionService` listeners — only `IDELayout` subscribed, but it is unmounted in fullscreen, so "View File in Editor" / "Inspect Changes" taps emitted to nobody. (2) `IDELayout` `OPEN_FILE` handler did not normalize PRoot paths (`/workspace/...`, `/workspaces/<id>/...`, `file://`), so `readFileContent` missed and opens silently failed. (3) `MarkdownMessageView` rendered `[label](target)` markdown links and bare file paths as plain non-pressable `Text`.
+- **Sticky Pending Actions (`ideActionService.ts`):** `OPEN_FILE` / `OPEN_BROWSER` / `OPEN_TERMINAL` / `SWITCH_TAB` events are now stored as sticky pending actions with `consumePendingAction(type, maxAgeMs)` (5-min TTL). Payloads carry `userInitiated?: boolean`; UI tap handlers (`StepCard`, `AgentMessageItem`, `LiveAgentStatusBar`) pass `true`, background auto-open (`astraStreamParser`, `astraFormatters`) stays `false` so agent file writes no longer risk yanking the user out of chat.
+- **Path Resolver (`chatFileLinkService.ts`, new 49-line module):** `resolveChatPathToRelative()` strips `file://`, `/workspace/`, `/workspaces/<id>/`, `/<workspaceId>/`, `./`, `:line` suffixes; preserves absolute `/sdcard|/storage|/data` paths. `isOpenableFileTarget()` gates pressability.
+- **Fullscreen → Editor Routing (`AstraChatScreen.tsx`):** subscribes to the 4 actions and calls `onNavigateToEditor()` only on `userInitiated` taps; `IDELayout` consumes pending file/browser/terminal/tab on workspace load and opens via hardened `applyOpenFile()` (resolver + success/error alerts).
+- **Tappable Markdown Links (`MarkdownMessageView.tsx`):** `renderInline` now parses `[label](target)` links plus bare `file://`, `/workspace(s)/`, `http(s)://`, and `dir/file.ext` / whitelisted-extension filenames into underlined pressable `Text` that routes through `ideActionService` (http → browser preview, else editor).
+- **Rule Compliance (`agent.md`):** All files <500 lines (IDELayout 484, AstraChatScreen 444, MarkdownMessageView 434), `tsc --noEmit` 0 errors, resolver logic sanity-checked (8/8 cases).
+
+### [2026-09-03] - Terminal Double-Delete Fix & Persistent Directory Prompt
+- **Double-Delete Fix (`TerminalView.tsx`):** Removed `Backspace` branch from `handleKeyPress` — Android soft keyboards fire both `onKeyPress(Backspace)` and `onChangeText("")`, each slicing one char. Backspace now handled solely in `handleDirectInput`.
+- **Directory-Hidden Fix (JS + Native):**
+  - `useTerminalSession.ts`: history loader no longer blindly overwrites `sessionOutputs` (which wiped banner + locally-typed echo). Merge-only: adopt native hist when empty/banner/longer, else keep local buffer for live stream catch-up.
+  - `TerminalSessionManager.kt`: `PS1` changed from static `$targetDir` to dynamic `\w` so prompt always shows current dir and survives `cd`.
+  - `EnvironmentManager.kt`: profile `PS1` changed from bash-style `\[\033...\]` (rendered literally by BusyBox ash, hiding dir) to ash-compatible `\e[1;32mastra\e[0m:\e[1;34m\w\e[0m# `.
+- **Rule Compliance (`agent.md`):** All files <500 lines, `tsc --noEmit` 0 errors.
+- **Debug Build & On-Device Deploy:** `assembleDebug` BUILD SUCCESSFUL (2m 50s, 349 MB `app-debug.apk`), `adb install -r` Success on `AUDUT20616012479`, app launched (`com.janelle.aicoder/.MainActivity`).
+
+### [2026-09-03] - Instant Workspace Delete (Rename-to-Trash + Optimistic UI)
+- **Root Cause:** `deleteWorkspace` awaited full recursive `File.deleteRecursively()` / `FileSystem.deleteAsync` (slow on `node_modules`/`.git`, 5-10s) before registry cleanup + list reload, freezing UI.
+- **Instant Delete Engine (`workspaceService.ts`):**
+  - Registry entry removed first so reload is instant.
+  - O(1) `movePath` rename to `<path>-deleting-<timestamp>/`, slow `deletePath` fired in background without await.
+  - `listWorkspaces` filters `-deleting-` / dot-prefixed trash ghosts.
+- **Optimistic UI (`ProjectPicker.tsx`, `ProjectInspectorModal.tsx`):**
+  - List item removed from state + inspector closed immediately on confirm; `loadProjects()` reconciles after background delete.
+  - Modal now calls `onClose()` before `onDeleteProject()` so sheet dismisses instantly.
+- **Rule Compliance (`agent.md`):** All files <500 lines (workspaceService 481), `tsc --noEmit` 0 errors.
 
 ### [2026-09-02] - Astra Fullscreen Streaming Fix, Stream-JSON Parsing & Codebase Modularization
 - **Astra Fullscreen Stream Listener & Event Parsing Fix ([`astraCliService.ts`](file:///home/janelle/Documents/projects/ai-coder/src/ai/astra/astraCliService.ts), [`astraStreamParser.ts`](file:///home/janelle/Documents/projects/ai-coder/src/ai/astra/astraStreamParser.ts)):**
