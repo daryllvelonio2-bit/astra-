@@ -2,15 +2,19 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
+import { BottomTabVisibility, DEFAULT_BOTTOM_TABS } from "../services/configService";
+
+export type IDEBottomTab = "editor" | "terminal" | "browser" | "git" | "desktop";
 
 interface IDEBottomBarProps {
-  bottomTab: "editor" | "terminal" | "browser";
-  onChangeTab: (tab: "editor" | "terminal" | "browser") => void;
+  bottomTab: IDEBottomTab;
+  onChangeTab: (tab: IDEBottomTab) => void;
   runningTaskCount?: number;
   compact?: boolean;
+  visibleTabs?: BottomTabVisibility;
 }
 
-export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, compact = false }: IDEBottomBarProps) {
+export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, compact = false, visibleTabs = DEFAULT_BOTTOM_TABS }: IDEBottomBarProps) {
   const { theme } = useTheme();
 
   return (
@@ -62,6 +66,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
         </Text>
       </TouchableOpacity>
 
+      {visibleTabs.browser && (
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
@@ -81,6 +86,51 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           Browser
         </Text>
       </TouchableOpacity>
+      )}
+
+      {visibleTabs.git && (
+      <TouchableOpacity
+        style={[
+          styles.bottomTabBtn,
+          bottomTab === "git" && { backgroundColor: theme.bgTertiary },
+        ]}
+        onPress={() => onChangeTab("git")}
+      >
+        <Ionicons name="git-branch-outline" size={16} color={bottomTab === "git" ? theme.accent : theme.textMuted} />
+        <Text
+          style={[
+            styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
+            { color: theme.textMuted },
+            bottomTab === "git" && { color: theme.accent, fontWeight: "700" },
+          ]}
+        >
+          Git
+        </Text>
+      </TouchableOpacity>
+      )}
+
+      {visibleTabs.desktop && (
+      <TouchableOpacity
+        style={[
+          styles.bottomTabBtn,
+          bottomTab === "desktop" && { backgroundColor: theme.bgTertiary },
+        ]}
+        onPress={() => onChangeTab("desktop")}
+      >
+        <Ionicons name="desktop-outline" size={16} color={bottomTab === "desktop" ? theme.accent : theme.textMuted} />
+        <Text
+          style={[
+            styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
+            { color: theme.textMuted },
+            bottomTab === "desktop" && { color: theme.accent, fontWeight: "700" },
+          ]}
+        >
+          Desktop
+        </Text>
+      </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -99,8 +149,8 @@ const styles = StyleSheet.create({
   bottomTabBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: 5,
+    paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 4,
   },

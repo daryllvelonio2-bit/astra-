@@ -6,7 +6,7 @@ import { useTheme } from '../../theme/themeContext';
 export interface ProjectItem {
   id: string;
   name: string;
-  template: string;
+  template?: string;
   path: string;
   lastModified: string;
   fileCount: number;
@@ -52,7 +52,7 @@ export function ProjectCard({ item, onPress, onMorePress }: ProjectCardProps) {
           </Text>
         </View>
         <Text style={[styles.cardDetails, { color: theme.textSecondary }]}>
-          {item.template} • {item.fileCount} file{item.fileCount > 1 ? 's' : ''} • {item.lastModified}
+          {item.template ? `${item.template} • ` : ''}{item.fileCount} file{item.fileCount > 1 ? 's' : ''} • {item.lastModified}
         </Text>
       </View>
     </TouchableOpacity>

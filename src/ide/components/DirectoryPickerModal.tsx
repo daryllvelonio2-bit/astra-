@@ -10,9 +10,13 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
+import {
+  getDefaultPickerBase,
+  getPickerTitle,
+  getQuickPaths,
+} from '../services/storagePaths';
 import {
   readDirEntries,
   makeDir,
@@ -35,7 +39,8 @@ export function DirectoryPickerModal({
   onSelectDirectory,
 }: DirectoryPickerModalProps) {
   const { theme } = useTheme();
-  const defaultBase = FileSystem.documentDirectory || '';
+  const defaultBase = getDefaultPickerBase();
+  const pickerTitle = getPickerTitle();
   const [currentPath, setCurrentPath] = useState<string>(initialPath || defaultBase);
   const [typedPath, setTypedPath] = useState<string>(initialPath || defaultBase);
   const [entries, setEntries] = useState<NativeDirEntry[]>([]);
@@ -102,13 +107,7 @@ export function DirectoryPickerModal({
     requestAllFilesPermission();
   };
 
-  const quickPaths = [
-    { label: '🎮 Godot', path: '/sdcard/Godot/' },
-    { label: '📁 Documents', path: '/sdcard/Documents/' },
-    { label: '📱 SDCard', path: '/sdcard/' },
-    { label: '⬇️ Download', path: '/sdcard/Download/' },
-    { label: '📦 Workspaces', path: `${FileSystem.documentDirectory}workspaces/` },
-  ];
+  const quickPaths = getQuickPaths();
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -119,7 +118,7 @@ export function DirectoryPickerModal({
           <View style={[styles.header, { borderBottomColor: theme.border }]}>
             <View style={styles.headerLeft}>
               <Ionicons name="folder-open-outline" size={20} color={theme.accent} />
-              <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Choose Phone Directory</Text>
+              <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{pickerTitle}</Text>
             </View>
             <View style={styles.headerRight}>
               <TouchableOpacity onPress={handleRequestStoragePermission} style={styles.permBtn}>

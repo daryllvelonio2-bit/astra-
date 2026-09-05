@@ -26,7 +26,7 @@ export interface OpenTerminalPayload {
 }
 
 export interface SwitchTabPayload {
-  tab: "editor" | "terminal" | "browser";
+  tab: "editor" | "terminal" | "browser" | "git" | "desktop";
   userInitiated?: boolean;
 }
 
@@ -168,7 +168,7 @@ class IDEActionServiceImpl {
   /**
    * Helper: Instruct the IDE to switch bottom tabs.
    */
-  switchTab(tab: "editor" | "terminal" | "browser", userInitiated = false) {
+  switchTab(tab: "editor" | "terminal" | "browser" | "git" | "desktop", userInitiated = false) {
     this.emit("SWITCH_TAB", { tab, userInitiated });
   }
 

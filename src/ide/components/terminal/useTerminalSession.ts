@@ -76,6 +76,10 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
   const isAutoScrollEnabled = useRef<boolean>(true);
   // Bytes of native history already folded into each session buffer.
   const seenNativeLen = useRef<Record<string, number>>({});
+  // Shell (non-task) session ids alive in this mount. Native start is a
+  // no-op for a running id, so these must be stopped when the workspace
+  // changes — otherwise terminals keep the old workspace cwd and binds.
+  const shellIdsRef = useRef<string[]>(["session-1"]);
 
   const foldNativeHistory = useCallback((sessionId: string, hist: string) => {
     const cleanHist = hist.replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "");
@@ -107,7 +111,10 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     setTimeout(() => setToastMessage(null), 2000);
   }, []);
 
-  // Initialize Linux environment and start initial session
+  // Initialize Linux environment and start initial session.
+  // TerminalView is keyed by workspaceId (see IDELayout), so a workspace
+  // switch remounts us: stop the old shell sessions here so the fresh mount
+  // respawns them inside the new workspace instead of reusing the stale cwd.
   useEffect(() => {
     let mounted = true;
     const init = async () => {
@@ -123,6 +130,12 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     init();
     return () => {
       mounted = false;
+      shellIdsRef.current.forEach((id) => {
+        try {
+          stopTerminalSession(id);
+        } catch (_) {}
+      });
+      shellIdsRef.current = ["session-1"];
     };
   }, [workspaceId]);
 
@@ -352,6 +365,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       id: newId,
       name: `${nextIdx}: sh`,
     };
+    shellIdsRef.current.push(newId);
 
     setSessions((prev) => [...prev, newTab]);
     setSessionOutputs((prev) => ({ ...prev, [newId]: getBanner(workspaceId) }));
@@ -375,6 +389,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
         showToast("Background task stopped");
       } else {
         await stopTerminalSession(idToClose);
+        shellIdsRef.current = shellIdsRef.current.filter((id) => id !== idToClose);
       }
 
       const remaining = sessions.filter((s) => s.id !== idToClose);

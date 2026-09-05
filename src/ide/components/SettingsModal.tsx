@@ -12,6 +12,9 @@ import {
   loadConfig,
   saveConfig,
   AppTheme,
+  BottomTabVisibility,
+  DEFAULT_BOTTOM_TABS,
+  normalizeBottomTabs,
 } from "../services/configService";
 import { useTheme } from "../../theme/themeContext";
 import { ApiKeyManager } from "./ApiKeyManager";
@@ -19,6 +22,7 @@ import { SettingsTabBar, SettingsTabId } from "./settings/SettingsTabBar";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ModelSection } from "./settings/ModelSection";
 import { EnvironmentSection } from "./settings/EnvironmentSection";
+import { NavigationSection } from "./settings/NavigationSection";
 
 interface SettingsModalProps {
   visible: boolean;
@@ -35,13 +39,15 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
   const [apiKeys, setApiKeys] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash-lite");
   const [activeTheme, setActiveTheme] = useState<AppTheme>(themeMode);
+  const [bottomTabs, setBottomTabs] = useState<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
+  const [showAiButton, setShowAiButton] = useState(true);
   const [savedTick, setSavedTick] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const dirtyRef = useRef(false);
   const skipFirstRef = useRef(true);
   const saveTimer = useRef<any>(null);
-  const draftRef = useRef({ apiKeys, selectedModel, activeTheme });
-  draftRef.current = { apiKeys, selectedModel, activeTheme };
+  const draftRef = useRef({ apiKeys, selectedModel, activeTheme, bottomTabs, showAiButton });
+  draftRef.current = { apiKeys, selectedModel, activeTheme, bottomTabs, showAiButton };
 
   const flushSave = async () => {
     const draft = draftRef.current;
@@ -50,6 +56,8 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
       apiKey: draft.apiKeys[0] || "",
       selectedModel: draft.selectedModel,
       selectedTheme: draft.activeTheme,
+      bottomTabs: normalizeBottomTabs(draft.bottomTabs),
+      showAiButton: !!draft.showAiButton,
     });
     setTheme(draft.activeTheme);
     dirtyRef.current = false;
@@ -65,6 +73,8 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
         setApiKeys(cfg.apiKeys || (cfg.apiKey ? [cfg.apiKey] : []));
         setSelectedModel(cfg.selectedModel || "gemini-3.5-flash-lite");
         setActiveTheme(cfg.selectedTheme || themeMode);
+        setBottomTabs(normalizeBottomTabs(cfg.bottomTabs));
+        setShowAiButton(cfg.showAiButton ?? true);
         setLoaded(true);
       });
     } else {
@@ -92,7 +102,7 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys, selectedModel, activeTheme, loaded]);
+  }, [apiKeys, selectedModel, activeTheme, bottomTabs, showAiButton, loaded]);
 
   const handleSelectTheme = (mode: AppTheme) => {
     setActiveTheme(mode);
@@ -141,6 +151,15 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
             )}
             {activeTab === "environment" && (
               <EnvironmentSection theme={theme} />
+            )}
+            {activeTab === "tabs" && (
+              <NavigationSection
+                visibility={bottomTabs}
+                onChange={setBottomTabs}
+                showAiButton={showAiButton}
+                onChangeAiButton={setShowAiButton}
+                theme={theme}
+              />
             )}
           </ScrollView>
         </View>

@@ -1,8 +1,127 @@
 # Project Progress Tracker
 
 ## Status
-- **Current Phase:** Production Release Build Verified
-- **Last Updated:** September 4, 2026
+- **Current Phase:** Project Documentation (docs/)
+- **Last Updated:** September 5, 2026
+
+### [2026-09-05] - Project Documentation (docs/)
+- **Feature:** New `docs/` folder documenting the whole project: index + overview (`README.md`), setup/build/run (`getting-started.md`), layers/process model/storage map/data flows (`architecture.md`), IDE (`ide.md`: workspaces, picker, editor, terminal, browser, Git, desktop, nav, settings, themes), AI engine (`ai-engine.md`: agent core, Astra CLI bridge, 3-tier runner, chat UI, voice, tasks), native bridges + guest provisioning (`native-modules.md`), `config.json`/models/paths/permissions (`configuration.md`), repo rules (`conventions.md`), and failure playbook (`troubleshooting.md`).
+- **Rule Compliance (`agent.md`):** Docs-only, no source changes. Verified file references against source (`TerminalView` workspace key, `WINDOW_SIZE=100`, git component list).
+
+### [2026-09-05] - Git Header Layout + Profile Avatars in History
+- **Fix:** Portrait header overflowed (repo + branch + Fetch pill + 3 icons): branch button now takes flexible space with proper ellipsis (`flex: 1`, truncated names no longer crush neighbors), sync pill and icon cluster pinned (`flexShrink: 0`).
+- **Feature:** History rows show the author's real GitHub profile picture instead of the initial letter: public commits API matched by SHA *and* author email (survives rebases), then Gravatar fallback for emails GitHub can't map to an account (`d=404` fails cleanly to initials). Bundled a compact MD5 verified against system crypto on 7 vectors (avoids a new native dep).
+- **Files:**
+  - `GitHeaderBar.tsx` (301 lines): flex/shrink rules only, no visual redesign.
+  - `gitAvatarService.ts` (175 lines): remote parsing (HTTPS/SSH/shorthand) + cached `{ bySha, byEmail }` fetch + `gravatarUrl()`, never throws. Authed with the user's saved git token (`getGitHubApiToken` reads `~/.git-credentials`) so private repos resolve; failures never cached.
+  - `GitHistoryList.tsx` (380 lines): `remoteUrl` prop, one fetch per repo, SHA → email → Gravatar → initials chain with per-avatar error fallback.
+  - `GitHubDesktopView.tsx` (494 lines): passes `remoteUrl` through.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - Detached-HEAD Bug: Bogus "N Commits to Push"
+- **Problem:** Tapping a remote branch (`origin/...`) in Switch Branch ran `git checkout "origin/..."` verbatim → detached HEAD. Status fallback then counted `origin/HEAD..HEAD` as "ahead", so e.g. "7 commits to push" on a clean tree; push buttons were dead ends. The `origin/HEAD -> origin/main` symlink was also listed as a branch.
+- **Fix:**
+  - `gitService.ts` (481 lines): `switchGitBranch` strips `origin/` so git resolves/creates the local tracking branch; `getGitStatus` detects `## HEAD` explicitly → `detached: true`, zero counts, skips fallback; fallback leg reporting the whole history as pushable removed (only same-name-remote counts remain); branch list filters the `origin/HEAD` symlink and the `(HEAD detached…)` pseudo-entry.
+  - `types.ts` (56 lines): `GitRepoStatus.detached`.
+  - `GitChangesList.tsx` (400 lines): detached empty-view copy ("switch to a local branch"), push CTAs hidden when detached.
+  - `GitHubDesktopView.tsx` (493 lines): passes `detached` through; push on detached explains instead of failing; branch switch auto-syncs in background (no remote → silent local refresh, failures silent) so behind/ahead update without tapping sync.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - Clone GitHub Repo + Pull Auth Recovery
+- **Feature:** "Clone Repo" in the Project Picker (header + empty state) clones any GitHub URL / `user/repo` shorthand over HTTPS or SSH into Workspaces (or a picked parent dir), registers it via `openExistingDirectoryAsProject()`, and opens it. Private-repo failures expand inline auth: token form (`GitTokenTab` + `configureGitCredentials`, auto-retry) or SSH key manager (`GitSshKeyTab`, copy/generate + retry). Pull/push/fetch auth failures now route to the credentials modal instead of a dead-end alert.
+- **Fix:** Terminal followed the old workspace after clone/open — native `startSession` is a no-op for a live id, so shell sessions kept the old cwd+binds (new tabs worked only because they get fresh ids). `TerminalView` is now keyed by `workspace.id` (remount on switch) and `useTerminalSession` stops all shell sessions on unmount, so terminals respawn inside the new workspace. Task tabs are untouched (owned by `runningTasksService`).
+- **Files:**
+  - `gitCloneService.ts` (125 lines): `normalizeCloneUrl`, `folderNameFromCloneUrl`, `isGitAuthError`, `cloneGitRepo` (non-interactive: `GIT_TERMINAL_PROMPT=0`, SSH BatchMode + accept-new, duplicate-folder guard; optional `onProgress` via `executeCommandStream` + `cancelClone()`).
+  - `CloneRepoModal.tsx` (457 lines) + `CloneRepoModal.styles.ts` (166 lines): bottom-sheet with keyboard pre-lift, HTTPS/SSH toggle, folder + destination pickers. Live progress bar + last git output line while cloning; Cancel kills the in-flight clone.
+  - `ProjectPicker.tsx` (357 lines): Clone buttons + `handleClonedRepo`.
+  - `GitHubDesktopView.tsx` (478 lines): `showSyncResult` auth routing for push/sync.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - Git IDE AI Commit Summary Generation (User API Key)
+- **Feature:** ✨ button in the commit box generates a GitHub-style summary + description from the working directory diffs, using the user's own Gemini key + selected model from Settings (`loadApiKey()` / `loadSelectedModel()`).
+- **Files:**
+  - `gitCommitSummary.ts` (new, 119 lines): Caps at 15 files / 12k chars, prompts for imperative ≤72-char summary + bullets, raw-JSON response with tolerant parsing. Readable errors (missing key → points to Settings).
+  - `GitChangesList.tsx` (388 lines): Sparkles button with spinner; fills Summary, fills Description only if non-empty; failures shown via Alert.
+  - `GitHubDesktopView.tsx` (464 lines): Passes `workspaceId` through.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - Git IDE Portrait Commit Inputs Keyboard Visibility Fix
+- **Problem:** In portrait mode, tapping Summary/Description hid the text under the keyboard — user could not see what they were typing.
+- **Final fix (v4 — live keyboard-height padding):** Plain `flex: 1` hid the box because edge-to-edge (Expo 52+, RN 0.81) disables window resize — flex alone can't lift anything, which is why the box only "moved a bit" (bottom-bar hide). Now pads the container by the live keyboard height, same proven pattern as `AstraChatScreen`. Tracks `keyboardDidShow` + `keyboardDidChangeFrame` so SwiftKey's growing suggestion/strip rows stay accurate (stale one-shot height caused the earlier gap); file list stays `flex: 1` so the box pins exactly above the keyboard. No list collapsing.
+- **Delay fix (v5 — instant pre-lift on focus):** `keyboardDidShow` fires only after the slide-up animation, so the box lagged behind the keyboard. Now `onFocus` instantly pads using the last measured height (300dp fallback on first open); live events correct it within milliseconds.
+- **Lag fix (v6 — memoize 179 rows):** Every keyboard-height update re-rendered/reconciled all file rows (`GitFileItem` unmemoized + inline closures), costing hundreds of ms per update. Now `GitFileItem` is `React.memo` with stable `onSelectFile`/`onToggleStageFile` refs, `renderItem`/`keyExtractor` are `useCallback`, and height updates bail when unchanged.
+- **Files:**
+  - `GitChangesList.tsx` (334 lines): `keyboardHeight` state, 3 listeners, portrait-only `paddingBottom`.
+  - `GitChangesList.styles.ts` (184 lines): Extracted styles; `fileListCollapsed` removed.
+- **Rule Compliance (`agent.md`):** Both files `<500` lines, theme tokens only (`useTheme()`), no hardcoded colors. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - GitHub Dual Authentication: Fine-Grained PATs & SSH Keys (Ed25519)
+- **Feature:** Added native support for both modern GitHub Fine-Grained Personal Access Tokens (repository-scoped, non-classic) and ed25519 SSH Keys.
+- **Components & Services:**
+  - `gitService.ts` (447 lines): Added `getSshPublicKey()`, `generateSshKey()`, `getGitRemoteUrl()`, and `setGitRemoteUrl()`. Auto-provisions `~/.ssh/config` with `StrictHostKeyChecking accept-new` for non-interactive `github.com` connections.
+  - `GitCredentialsModal.tsx` (262 lines): Refactored into a tabbed authentication modal with two modes: "Fine-Grained Token" and "SSH Key".
+  - `GitTokenTab.tsx` (142 lines): Clear instructions for generating modern Fine-Grained PATs with repository scoping (`Contents: Read & write`), with username, email, and token inputs.
+  - `GitSshKeyTab.tsx` (220 lines): 1-tap generation of ed25519 SSH keys, formatted display of `~/.ssh/id_ed25519.pub`, 1-tap "Copy Public Key" to clipboard, and guidance on configuring SSH remotes (`git@github.com:...`).
+- **Rule Compliance (`agent.md`):** All 4 files strictly `<500` lines (`GitCredentialsModal.tsx`: 262, `GitSshKeyTab.tsx`: 220, `GitTokenTab.tsx`: 142, `gitService.ts`: 447). `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - GitHub Desktop 50% Sidebar Width Reduction (Landscape)
+- **Problem:** In landscape mode, the left changes/history sidebar occupied 380px (`maxWidth: 46%`), consuming almost half of the screen and constraining the diff viewer pane.
+- **Fix:**
+  - `GitHubDesktopView.tsx` (368 lines): Reduced landscape sidebar width by 50% from 380px down to **190px** (`maxWidth: 25%`), allocating ~75% of horizontal screen real estate to the diff viewer. Adjusted tab bar padding and added single-line clipping to tab labels.
+  - `GitChangesList.tsx` (466 lines): Added `numberOfLines={1}` and `ellipsizeMode="tail"` to the commit button to prevent text wrapping on long branch names. Compacted summary input, toggle button, and commit button padding for the 190px sidebar.
+  - `GitHistoryList.tsx` (244 lines): Added responsive landscape styles (`commitRowLandscape`, `avatarLandscape`, `hashBadgeLandscape`, `metaRowLandscape`) so commit history items render cleanly in the 190px pane.
+- **Rule Compliance (`agent.md`):** All files strictly `<500` lines. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - GitHub Desktop Diff Parsing, Branch Detection & Layout Fixes
+- **Problem:**
+  - Raw Git metadata headers (`diff --git`, `new file mode`, `index`, `---`, `+++`) were displayed as lines 1-5 in the diff viewer, confusing the user with numbered header rows.
+  - Untracked files exhibited duplicated file contents (lines 7 & 8) due to bash `|| cat` executing when `git diff --no-index` exited with code 1.
+  - Repositories without an initial commit (`## No commits yet on main`) caused the branch regex to extract `"No"` as the branch name (`Commit to No (0)` and `No v`).
+  - Android `TextInput` vertical font padding sliced off the lower half of letters in the commit summary input in landscape mode.
+  - Floating AI assistant menu hovered over the diff viewer in the Git tab.
+- **Fix:**
+  - `diffParser.ts` (125 lines): Extracted modular unified diff parser. Skips pre-hunk Git metadata headers, identifies `@@` hunks as clean divider rows with no line numbers, and tracks separate old/new line numbers.
+  - `GitDiffViewer.tsx` (383 lines): Refactored to use `diffParser.ts`. Renders dual gutter columns (Old #, New #, marker `+`/`-`), styling hunk headers with soft accent backgrounds and additions/deletions with clear color coding.
+  - `gitService.ts` (388 lines):
+    - Fixed `getGitStatus` branch parsing to detect `No commits yet on ` and `Initial commit on ` before running the regex, correctly extracting `main`.
+    - Fixed `getGitFileDiff` untracked diff generation to safely handle exit code 1 with `|| true` and avoid duplicate `cat` concatenation.
+  - `GitChangesList.tsx` (463 lines): Fixed summary input height (32px), set `paddingVertical: 0`, `textAlignVertical: "center"` for Android text rendering, added `flexShrink: 0` to `commitBox`, and aligned toggle/commit buttons to 32px.
+  - `IDELayout.tsx` (490 lines): Auto-hides `AiAssistantMenu` when `bottomTab === "git"` to keep diff view unobstructed.
+- **Rule Compliance (`agent.md`):** All 12 files strictly `<500` lines. `npx tsc --noEmit` clean (0 errors).
+
+### [2026-09-05] - GitHub Desktop Landscape Mode UI Optimization
+- **Problem:** In landscape mode on mobile, the commit box (summary, description, and button) and header bar took up excessive vertical height (~160px), leaving little room for the working directory's changed files list.
+- **Fix:**
+  - `GitHeaderBar.tsx` (274 lines): Added compact landscape layout collapsing header height from 44px to 32px, reducing font sizes and button padding.
+  - `GitChangesList.tsx` (452 lines): Optimized commit box in landscape mode down to ~68px (height 28px summary input, collapsible description toggle button, and height 28px commit button). This frees up over 85px of vertical space directly for the working directory file list.
+  - `GitHubDesktopView.tsx` (365 lines): Expanded landscape sidebar width from 320px to 380px (`maxWidth: 46%`) and compacted sub-tab bar height to 32px, giving the file list significantly more horizontal and vertical breathing room.
+  - `GitDiffViewer.tsx` (260 lines): Compacted diff header to 32px in landscape mode, giving maximum vertical lines to code inspection.
+- **Rule Compliance (`agents.md`):** All files strictly `<500` lines. `npx tsc --noEmit` passed with 0 errors.
+
+### [2026-09-05] - Custom GitHub Desktop Interface
+- **Feature:** Integrated a native, responsive GitHub Desktop experience directly into Astra, backed by the embedded Alpine Linux `git` binary via the PRoot command bridge.
+- **Components & Services:**
+  - `gitService.ts` (379 lines): Comprehensive porcelain Git engine supporting repo detection/init (`git rev-parse`, `git init`), branch status & ahead/behind tracking (`git status --porcelain=v1 -b`), file staging/unstaging (`git add`, `git restore --staged`), atomic commits, commit history & inspection (`git log`, `git show`), branch switching/creation (`git checkout`), remote synchronization (`git fetch`, `git pull`, `git push`), and credential management via `~/.git-credentials`.
+  - `types.ts` (45 lines): Typed definitions for Git file statuses, branches, commits, and repository states.
+  - `GitHubDesktopView.tsx` (350 lines): Master coordinating view with responsive layouts (split side-by-side in landscape; master-detail navigation in portrait).
+  - `GitHeaderBar.tsx` (211 lines): GitHub Desktop top repository bar featuring current repo name, branch dropdown, sync button with ahead/behind indicators (`Push ↑2`, `Pull ↓1`, `Fetch`), and settings trigger.
+  - `GitChangesList.tsx` (305 lines): Staging list with individual and bulk file checkboxes, status chips (`M`, `A`, `D`, `U`), and fixed bottom commit box with summary & description fields.
+  - `GitHistoryList.tsx` (167 lines): Commit timeline with author initials, commit messages, relative timestamps, and short SHA pills.
+  - `GitDiffViewer.tsx` (220 lines): GitHub-style unified diff viewer with addition (+ green) and deletion (- red) color coding, line numbers, and horizontal scrolling.
+  - `GitBranchModal.tsx` (272 lines): Searchable branch switcher and new branch creator.
+  - `GitCredentialsModal.tsx` (185 lines): GitHub Personal Access Token (PAT) setup modal for seamless push/pull authentication.
+  - `IDEBottomBar.tsx` (179 lines): Added 5th tab `Git` with branch icon and responsive button padding.
+  - `IDELayout.tsx` (490 lines): Added keep-alive `GitHubDesktopView` slot and `SWITCH_TAB` support.
+- **Rule Compliance (`agents.md`):** All 11 files strictly `<500` lines (largest is 490 lines). Zero bloatware, pure native React Native UI, dynamic global theme adherence (`useTheme()`). `npx tsc --noEmit` passed with 0 errors.
+
+### [2026-09-05] - Fullscreen Landscape Mode for Linux Desktop (No Notification Bar)
+- **Feature:** Rotating to landscape while viewing the Linux Desktop tab automatically triggers full-screen mode, hiding the Android notification/status bar, eliminating top safe-area inset padding, hiding the bottom IDE navigation bar, and hiding the floating AI assistant menu.
+- **Components:**
+  - `DesktopView.tsx` (379 lines): Integrated `useOrientation` to automatically engage fullscreen and call `StatusBar.setHidden(true, 'slide')` on landscape rotation, and restore the status bar on rotating back to portrait or navigating away. Added notch/safe-area aware floating controls (1-tap contract/exit and 1-tap geometry refit when XFCE aspect ratio changes).
+  - `DesktopSetupCard.tsx` (250 lines): Extracted non-running desktop phases (checking, not installed, installing, stopped, error) to isolate setup UI and guarantee strict `<500` lines compliance per `agent.md` (Rule 5).
+  - `IDELayout.tsx` (481 lines): Updated container `paddingTop` to dynamically collapse to 0 when `desktopFullscreen` is active (`paddingTop: desktopFullscreen ? 0 : insets.top`), added declarative `<StatusBar hidden={desktopFullscreen} />`, and auto-hid the floating AI assistant menu (`!desktopFullscreen && <AiAssistantMenu ... />`).
+  - `useFloatingOverlayControl.ts` (70 lines): Extracted system overlay status polling and permission handling from `IDELayout.tsx` to maintain modularity.
+- **Rule Compliance (`agent.md`):** All modified and created files strictly `<500` lines (`DesktopView.tsx`: 379, `DesktopSetupCard.tsx`: 250, `IDELayout.tsx`: 481, `useFloatingOverlayControl.ts`: 70). `npx tsc --noEmit` clean (0 errors).
 
 ### [2026-09-04] - Linux Dependencies Auto Downloader Progress in Settings
 - **Problem:** The embedded Alpine Linux developer toolchain auto-downloader (`ToolchainProvisioner.kt`) ran completely in the dark on a detached background daemon thread. Users had zero visibility into which stage was executing, which packages were actively downloading, whether APK locks or timeouts occurred, or how to safely cancel/retry.
@@ -21,6 +140,40 @@
     - **Binary Health Diagnostics**: Real-time status badges for Node.js, Python 3, PHP 8.3, and Git.
   - Mounted `EnvironmentSection` into `SettingsModal.tsx`.
 - **Verification:** `npx tsc --noEmit` passed with 0 errors; all source files strictly under 500 lines; Debug APK built with Gradle (`app-debug.apk`), installed and launched on connected Android device (`AUDUT20616012479`).
+
+### [2026-09-04] - Desktop Start Unwedged (Supervisor PTY Session)
+- Root cause of the eternal "starting" spinner, proven via `ps` + `/proc/net/tcp`: all daemons (Xvnc, xfce4, websockify, panel) were ALIVE and both ports LISTENING — but PRoot waits for every forked descendant, so the blocking start call could never return. Same trap would catch any daemon spawn via executeCommand.
+- Fix: daemons now spawn from a persistent supervisor PTY session (`desktop-svc`); readiness arrives as terminal-data events with a 60s reconcile fallback. Port probes switched to python (host/guest shells lack /dev/tcp). Stop kills the supervisor tree + pidfile sweep.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - Desktop Suicide pkill (Start Killed Itself via Self-Match)
+- STEP markers proved startup died between CLEANUP and XVNC with zero output: `pkill -f '[X]vnc :0'` matched the start script's own command line (it contains the real `Xvnc :0` launch text later on) and SIGTERM'd its own shell/proot. The `[X]` trick only guards the trick text, not real occurrences.
+- Fix: no pkill/pgrep for Xvnc/websockify anywhere near their launch lines — cleanup + ready checks use pidfiles with `/proc/PID/cmdline` verification (also guards stale-PID kills); trick-pattern pkill kept only where the literal can't occur (xfce4-session, stop fallbacks). Diagnostics shows pidfile cmdlines instead of pgrep.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - Desktop Diagnostics Honesty (BusyBox command -v Trap)
+- Diagnose screenshot showed only Xvnc + missing logs: busybox `command -v` ignores all but its first arg, so both the provision gate and diagnostics overstated things. Now checks each binary separately; start script emits STEP markers + regenerates a missing passwd file; error log view shows last 60 lines (was 12, hiding the real error).
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - Desktop "Running" False Positive (pgrep Self-Match Fix)
+- `ERR_CONNECTION_REFUSED` on :6080 while status said running: the `pgrep -f 'Xvnc :0'` check matched the start script's own command line (it literally contains that string) — a false positive hiding a dead websockify/Xvnc.
+- Fix: `[X]`-style pgrep patterns, real port probe (`/dev/tcp/127.0.0.1:6080`) in the ready check, `mkdir -p /tmp/.X11-unix`, all three daemon logs on failure, plus a Diagnose button (binaries + procs + log tails) in the error view.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
+
+### [2026-09-04] - XFCE Desktop Tab (Xvnc + noVNC)
+- New 4th IDE tab `Desktop`: on-demand provision (tigervnc/Xvnc + xfce4 + fonts + pip websockify + noVNC v1.5.0, ~1GB) with streamed install log; start/stop; viewer is the bundled noVNC client in a WebView over localhost websockify (6080→5900). VNC is localhost-only + random per-install password injected into the URL.
+- Files: `src/ide/services/desktopService.ts`, `src/ide/components/DesktopView.tsx`, Desktop tab in `IDEBottomBar` + keep-alive slot in `IDELayout`.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild. On-device provision + first launch still to verify.
+
+### [2026-09-04] - PTY Write Preserves CR (Real opencode Enter Fix)
+- Follow-up: JS-side CR translation wasn't enough — `PtySession.write()` was rewriting every `\r`→`\n` natively, so opencode still got LF (newline) from ALL Enter paths. Removed the normalization; bytes now go verbatim. Shells unaffected (ICRNL accepts CR).
+- Rebuild + reinstall done (BUILD SUCCESSFUL). App restarts on install — opencode must be relaunched to test.
+
+### [2026-09-04] - Soft-Keyboard Enter Sends CR in PTY Mode (opencode Submit Fix)
+- Bug: Gboard commits Enter as `\n`, which went raw to the pty. Shells tolerate it, but raw-mode TUIs (opencode, vim) bind submit to CR and read LF as Ctrl+J = "insert newline" — so Enter in opencode just wrapped lines.
+- Fix (`TerminalView.tsx`): `handleXtermInput` translates a lone `\n`/`\r\n` commit to `\r`; multi-char pastes keep raw LFs for shell line-by-line execution. Removed the `onKeyPress` Enter→CR send (every keyboard also commits text — keeping both double-submitted).
+- Safe by construction: with ICRNL on, CR submits in canonical shell mode exactly like LF did.
+- **Rule Compliance (`agent.md`):** `tsc` clean. JS-only — Metro reload, no rebuild.
 
 ### [2026-09-04] - Fullscreen Chat Survives Navigation (Keep-Alive)
 - Bug: `App.tsx` conditionally unmounted screens, so leaving mid-turn orphaned the agent chain — the dead hook kept streaming into discarded state (never saved) while the remount showed a frozen "thinking" message. Same unmount also killed terminal WebViews editor↔chat.

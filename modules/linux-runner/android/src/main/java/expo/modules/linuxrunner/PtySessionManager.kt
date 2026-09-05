@@ -65,8 +65,12 @@ class PtySession(
 
     fun write(data: String) {
         try {
-            val converted = data.replace("\r\n", "\n").replace("\r", "\n")
-            val bytes = converted.toByteArray(Charsets.UTF_8)
+            // Write bytes verbatim: CR must reach the pty intact. Canonical-
+            // mode shells accept CR (ICRNL) and LF alike, but raw-mode TUIs
+            // (opencode, vim, htop) bind submit to CR and read LF as Ctrl+J /
+            // "insert newline" — normalizing CR→LF here made Enter unusable
+            // in every fullscreen app with no way for JS to compensate.
+            val bytes = data.toByteArray(Charsets.UTF_8)
             PtyNative.ptyWrite(handle, bytes, 0, bytes.size)
         } catch (e: Exception) {
             Log.e("PtySession", "Error writing to session $sessionId", e)

@@ -29,7 +29,6 @@ interface EditorViewProps {
   onExitProject?: () => void;
   onToggleSidebar?: () => void;
   onRunFile?: (content: string, fileName: string) => void;
-  onAskAiAboutFile?: (content: string, fileName: string) => void;
 }
 
 const LINE_HEIGHT = 20;
@@ -46,7 +45,6 @@ export function EditorView({
   onExitProject,
   onToggleSidebar,
   onRunFile,
-  onAskAiAboutFile,
 }: EditorViewProps) {
   const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
@@ -240,7 +238,6 @@ export function EditorView({
         }}
         onFormatCode={handleFormatCode}
         onRunFile={onRunFile ? () => onRunFile(content, fileName) : undefined}
-        onAskAi={onAskAiAboutFile ? () => onAskAiAboutFile(content, fileName) : undefined}
         onExitProject={onExitProject}
         onToggleSidebar={onToggleSidebar}
         errorCount={assists.errorCount}

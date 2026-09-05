@@ -76,10 +76,12 @@ export function ProjectInspectorModal({
               <MaterialCommunityIcons name="git" size={16} color={theme.accent} />
               <Text style={[styles.detailText, { color: theme.textPrimary }]}>Branch: {project.branch}</Text>
             </View>
-            <View style={styles.detailRow}>
-              <Ionicons name="document-text-outline" size={16} color={theme.accent} />
-              <Text style={[styles.detailText, { color: theme.textPrimary }]}>{project.template} Project</Text>
-            </View>
+            {project.template ? (
+              <View style={styles.detailRow}>
+                <Ionicons name="document-text-outline" size={16} color={theme.accent} />
+                <Text style={[styles.detailText, { color: theme.textPrimary }]}>{project.template} Project</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.actionButtons}>

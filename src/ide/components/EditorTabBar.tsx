@@ -10,7 +10,6 @@ interface EditorTabBarProps {
   onDoneEdit: () => void;
   onFormatCode: () => void;
   onRunFile?: () => void;
-  onAskAi?: () => void;
   onExitProject?: () => void;
   onToggleSidebar?: () => void;
   errorCount?: number;
@@ -25,7 +24,6 @@ export function EditorTabBar({
   onDoneEdit,
   onFormatCode,
   onRunFile,
-  onAskAi,
   onExitProject,
   onToggleSidebar,
   errorCount = 0,
@@ -111,11 +109,6 @@ export function EditorTabBar({
             <Ionicons name="play" size={16} color={theme.accentGreen} />
           </TouchableOpacity>
         )}
-        {onAskAi && !collapseActions && (
-          <TouchableOpacity style={styles.actionIconBtn} onPress={onAskAi}>
-            <Ionicons name="sparkles" size={16} color={theme.accent} />
-          </TouchableOpacity>
-        )}
         {onExitProject && (
           <TouchableOpacity onPress={() => setShowDropdown(true)} style={styles.actionIconBtn}>
             <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
@@ -142,18 +135,6 @@ export function EditorTabBar({
               <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} style={{ marginRight: 8 }} />
               <Text style={[styles.dropdownItemText, { color: theme.accentGold }]}>Format Code (Prettier)</Text>
             </TouchableOpacity>
-            {collapseActions && onAskAi && (
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setShowDropdown(false);
-                  onAskAi();
-                }}
-              >
-                <Ionicons name="sparkles" size={16} color={theme.accent} style={{ marginRight: 8 }} />
-                <Text style={[styles.dropdownItemText, { color: theme.accent }]}>Ask AI About File</Text>
-              </TouchableOpacity>
-            )}
             <TouchableOpacity
               style={styles.dropdownItem}
               onPress={() => {
