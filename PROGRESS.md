@@ -4,6 +4,24 @@
 - **Current Phase:** Landscape GitHub Desktop Optimized & Verified
 - **Last Updated:** September 5, 2026
 
+### [2026-09-05] - Git IDE AI Commit Summary Generation (User API Key)
+- **Feature:** ✨ button in the commit box generates a GitHub-style summary + description from the working directory diffs, using the user's own Gemini key + selected model from Settings (`loadApiKey()` / `loadSelectedModel()`).
+- **Files:**
+  - `gitCommitSummary.ts` (new, 119 lines): Caps at 15 files / 12k chars, prompts for imperative ≤72-char summary + bullets, raw-JSON response with tolerant parsing. Readable errors (missing key → points to Settings).
+  - `GitChangesList.tsx` (388 lines): Sparkles button with spinner; fills Summary, fills Description only if non-empty; failures shown via Alert.
+  - `GitHubDesktopView.tsx` (464 lines): Passes `workspaceId` through.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - Git IDE Portrait Commit Inputs Keyboard Visibility Fix
+- **Problem:** In portrait mode, tapping Summary/Description hid the text under the keyboard — user could not see what they were typing.
+- **Final fix (v4 — live keyboard-height padding):** Plain `flex: 1` hid the box because edge-to-edge (Expo 52+, RN 0.81) disables window resize — flex alone can't lift anything, which is why the box only "moved a bit" (bottom-bar hide). Now pads the container by the live keyboard height, same proven pattern as `AstraChatScreen`. Tracks `keyboardDidShow` + `keyboardDidChangeFrame` so SwiftKey's growing suggestion/strip rows stay accurate (stale one-shot height caused the earlier gap); file list stays `flex: 1` so the box pins exactly above the keyboard. No list collapsing.
+- **Delay fix (v5 — instant pre-lift on focus):** `keyboardDidShow` fires only after the slide-up animation, so the box lagged behind the keyboard. Now `onFocus` instantly pads using the last measured height (300dp fallback on first open); live events correct it within milliseconds.
+- **Lag fix (v6 — memoize 179 rows):** Every keyboard-height update re-rendered/reconciled all file rows (`GitFileItem` unmemoized + inline closures), costing hundreds of ms per update. Now `GitFileItem` is `React.memo` with stable `onSelectFile`/`onToggleStageFile` refs, `renderItem`/`keyExtractor` are `useCallback`, and height updates bail when unchanged.
+- **Files:**
+  - `GitChangesList.tsx` (334 lines): `keyboardHeight` state, 3 listeners, portrait-only `paddingBottom`.
+  - `GitChangesList.styles.ts` (184 lines): Extracted styles; `fileListCollapsed` removed.
+- **Rule Compliance (`agent.md`):** Both files `<500` lines, theme tokens only (`useTheme()`), no hardcoded colors. `npx tsc --noEmit` verified with 0 errors.
+
 ### [2026-09-05] - GitHub Dual Authentication: Fine-Grained PATs & SSH Keys (Ed25519)
 - **Feature:** Added native support for both modern GitHub Fine-Grained Personal Access Tokens (repository-scoped, non-classic) and ed25519 SSH Keys.
 - **Components & Services:**

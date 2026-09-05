@@ -8,16 +8,16 @@ interface GitFileItemProps {
   file: GitFileStatus;
   isSelected: boolean;
   isLandscape: boolean;
-  onSelect: () => void;
-  onToggleStage: () => void;
+  onSelectFile: (file: GitFileStatus) => void;
+  onToggleStageFile: (file: GitFileStatus) => void;
 }
 
-export function GitFileItem({
+export const GitFileItem = React.memo(function GitFileItem({
   file,
   isSelected,
   isLandscape,
-  onSelect,
-  onToggleStage,
+  onSelectFile,
+  onToggleStageFile,
 }: GitFileItemProps) {
   const { theme } = useTheme();
 
@@ -48,12 +48,12 @@ export function GitFileItem({
         { borderBottomColor: theme.border },
         isSelected && { backgroundColor: `${theme.accent}18` },
       ]}
-      onPress={onSelect}
+      onPress={() => onSelectFile(file)}
       activeOpacity={0.7}
     >
       <TouchableOpacity
         style={styles.checkboxTouch}
-        onPress={onToggleStage}
+        onPress={() => onToggleStageFile(file)}
       >
         <Ionicons
           name={file.staged ? "checkbox" : "square-outline"}
@@ -105,7 +105,7 @@ export function GitFileItem({
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   fileRow: {

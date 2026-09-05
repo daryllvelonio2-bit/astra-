@@ -341,6 +341,7 @@ export function GitHubDesktopView({
             {activeTab === "changes" ? (
               <GitChangesList
                 files={files}
+                workspaceId={workspaceId}
                 selectedFile={selectedFile}
                 currentBranch={status?.currentBranch || "main"}
                 ahead={status?.ahead || 0}

@@ -1,21 +1,26 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   FlatList,
-  StyleSheet,
   ActivityIndicator,
+  Alert,
+  Keyboard,
+  Platform,
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
 import { GitFileStatus } from "./types";
 import { GitFileItem } from "./GitFileItem";
+import { gitChangesListStyles as styles } from "./GitChangesList.styles";
+import { generateCommitSummary } from "../../services/gitCommitSummary";
 
 interface GitChangesListProps {
   files: GitFileStatus[];
+  workspaceId?: string;
   selectedFile: GitFileStatus | null;
   currentBranch: string;
   ahead?: number;
@@ -30,6 +35,7 @@ interface GitChangesListProps {
 
 export function GitChangesList({
   files,
+  workspaceId,
   selectedFile,
   currentBranch,
   ahead = 0,
@@ -46,6 +52,88 @@ export function GitChangesList({
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [showDescriptionInLandscape, setShowDescriptionInLandscape] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [descHeight, setDescHeight] = useState(48);
+  const descriptionRef = useRef<TextInput>(null);
+  const fileListRef = useRef<FlatList>(null);
+
+  // Edge-to-edge (Expo 52+) disables window resize, so flex alone can't lift
+  // the commit box — pad it by the live keyboard height instead (same proven
+  // pattern as AstraChatScreen). DidChangeFrame keeps SwiftKey's growing
+  // suggestion/strip rows accurate; the file list stays flex:1 so the box is
+  // pinned to the bottom of the padded container, exactly above the keyboard.
+  // To avoid waiting for keyboardDidShow (fires after the slide-up animation),
+  // pre-lift instantly on focus using the last measured height.
+  const lastKeyboardHeight = useRef(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const setH = (e: any) => {
+      const h = e?.endCoordinates?.height ?? 0;
+      if (h > 0) lastKeyboardHeight.current = h;
+      setKeyboardHeight((prev) => (prev === h ? prev : h));
+    };
+    const showSub = Keyboard.addListener(showEvt, setH);
+    const frameSub = Keyboard.addListener("keyboardDidChangeFrame", setH);
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      setKeyboardHeight(0);
+      setInputFocused(false);
+    });
+    return () => {
+      showSub.remove();
+      frameSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleGenerateSummary = async () => {
+    if (generating || files.length === 0) return;
+    setGenerating(true);
+    try {
+      const result = await generateCommitSummary(workspaceId, files);
+      setSummary(result.summary);
+      if (result.description) setDescription(result.description);
+    } catch (e: any) {
+      Alert.alert("Generate Summary", e?.message || "Could not generate a summary.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleInputFocus = () => {
+    setInputFocused(true);
+    if (!isLandscape && keyboardHeight === 0) {
+      setKeyboardHeight(lastKeyboardHeight.current > 0 ? lastKeyboardHeight.current : 300);
+    }
+  };
+
+  // Stable row rendering: with 179+ files, any parent re-render (e.g. every
+  // keyboard frame event) must not reconcile all rows, or the lift lags.
+  // Memoized GitFileItem + stable callbacks keep row updates to prop changes.
+  const selectedPath = selectedFile?.path;
+  const handleSelectItem = useCallback(
+    (file: GitFileStatus) => onSelectFile(file),
+    [onSelectFile]
+  );
+  const handleToggleItem = useCallback(
+    (file: GitFileStatus) => onToggleStageFile(file),
+    [onToggleStageFile]
+  );
+  const renderFileItem = useCallback(
+    ({ item }: { item: GitFileStatus }) => (
+      <GitFileItem
+        file={item}
+        isSelected={selectedPath === item.path}
+        isLandscape={isLandscape}
+        onSelectFile={handleSelectItem}
+        onToggleStageFile={handleToggleItem}
+      />
+    ),
+    [selectedPath, isLandscape, handleSelectItem, handleToggleItem]
+  );
+  const fileKeyExtractor = useCallback((item: GitFileStatus) => item.path, []);
 
   const stagedCount = files.filter((f) => f.staged).length;
   const allStaged = files.length > 0 && stagedCount === files.length;
@@ -74,7 +162,7 @@ export function GitChangesList({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, !isLandscape && keyboardHeight > 0 && { paddingBottom: keyboardHeight }]}>
       {/* Changes Header & Select All */}
       <View
         style={[
@@ -107,19 +195,14 @@ export function GitChangesList({
 
       {/* Changed Files List (Working Directory) */}
       <FlatList
+        ref={fileListRef}
         data={files}
-        keyExtractor={(item) => item.path}
+        keyExtractor={fileKeyExtractor}
         style={styles.fileList}
         contentContainerStyle={files.length === 0 ? styles.emptyContainer : styles.fileListContent}
-        renderItem={({ item }) => (
-          <GitFileItem
-            file={item}
-            isSelected={selectedFile?.path === item.path}
-            isLandscape={isLandscape}
-            onSelect={() => onSelectFile(item)}
-            onToggleStage={() => onToggleStageFile(item)}
-          />
-        )}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+        renderItem={renderFileItem}
         ListEmptyComponent={
           <View style={styles.emptyView}>
             {ahead > 0 ? (
@@ -167,6 +250,23 @@ export function GitChangesList({
       >
         {files.length > 0 && (
           <View style={styles.summaryRow}>
+            <TouchableOpacity
+              style={[
+                styles.descToggleBtn,
+                isLandscape && styles.descToggleBtnLandscape,
+                { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+              ]}
+              onPress={handleGenerateSummary}
+              disabled={generating}
+              activeOpacity={0.7}
+              accessibilityLabel="Generate commit summary with AI"
+            >
+              {generating ? (
+                <ActivityIndicator size="small" color={theme.accent} />
+              ) : (
+                <Ionicons name="sparkles" size={14} color={theme.accent} />
+              )}
+            </TouchableOpacity>
             <TextInput
               style={[
                 styles.summaryInput,
@@ -178,6 +278,10 @@ export function GitChangesList({
               value={summary}
               onChangeText={setSummary}
               returnKeyType="next"
+              blurOnSubmit={false}
+              onFocus={handleInputFocus}
+              onBlur={() => setInputFocused(false)}
+              onSubmitEditing={() => descriptionRef.current?.focus()}
             />
             {isLandscape && (
               <TouchableOpacity
@@ -202,16 +306,28 @@ export function GitChangesList({
 
         {files.length > 0 && (!isLandscape || showDescriptionInLandscape) && (
           <TextInput
+            ref={descriptionRef}
             style={[
               styles.descriptionInput,
               isLandscape && styles.descriptionInputLandscape,
-              { backgroundColor: theme.bgTertiary, borderColor: theme.border, color: theme.textPrimary },
+              !isLandscape && { height: Math.min(Math.max(descHeight, 48), 140) },
+              inputFocused && !isLandscape && { borderColor: theme.accent },
+              { backgroundColor: theme.bgTertiary, borderColor: inputFocused && !isLandscape ? theme.accent : theme.border, color: theme.textPrimary },
             ]}
             placeholder="Description (optional)"
             placeholderTextColor={theme.textMuted}
             value={description}
             onChangeText={setDescription}
             multiline
+            scrollEnabled
+            textAlignVertical="top"
+            returnKeyType="default"
+            blurOnSubmit={false}
+            onFocus={handleInputFocus}
+            onBlur={() => setInputFocused(false)}
+            onContentSizeChange={(e) => {
+              if (!isLandscape) setDescHeight(e.nativeEvent.contentSize.height);
+            }}
             numberOfLines={isLandscape ? 1 : 2}
           />
         )}
@@ -270,186 +386,3 @@ export function GitChangesList({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  subHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  subHeaderLandscape: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  selectAllRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  countText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  countTextLandscape: {
-    fontSize: 11,
-  },
-  fileList: {
-    flex: 1,
-  },
-  fileListContent: {
-    paddingBottom: 4,
-  },
-  emptyContainer: {
-    flexGrow: 1,
-  },
-  emptyView: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    gap: 6,
-  },
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  emptyTitleLandscape: {
-    fontSize: 12.5,
-  },
-  emptySubtitle: {
-    fontSize: 12,
-    textAlign: "center",
-  },
-  emptySubtitleLandscape: {
-    fontSize: 10.5,
-  },
-  pushNowBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 6,
-    marginTop: 8,
-  },
-  pushNowBtnText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  commitBox: {
-    padding: 10,
-    borderTopWidth: 1,
-    gap: 8,
-    flexShrink: 0,
-  },
-  commitBoxLandscape: {
-    padding: 6,
-    gap: 5,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-  },
-  summaryInput: {
-    flex: 1,
-    height: 36,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 0,
-    textAlignVertical: "center",
-    fontSize: 12,
-  },
-  summaryInputLandscape: {
-    height: 30,
-    fontSize: 10.5,
-    paddingHorizontal: 6,
-    paddingVertical: 0,
-    textAlignVertical: "center",
-    borderRadius: 4,
-  },
-  descToggleBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 4,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  descToggleBtnLandscape: {
-    width: 30,
-    height: 30,
-  },
-  descriptionInput: {
-    height: 48,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 11.5,
-    textAlignVertical: "top",
-  },
-  descriptionInputLandscape: {
-    height: 30,
-    fontSize: 10.5,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  commitBtnRow: {
-    flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-  },
-  commitBtn: {
-    flex: 1,
-    height: 36,
-    borderRadius: 6,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-  },
-  commitBtnLandscape: {
-    height: 30,
-    borderRadius: 4,
-    paddingHorizontal: 4,
-  },
-  commitBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
-  },
-  commitBtnTextLandscape: {
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  commitPushBtn: {
-    height: 36,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  commitPushBtnLandscape: {
-    height: 30,
-    width: 32,
-    paddingHorizontal: 0,
-    borderRadius: 4,
-  },
-  commitPushText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-  },
-});
