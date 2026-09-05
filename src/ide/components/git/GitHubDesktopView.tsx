@@ -47,7 +47,6 @@ import { GitCredentialsModal } from "./GitCredentialsModal";
 import { GitRemoteModal } from "./GitRemoteModal";
 import { useCommitAvatars } from "./useCommitAvatars";
 import { isGitAuthError } from "../../services/gitCloneService";
-
 interface GitHubDesktopViewProps {
   workspaceId?: string;
   projectName?: string;
@@ -85,10 +84,10 @@ export function GitHubDesktopView({
   const [showRemoteModal, setShowRemoteModal] = useState(false);
   const [portraitShowDetail, setPortraitShowDetail] = useState(false);
 
-  // Hoisted: survives History <-> Changes switches + detail drill-in, so
-  // profiles render instantly from disk instead of refetching every open.
+  // Avatar store lives here (stays mounted) so History never refetches.
   const { avatars, brokenAvatars, markBroken } = useCommitAvatars(remoteUrl);
-
+  const setStableRemoteUrl = (url: string | null) =>
+    setRemoteUrl((prev) => (prev === (url ?? null) ? prev : (url ?? null)));
   const refreshGitState = useCallback(async () => {
     if (!visible) return;
     setLoadingStatus(true);
@@ -98,9 +97,7 @@ export function GitHubDesktopView({
     if (newStatus.isRepo) {
       getGitCommitHistory(workspaceId).then(setCommits);
       getGitBranches(workspaceId).then(setBranches);
-      getGitRemoteUrl(workspaceId).then((url) =>
-        setRemoteUrl((prev) => (prev === (url ?? null) ? prev : (url ?? null)))
-      );
+      getGitRemoteUrl(workspaceId).then(setStableRemoteUrl);
     }
   }, [workspaceId, visible]);
 
@@ -220,8 +217,7 @@ export function GitHubDesktopView({
   const handleSaveRemote = async (url: string): Promise<{ success: boolean; error?: string }> => {
     const res = await setGitRemoteUrl(workspaceId, url);
     if (res.success) {
-      const next = url.trim() ? url.trim() : null;
-      setRemoteUrl((prev) => (prev === next ? prev : next));
+      setStableRemoteUrl(url.trim() ? url.trim() : null);
       refreshGitState();
     }
     return res;

@@ -33,6 +33,10 @@ export function useCommitAvatars(remoteUrl?: string | null) {
   const [avatars, setAvatars] = useState<CommitAvatarMap>(EMPTY_MAP);
   const [brokenAvatars, setBrokenAvatars] = useState<Record<string, boolean>>({});
   const liveKey = useRef<string | null>(null);
+  const avatarsRef = useRef(avatars);
+  avatarsRef.current = avatars;
+  const brokenRef = useRef(brokenAvatars);
+  brokenRef.current = brokenAvatars;
 
   useEffect(() => {
     const ref = parseGitHubRepo(remoteUrl);
@@ -77,20 +81,15 @@ export function useCommitAvatars(remoteUrl?: string | null) {
 
   const markBroken = useCallback(
     (hash: string) => {
-      if (!hash) return;
+      if (!hash || brokenRef.current[hash]) return;
       const ref = parseGitHubRepo(remoteUrl);
-      setBrokenAvatars((prev) => {
-        if (prev[hash]) return prev;
-        const next = { ...prev, [hash]: true };
-        // Persist negative (Gravatar 404) so reopen skips the failing Image.
-        if (ref) {
-          setAvatars((cur) => {
-            savePersistedAvatars(ref.owner, ref.repo, cur, { [hash]: true }).catch(() => {});
-            return cur;
-          });
-        }
-        return next;
-      });
+      setBrokenAvatars((prev) => (prev[hash] ? prev : { ...prev, [hash]: true }));
+      // Persist negative (Gravatar 404) so reopen skips the failing Image.
+      if (ref) {
+        savePersistedAvatars(ref.owner, ref.repo, avatarsRef.current, {
+          [hash]: true,
+        }).catch(() => {});
+      }
     },
     [remoteUrl]
   );
