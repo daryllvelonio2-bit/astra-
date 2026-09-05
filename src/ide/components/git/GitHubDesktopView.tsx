@@ -260,8 +260,19 @@ export function GitHubDesktopView({
 
   const handleSwitchBranch = async (branchName: string) => {
     const res = await switchGitBranch(workspaceId, branchName);
-    if (res.success) refreshGitState();
-    else Alert.alert("Error", res.error || "Could not switch branch.");
+    if (!res.success) {
+      Alert.alert("Error", res.error || "Could not switch branch.");
+      return;
+    }
+    // Show local state instantly, then sync in the background (only when a
+    // remote exists — never pop a modal uninvited) so behind/ahead counts
+    // update on their own without tapping sync. Failures stay silent.
+    refreshGitState();
+    if (!remoteUrl) return;
+    try {
+      await fetchGitRemote(workspaceId);
+    } catch (_) {}
+    refreshGitState();
   };
 
   const handleCreateBranch = async (branchName: string) => {
@@ -384,6 +395,7 @@ export function GitHubDesktopView({
               <GitHistoryList
                 commits={commits}
                 selectedCommit={selectedCommit}
+                remoteUrl={remoteUrl}
                 onSelectCommit={loadCommitDiff}
               />
             )}

@@ -8,13 +8,23 @@
 - **Feature:** New `docs/` folder documenting the whole project: index + overview (`README.md`), setup/build/run (`getting-started.md`), layers/process model/storage map/data flows (`architecture.md`), IDE (`ide.md`: workspaces, picker, editor, terminal, browser, Git, desktop, nav, settings, themes), AI engine (`ai-engine.md`: agent core, Astra CLI bridge, 3-tier runner, chat UI, voice, tasks), native bridges + guest provisioning (`native-modules.md`), `config.json`/models/paths/permissions (`configuration.md`), repo rules (`conventions.md`), and failure playbook (`troubleshooting.md`).
 - **Rule Compliance (`agent.md`):** Docs-only, no source changes. Verified file references against source (`TerminalView` workspace key, `WINDOW_SIZE=100`, git component list).
 
+### [2026-09-05] - Git Header Layout + Profile Avatars in History
+- **Fix:** Portrait header overflowed (repo + branch + Fetch pill + 3 icons): branch button now takes flexible space with proper ellipsis (`flex: 1`, truncated names no longer crush neighbors), sync pill and icon cluster pinned (`flexShrink: 0`).
+- **Feature:** History rows show the author's real GitHub profile picture instead of the initial letter: public commits API matched by SHA *and* author email (survives rebases), then Gravatar fallback for emails GitHub can't map to an account (`d=404` fails cleanly to initials). Bundled a compact MD5 verified against system crypto on 7 vectors (avoids a new native dep).
+- **Files:**
+  - `GitHeaderBar.tsx` (301 lines): flex/shrink rules only, no visual redesign.
+  - `gitAvatarService.ts` (175 lines): remote parsing (HTTPS/SSH/shorthand) + cached `{ bySha, byEmail }` fetch + `gravatarUrl()`, never throws. Authed with the user's saved git token (`getGitHubApiToken` reads `~/.git-credentials`) so private repos resolve; failures never cached.
+  - `GitHistoryList.tsx` (380 lines): `remoteUrl` prop, one fetch per repo, SHA → email → Gravatar → initials chain with per-avatar error fallback.
+  - `GitHubDesktopView.tsx` (494 lines): passes `remoteUrl` through.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
 ### [2026-09-05] - Detached-HEAD Bug: Bogus "N Commits to Push"
 - **Problem:** Tapping a remote branch (`origin/...`) in Switch Branch ran `git checkout "origin/..."` verbatim → detached HEAD. Status fallback then counted `origin/HEAD..HEAD` as "ahead", so e.g. "7 commits to push" on a clean tree; push buttons were dead ends. The `origin/HEAD -> origin/main` symlink was also listed as a branch.
 - **Fix:**
   - `gitService.ts` (481 lines): `switchGitBranch` strips `origin/` so git resolves/creates the local tracking branch; `getGitStatus` detects `## HEAD` explicitly → `detached: true`, zero counts, skips fallback; fallback leg reporting the whole history as pushable removed (only same-name-remote counts remain); branch list filters the `origin/HEAD` symlink and the `(HEAD detached…)` pseudo-entry.
   - `types.ts` (56 lines): `GitRepoStatus.detached`.
   - `GitChangesList.tsx` (400 lines): detached empty-view copy ("switch to a local branch"), push CTAs hidden when detached.
-  - `GitHubDesktopView.tsx` (482 lines): passes `detached` through; push on detached explains instead of failing.
+  - `GitHubDesktopView.tsx` (493 lines): passes `detached` through; push on detached explains instead of failing; branch switch auto-syncs in background (no remote → silent local refresh, failures silent) so behind/ahead update without tapping sync.
 - **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
 
 ### [2026-09-05] - Clone GitHub Repo + Pull Auth Recovery

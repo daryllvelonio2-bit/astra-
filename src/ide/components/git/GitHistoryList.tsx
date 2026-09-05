@@ -1,23 +1,58 @@
-import React from "react";
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Image } from "react-native";
 import { Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
 import { GitCommit } from "./types";
+import { parseGitHubRepo, fetchCommitAvatars, getGitHubApiToken, gravatarUrl, CommitAvatarMap } from "../../services/gitAvatarService";
 
 interface GitHistoryListProps {
   commits: GitCommit[];
   selectedCommit: GitCommit | null;
+  remoteUrl?: string | null;
   onSelectCommit: (commit: GitCommit) => void;
 }
 
 export function GitHistoryList({
   commits,
   selectedCommit,
+  remoteUrl,
   onSelectCommit,
 }: GitHistoryListProps) {
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
+  const [avatars, setAvatars] = useState<CommitAvatarMap>({ bySha: {}, byEmail: {} });
+  const [brokenAvatars, setBrokenAvatars] = useState<Record<string, boolean>>({});
+
+  // Load GitHub profile pictures once per repo (authed when the user saved
+  // a token, so private repos resolve too); initials remain the fallback.
+  useEffect(() => {
+    let cancelled = false;
+    const ref = parseGitHubRepo(remoteUrl);
+    if (!ref) return;
+    getGitHubApiToken()
+      .catch(() => null)
+      .then((token) => fetchCommitAvatars(ref.owner, ref.repo, token || undefined))
+      .then((map) => {
+        if (!cancelled && (Object.keys(map.bySha).length > 0 || Object.keys(map.byEmail).length > 0)) {
+          setAvatars(map);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [remoteUrl]);
+
+  // Resolution order: exact commit SHA → author email (survives rebases) →
+  // Gravatar for that email (d=404 fails cleanly) → initial letter.
+  const avatarUriFor = (item: GitCommit): string | null => {
+    const email = (item.authorEmail || "").trim().toLowerCase();
+    return (
+      avatars.bySha[item.hash] ||
+      (email ? avatars.byEmail[email] : "") ||
+      gravatarUrl(email)
+    );
+  };
 
   const getInitials = (name: string) => {
     const parts = name.trim().split(" ");
@@ -46,6 +81,7 @@ export function GitHistoryList({
       renderItem={({ item }) => {
         const isSelected = selectedCommit?.hash === item.hash;
         const statusBadge = getStatusDetails(item.status);
+        const avatarUri = !brokenAvatars[item.hash] ? avatarUriFor(item) : null;
         return (
           <TouchableOpacity
             style={[
@@ -64,15 +100,27 @@ export function GitHistoryList({
                 { backgroundColor: theme.bgTertiary, borderColor: theme.border },
               ]}
             >
-              <Text
-                style={[
-                  styles.avatarText,
-                  isLandscape && styles.avatarTextLandscape,
-                  { color: theme.textSecondary },
-                ]}
-              >
-                {getInitials(item.authorName)}
-              </Text>
+              {avatarUri ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={[styles.avatarImage, isLandscape && styles.avatarImageLandscape]}
+                  onError={() =>
+                    setBrokenAvatars((prev) =>
+                      prev[item.hash] ? prev : { ...prev, [item.hash]: true }
+                    )
+                  }
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.avatarText,
+                    isLandscape && styles.avatarTextLandscape,
+                    { color: theme.textSecondary },
+                  ]}
+                >
+                  {getInitials(item.authorName)}
+                </Text>
+              )}
             </View>
             <View style={styles.contentCol}>
               <Text
@@ -208,6 +256,16 @@ const styles = StyleSheet.create({
   },
   avatarTextLandscape: {
     fontSize: 8.5,
+  },
+  avatarImage: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  avatarImageLandscape: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   contentCol: {
     flex: 1,

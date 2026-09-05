@@ -192,6 +192,8 @@ const styles = StyleSheet.create({
   repoBox: {
     flexDirection: "row",
     alignItems: "center",
+    flexShrink: 1,
+    minWidth: 0,
     gap: 6,
     maxWidth: 130,
   },
@@ -202,6 +204,7 @@ const styles = StyleSheet.create({
   repoName: {
     fontSize: 12,
     fontWeight: "700",
+    flexShrink: 1,
   },
   repoNameLandscape: {
     fontSize: 11,
@@ -209,12 +212,15 @@ const styles = StyleSheet.create({
   branchBtn: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 64,
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
     borderWidth: 1,
-    maxWidth: 140,
+    maxWidth: 200,
   },
   branchBtnLandscape: {
     paddingHorizontal: 7,
@@ -226,6 +232,9 @@ const styles = StyleSheet.create({
   branchText: {
     fontSize: 11.5,
     fontWeight: "600",
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   branchTextLandscape: {
     fontSize: 10.5,
@@ -233,6 +242,7 @@ const styles = StyleSheet.create({
   syncBtn: {
     flexDirection: "row",
     alignItems: "center",
+    flexShrink: 0,
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -248,6 +258,7 @@ const styles = StyleSheet.create({
   syncText: {
     fontSize: 11,
     fontWeight: "600",
+    flexShrink: 0,
   },
   syncTextLandscape: {
     fontSize: 10,
@@ -277,6 +288,7 @@ const styles = StyleSheet.create({
   rightActions: {
     flexDirection: "row",
     alignItems: "center",
+    flexShrink: 0,
     marginLeft: "auto",
     gap: 6,
   },
