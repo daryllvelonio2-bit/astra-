@@ -1,8 +1,31 @@
 # Project Progress Tracker
 
 ## Status
-- **Current Phase:** Landscape GitHub Desktop Optimized & Verified
+- **Current Phase:** Project Documentation (docs/)
 - **Last Updated:** September 5, 2026
+
+### [2026-09-05] - Project Documentation (docs/)
+- **Feature:** New `docs/` folder documenting the whole project: index + overview (`README.md`), setup/build/run (`getting-started.md`), layers/process model/storage map/data flows (`architecture.md`), IDE (`ide.md`: workspaces, picker, editor, terminal, browser, Git, desktop, nav, settings, themes), AI engine (`ai-engine.md`: agent core, Astra CLI bridge, 3-tier runner, chat UI, voice, tasks), native bridges + guest provisioning (`native-modules.md`), `config.json`/models/paths/permissions (`configuration.md`), repo rules (`conventions.md`), and failure playbook (`troubleshooting.md`).
+- **Rule Compliance (`agent.md`):** Docs-only, no source changes. Verified file references against source (`TerminalView` workspace key, `WINDOW_SIZE=100`, git component list).
+
+### [2026-09-05] - Detached-HEAD Bug: Bogus "N Commits to Push"
+- **Problem:** Tapping a remote branch (`origin/...`) in Switch Branch ran `git checkout "origin/..."` verbatim → detached HEAD. Status fallback then counted `origin/HEAD..HEAD` as "ahead", so e.g. "7 commits to push" on a clean tree; push buttons were dead ends. The `origin/HEAD -> origin/main` symlink was also listed as a branch.
+- **Fix:**
+  - `gitService.ts` (481 lines): `switchGitBranch` strips `origin/` so git resolves/creates the local tracking branch; `getGitStatus` detects `## HEAD` explicitly → `detached: true`, zero counts, skips fallback; fallback leg reporting the whole history as pushable removed (only same-name-remote counts remain); branch list filters the `origin/HEAD` symlink and the `(HEAD detached…)` pseudo-entry.
+  - `types.ts` (56 lines): `GitRepoStatus.detached`.
+  - `GitChangesList.tsx` (400 lines): detached empty-view copy ("switch to a local branch"), push CTAs hidden when detached.
+  - `GitHubDesktopView.tsx` (482 lines): passes `detached` through; push on detached explains instead of failing.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - Clone GitHub Repo + Pull Auth Recovery
+- **Feature:** "Clone Repo" in the Project Picker (header + empty state) clones any GitHub URL / `user/repo` shorthand over HTTPS or SSH into Workspaces (or a picked parent dir), registers it via `openExistingDirectoryAsProject()`, and opens it. Private-repo failures expand inline auth: token form (`GitTokenTab` + `configureGitCredentials`, auto-retry) or SSH key manager (`GitSshKeyTab`, copy/generate + retry). Pull/push/fetch auth failures now route to the credentials modal instead of a dead-end alert.
+- **Fix:** Terminal followed the old workspace after clone/open — native `startSession` is a no-op for a live id, so shell sessions kept the old cwd+binds (new tabs worked only because they get fresh ids). `TerminalView` is now keyed by `workspace.id` (remount on switch) and `useTerminalSession` stops all shell sessions on unmount, so terminals respawn inside the new workspace. Task tabs are untouched (owned by `runningTasksService`).
+- **Files:**
+  - `gitCloneService.ts` (125 lines): `normalizeCloneUrl`, `folderNameFromCloneUrl`, `isGitAuthError`, `cloneGitRepo` (non-interactive: `GIT_TERMINAL_PROMPT=0`, SSH BatchMode + accept-new, duplicate-folder guard; optional `onProgress` via `executeCommandStream` + `cancelClone()`).
+  - `CloneRepoModal.tsx` (457 lines) + `CloneRepoModal.styles.ts` (166 lines): bottom-sheet with keyboard pre-lift, HTTPS/SSH toggle, folder + destination pickers. Live progress bar + last git output line while cloning; Cancel kills the in-flight clone.
+  - `ProjectPicker.tsx` (357 lines): Clone buttons + `handleClonedRepo`.
+  - `GitHubDesktopView.tsx` (478 lines): `showSyncResult` auth routing for push/sync.
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
 
 ### [2026-09-05] - Git IDE AI Commit Summary Generation (User API Key)
 - **Feature:** ✨ button in the commit box generates a GitHub-style summary + description from the working directory diffs, using the user's own Gemini key + selected model from Settings (`loadApiKey()` / `loadSelectedModel()`).

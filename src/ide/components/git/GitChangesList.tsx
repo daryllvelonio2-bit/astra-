@@ -24,6 +24,7 @@ interface GitChangesListProps {
   selectedFile: GitFileStatus | null;
   currentBranch: string;
   ahead?: number;
+  detached?: boolean;
   committing: boolean;
   onSelectFile: (file: GitFileStatus) => void;
   onToggleStageFile: (file: GitFileStatus) => void;
@@ -39,6 +40,7 @@ export function GitChangesList({
   selectedFile,
   currentBranch,
   ahead = 0,
+  detached = false,
   committing,
   onSelectFile,
   onToggleStageFile,
@@ -205,7 +207,17 @@ export function GitChangesList({
         renderItem={renderFileItem}
         ListEmptyComponent={
           <View style={styles.emptyView}>
-            {ahead > 0 ? (
+            {detached ? (
+              <>
+                <Octicons name="git-branch" size={isLandscape ? 22 : 28} color={theme.accentGold} />
+                <Text style={[styles.emptyTitle, isLandscape && styles.emptyTitleLandscape, { color: theme.textPrimary }]}>
+                  Detached HEAD
+                </Text>
+                <Text style={[styles.emptySubtitle, isLandscape && styles.emptySubtitleLandscape, { color: theme.textSecondary }]}>
+                  You're viewing a remote snapshot, not a branch. Switch to a local branch to commit or push.
+                </Text>
+              </>
+            ) : ahead > 0 ? (
               <>
                 <Octicons name="arrow-up" size={isLandscape ? 22 : 28} color={theme.accent} />
                 <Text style={[styles.emptyTitle, isLandscape && styles.emptyTitleLandscape, { color: theme.textPrimary }]}>
@@ -214,7 +226,7 @@ export function GitChangesList({
                 <Text style={[styles.emptySubtitle, isLandscape && styles.emptySubtitleLandscape, { color: theme.textSecondary }]}>
                   Your local commits are ready to push to GitHub.
                 </Text>
-                {onPush && (
+                {onPush && !detached && (
                   <TouchableOpacity
                     style={[styles.pushNowBtn, { backgroundColor: theme.accent }]}
                     onPress={onPush}
@@ -333,7 +345,7 @@ export function GitChangesList({
         )}
 
         <View style={styles.commitBtnRow}>
-          {files.length === 0 && ahead > 0 ? (
+          {files.length === 0 && ahead > 0 && !detached ? (
             onPush && (
               <TouchableOpacity
                 style={[styles.commitBtn, isLandscape && styles.commitBtnLandscape, { backgroundColor: theme.accent, borderColor: theme.accent, flexDirection: "row", gap: 6 }]}

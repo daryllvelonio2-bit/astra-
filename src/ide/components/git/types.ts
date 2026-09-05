@@ -43,6 +43,7 @@ export interface GitRepoStatus {
   isRepo: boolean;
   currentBranch: string;
   upstreamBranch?: string;
+  detached: boolean;
   ahead: number;
   behind: number;
   files: GitFileStatus[];

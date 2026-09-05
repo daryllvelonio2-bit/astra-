@@ -34,6 +34,7 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
     return {
       isRepo: false,
       currentBranch: "none",
+      detached: false,
       ahead: 0,
       behind: 0,
       files: [],
@@ -46,6 +47,7 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
 
     let currentBranch = "main";
     let upstreamBranch: string | undefined;
+    let detached = false;
     let ahead = 0;
     let behind = 0;
     const files: GitFileStatus[] = [];
@@ -56,6 +58,11 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
         currentBranch = header.replace("No commits yet on ", "").trim();
       } else if (header.includes("Initial commit on ")) {
         currentBranch = header.replace("Initial commit on ", "").trim();
+      } else if (header === "HEAD" || header.startsWith("HEAD ")) {
+        // Detached HEAD (e.g. checked out a remote ref directly): there is no
+        // branch to commit to or push from, so report no ahead/behind.
+        detached = true;
+        currentBranch = "HEAD";
       } else {
         const match = header.match(/^([^\s.]+)(?:\.\.\.([^\s]+))?(?:\s+\[ahead\s+(\d+)(?:,\s*behind\s+(\d+))?\]|\s+\[behind\s+(\d+)\])?/);
         if (match) {
@@ -67,9 +74,13 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
       }
     }
 
-    if (!upstreamBranch) {
+    // No upstream in the header: only count ahead of a same-name remote
+    // branch (local branch simply not tracking yet). Never fall back to
+    // counting all of HEAD — with nowhere to push, that number is fiction.
+    // Detached HEAD reports no counts at all.
+    if (!upstreamBranch && !detached) {
       try {
-        const countCmd = `git rev-parse --verify "origin/${currentBranch}" >/dev/null 2>&1 && git rev-list --count "origin/${currentBranch}..HEAD" || (git rev-parse --verify HEAD >/dev/null 2>&1 && git rev-list --count HEAD || echo 0)`;
+        const countCmd = `git rev-parse --verify "origin/${currentBranch}" >/dev/null 2>&1 && git rev-list --count "origin/${currentBranch}..HEAD" || echo 0`;
         const countRes = await executeCommand(countCmd, workspaceId);
         const parsed = parseInt((countRes.stdout || "").trim(), 10);
         if (!isNaN(parsed) && parsed > 0) ahead = parsed;
@@ -120,6 +131,7 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
       isRepo: true,
       currentBranch,
       upstreamBranch,
+      detached,
       ahead,
       behind,
       files,
@@ -128,6 +140,7 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
     return {
       isRepo: true,
       currentBranch: "main",
+      detached: false,
       ahead: 0,
       behind: 0,
       files: [],
@@ -310,13 +323,18 @@ export async function getGitBranches(workspaceId?: string): Promise<GitBranch[]>
   try {
     const res = await executeCommand("git branch -a", workspaceId);
     if (res.exitCode !== 0) return [];
-    return (res.stdout || "").split(/\r?\n/).filter(Boolean).map((line) => {
+    return (res.stdout || "").split(/\r?\n/).filter(Boolean).flatMap((line) => {
       const trimmed = line.trim();
-      return {
+      // Skip the origin/HEAD -> origin/main symlink pointer and the
+      // "(HEAD detached at ...)" pseudo-entry: neither is a real branch and
+      // checking either out would detach (or fail to attach) HEAD.
+      if (/^remotes\/origin\/HEAD\b/.test(trimmed) || trimmed.includes("->")) return [];
+      if (/^\(\s*HEAD detached/i.test(trimmed.replace(/^\*\s*/, ""))) return [];
+      return [{
         name: trimmed.replace(/^\*\s*/, "").replace(/^remotes\//, ""),
         isCurrent: line.startsWith("*"),
         isRemote: trimmed.startsWith("remotes/"),
-      };
+      }];
     });
   } catch (_) {
     return [];
@@ -328,7 +346,11 @@ export async function switchGitBranch(
   branchName: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await executeCommand(`git checkout "${branchName}"`, workspaceId);
+    // Never checkout a remote ref directly — that detaches HEAD. Strip the
+    // origin/ prefix so git resolves/creates the local tracking branch.
+    const local = branchName.replace(/^origin\//, "").trim();
+    if (!local) return { success: false, error: "Invalid branch name" };
+    const res = await executeCommand(`git checkout "${local}"`, workspaceId);
     return res.exitCode === 0 ? { success: true } : { success: false, error: res.stdout || "Branch switch failed" };
   } catch (e: any) {
     return { success: false, error: e?.message || "Branch switch failed" };

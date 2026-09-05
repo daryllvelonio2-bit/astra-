@@ -10,7 +10,6 @@ interface EditorTabBarProps {
   onDoneEdit: () => void;
   onFormatCode: () => void;
   onRunFile?: () => void;
-  onAskAi?: () => void;
   onExitProject?: () => void;
   onToggleSidebar?: () => void;
   errorCount?: number;
@@ -25,7 +24,6 @@ export function EditorTabBar({
   onDoneEdit,
   onFormatCode,
   onRunFile,
-  onAskAi,
   onExitProject,
   onToggleSidebar,
   errorCount = 0,
@@ -109,11 +107,6 @@ export function EditorTabBar({
         {onRunFile && (
           <TouchableOpacity style={styles.actionIconBtn} onPress={onRunFile}>
             <Ionicons name="play" size={16} color={theme.accentGreen} />
-          </TouchableOpacity>
-        )}
-        {onAskAi && !collapseActions && (
-          <TouchableOpacity style={styles.actionIconBtn} onPress={onAskAi}>
-            <Ionicons name="sparkles" size={16} color={theme.accent} />
           </TouchableOpacity>
         )}
         {onExitProject && (

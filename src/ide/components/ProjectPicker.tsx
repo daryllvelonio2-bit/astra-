@@ -19,6 +19,7 @@ import {
 } from '../services/workspaceService';
 import { ProjectCard, ProjectItem } from './ProjectCard';
 import { CreateProjectModal } from './CreateProjectModal';
+import { CloneRepoModal } from './CloneRepoModal';
 import { ProjectInspectorModal } from './ProjectInspectorModal';
 import { SettingsModal } from './SettingsModal';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
@@ -40,6 +41,7 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
 
   // Modals
   const [isCreateModalVisible, setCreateModalVisible] = useState(false);
+  const [isCloneModalVisible, setCloneModalVisible] = useState(false);
   const [isOpenProjectModalVisible, setOpenProjectModalVisible] = useState(false);
   const [isSettingsModalVisible, setSettingsModalVisible] = useState(false);
   const [isInspectorVisible, setInspectorVisible] = useState(false);
@@ -86,6 +88,17 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
     }
   };
 
+  const handleClonedRepo = async (directoryPath: string) => {
+    try {
+      const ws = await openExistingDirectoryAsProject(directoryPath);
+      await loadProjects();
+      onOpenWorkspace(ws.id);
+    } catch (e) {
+      Alert.alert('Error', 'Repo cloned, but it could not be opened as a workspace');
+      await loadProjects();
+    }
+  };
+
   const handleDeleteProject = async (project: ProjectItem) => {
     // Optimistic: remove from list instantly, delete files in background.
     setProjects((prev) => prev.filter((p) => p.id !== project.id));
@@ -119,6 +132,14 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
           >
             <Ionicons name="folder-open-outline" size={15} color={theme.accentGold} />
             <Text style={[styles.headerBtnText, { color: theme.accentGold }]}>Open Project</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerBtn, { backgroundColor: `${theme.accent}18`, borderColor: `${theme.accent}40` }]}
+            onPress={() => setCloneModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="cloud-download-outline" size={15} color={theme.accent} />
+            <Text style={[styles.headerBtnText, { color: theme.accent }]}>Clone Repo</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]} onPress={() => setCreateModalVisible(true)}>
             <Ionicons name="add" size={24} color={theme.accent} />
@@ -183,6 +204,13 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
                 <Ionicons name="folder-open-outline" size={16} color={theme.accentGold} />
                 <Text style={[styles.createBtnText, { color: theme.textPrimary }]}>Open Existing</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createBtn, { backgroundColor: `${theme.accent}18`, borderColor: `${theme.accent}40`, borderWidth: 1 }]}
+                onPress={() => setCloneModalVisible(true)}
+              >
+                <Ionicons name="cloud-download-outline" size={16} color={theme.accent} />
+                <Text style={[styles.createBtnText, { color: theme.accent }]}>Clone Repo</Text>
+              </TouchableOpacity>
             </View>
           </View>
         }
@@ -193,6 +221,12 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
         visible={isCreateModalVisible}
         onClose={() => setCreateModalVisible(false)}
         onCreateProject={handleCreateProject}
+      />
+
+      <CloneRepoModal
+        visible={isCloneModalVisible}
+        onClose={() => setCloneModalVisible(false)}
+        onCloned={handleClonedRepo}
       />
 
       <DirectoryPickerModal

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -8,6 +8,8 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
@@ -31,6 +33,51 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
   const [useCustomDirectory, setUseCustomDirectory] = useState(false);
   const [customDirectoryPath, setCustomDirectoryPath] = useState('');
   const [isDirectoryPickerVisible, setDirectoryPickerVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const customDirInputRef = useRef<TextInput>(null);
+  const fieldTops = useRef<{ name: number; custom: number }>({ name: 0, custom: 0 });
+  const lastKeyboardHeight = useRef(0);
+
+  // Edge-to-edge (Expo 52+) disables window resize, so the keyboard would
+  // cover the sheet — lift it by the live keyboard height instead (same
+  // proven pattern as GitChangesList). Pre-lift instantly on focus using
+  // the last measured height; keyboardDidShow fires after the animation.
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardHeight(0);
+      return;
+    }
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const setH = (e: any) => {
+      const h = e?.endCoordinates?.height ?? 0;
+      if (h > 0) lastKeyboardHeight.current = h;
+      setKeyboardHeight((prev) => (prev === h ? prev : h));
+    };
+    const showSub = Keyboard.addListener(showEvt, setH);
+    const frameSub = Keyboard.addListener('keyboardDidChangeFrame', setH);
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      frameSub.remove();
+      hideSub.remove();
+    };
+  }, [visible]);
+
+  const preLiftKeyboard = () => {
+    if (keyboardHeight === 0) {
+      setKeyboardHeight(lastKeyboardHeight.current > 0 ? lastKeyboardHeight.current : 300);
+    }
+  };
+
+  const scrollToField = (field: 'name' | 'custom') => {
+    preLiftKeyboard();
+    const y = field === 'name' ? fieldTops.current.name : fieldTops.current.custom;
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    });
+  };
 
   const handleSubmit = () => {
     if (!projectName.trim()) {
@@ -66,14 +113,26 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <View style={[styles.modalOverlay, keyboardHeight > 0 && { paddingBottom: keyboardHeight }]}>
         <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
-        <View style={[styles.bottomSheet, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
-          <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={[
+          styles.bottomSheet,
+          { backgroundColor: theme.bgSecondary, borderColor: theme.border },
+          keyboardHeight > 0 && styles.bottomSheetKeyboardOpen,
+        ]}>
+          <ScrollView
+            ref={scrollRef}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
+          >
             <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>New Workspace Project</Text>
-            
+
             {/* Project Name */}
             <Text style={[styles.label, { color: theme.textSecondary }]}>Project Name</Text>
+            <View
+              onLayout={(e) => { fieldTops.current.name = e.nativeEvent.layout.y; }}
+            >
             <TextInput
               style={[styles.input, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
               placeholder="e.g. mobile-todo-app"
@@ -82,7 +141,13 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
               onChangeText={setProjectName}
               autoCapitalize="none"
               autoFocus
+              returnKeyType={useCustomDirectory ? 'next' : 'done'}
+              onFocus={() => scrollToField('name')}
+              onSubmitEditing={() => {
+                if (useCustomDirectory) customDirInputRef.current?.focus();
+              }}
             />
+            </View>
 
             {/* Workspace Directory Location Option */}
             <Text style={[styles.label, { color: theme.textSecondary }]}>Workspace Location</Text>
@@ -136,12 +201,16 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
 
             {/* Custom Directory Input & Browse Button */}
             {useCustomDirectory && (
-              <View style={[styles.customDirBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
+              <View
+                style={[styles.customDirBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}
+                onLayout={(e) => { fieldTops.current.custom = e.nativeEvent.layout.y; }}
+              >
                 <Text style={[styles.customDirLabel, { color: theme.textSecondary }]}>
                   {getParentDirLabel()}
                 </Text>
                 <View style={styles.customDirInputRow}>
                   <TextInput
+                    ref={customDirInputRef}
                     style={[
                       styles.customDirInput,
                       { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary },
@@ -151,6 +220,8 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                     value={customDirectoryPath}
                     onChangeText={setCustomDirectoryPath}
                     autoCapitalize="none"
+                    returnKeyType="done"
+                    onFocus={() => scrollToField('custom')}
                   />
                   <TouchableOpacity
                     style={[styles.browseBtn, { backgroundColor: theme.accent }]}
@@ -214,6 +285,14 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: '85%',
     borderWidth: 1,
+  },
+  bottomSheetKeyboardOpen: {
+    maxHeight: '62%',
+    paddingBottom: 12,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 8,
   },
   modalTitle: {
     fontSize: 18,

@@ -45,6 +45,7 @@ import { GitDiffViewer } from "./GitDiffViewer";
 import { GitBranchModal } from "./GitBranchModal";
 import { GitCredentialsModal } from "./GitCredentialsModal";
 import { GitRemoteModal } from "./GitRemoteModal";
+import { isGitAuthError } from "../../services/gitCloneService";
 
 interface GitHubDesktopViewProps {
   workspaceId?: string;
@@ -221,11 +222,14 @@ export function GitHubDesktopView({
   const handlePush = async () => {
     if (!status?.isRepo) return;
     if (!remoteUrl) return setShowRemoteModal(true);
+    if (status.detached) {
+      return Alert.alert("Detached HEAD", "Switch to a local branch before pushing.");
+    }
     setSyncing(true);
     const res = await pushGitRemote(workspaceId, status.currentBranch);
     setSyncing(false);
     refreshGitState();
-    Alert.alert("Push", res.message);
+    showSyncResult("Push", res.message);
   };
 
   const handleSync = async () => {
@@ -238,7 +242,20 @@ export function GitHubDesktopView({
     else res = await fetchGitRemote(workspaceId);
     setSyncing(false);
     refreshGitState();
-    Alert.alert(status.behind > 0 ? "Pull" : status.ahead > 0 ? "Push" : "Fetch", res.message);
+    showSyncResult(status.behind > 0 ? "Pull" : status.ahead > 0 ? "Push" : "Fetch", res.message);
+  };
+
+  // Auth failures route to the credentials modal instead of a dead-end alert.
+  const showSyncResult = (title: string, message: string) => {
+    if (!isGitAuthError(message)) return Alert.alert(title, message);
+    Alert.alert(
+      `${title} Needs Authentication`,
+      `${message}\n\nAdd your GitHub credentials to continue.`,
+      [
+        { text: "Later", style: "cancel" },
+        { text: "Add Credentials", onPress: () => setShowCredentialsModal(true) },
+      ]
+    );
   };
 
   const handleSwitchBranch = async (branchName: string) => {
@@ -345,6 +362,7 @@ export function GitHubDesktopView({
                 selectedFile={selectedFile}
                 currentBranch={status?.currentBranch || "main"}
                 ahead={status?.ahead || 0}
+                detached={status?.detached || false}
                 committing={committing || syncing}
                 onSelectFile={loadFileDiff}
                 onToggleStageFile={handleToggleStageFile}

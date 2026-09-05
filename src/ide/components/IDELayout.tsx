@@ -410,12 +410,11 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
               onExitProject={onBackToPicker}
               onToggleSidebar={!isSidebarOpen ? () => setIsSidebarOpen(true) : undefined}
               onRunFile={handleRunActiveFile}
-              onAskAiAboutFile={() => handleLaunchSystemOverlay()}
             />
           </View>
 
           <View style={[styles.tabContent, bottomTab !== "terminal" && styles.hiddenTab]}>
-            <TerminalView workspaceId={workspace?.id} />
+            <TerminalView key={workspace?.id || "none"} workspaceId={workspace?.id} />
           </View>
 
           <View style={[styles.tabContent, bottomTab !== "browser" && styles.hiddenTab]}>
