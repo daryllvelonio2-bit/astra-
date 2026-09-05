@@ -1,47 +1,30 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, Image } from "react-native";
 import { Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
 import { GitCommit } from "./types";
-import { parseGitHubRepo, fetchCommitAvatars, getGitHubApiToken, gravatarUrl, CommitAvatarMap } from "../../services/gitAvatarService";
+import { gravatarUrl, CommitAvatarMap } from "../../services/gitAvatarService";
 
 interface GitHistoryListProps {
   commits: GitCommit[];
   selectedCommit: GitCommit | null;
-  remoteUrl?: string | null;
+  avatars: CommitAvatarMap;
+  brokenAvatars: Record<string, boolean>;
+  onAvatarError: (hash: string) => void;
   onSelectCommit: (commit: GitCommit) => void;
 }
 
 export function GitHistoryList({
   commits,
   selectedCommit,
-  remoteUrl,
+  avatars,
+  brokenAvatars,
+  onAvatarError,
   onSelectCommit,
 }: GitHistoryListProps) {
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
-  const [avatars, setAvatars] = useState<CommitAvatarMap>({ bySha: {}, byEmail: {} });
-  const [brokenAvatars, setBrokenAvatars] = useState<Record<string, boolean>>({});
-
-  // Load GitHub profile pictures once per repo (authed when the user saved
-  // a token, so private repos resolve too); initials remain the fallback.
-  useEffect(() => {
-    let cancelled = false;
-    const ref = parseGitHubRepo(remoteUrl);
-    if (!ref) return;
-    getGitHubApiToken()
-      .catch(() => null)
-      .then((token) => fetchCommitAvatars(ref.owner, ref.repo, token || undefined))
-      .then((map) => {
-        if (!cancelled && (Object.keys(map.bySha).length > 0 || Object.keys(map.byEmail).length > 0)) {
-          setAvatars(map);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [remoteUrl]);
 
   // Resolution order: exact commit SHA → author email (survives rebases) →
   // Gravatar for that email (d=404 fails cleanly) → initial letter.
@@ -104,11 +87,7 @@ export function GitHistoryList({
                 <Image
                   source={{ uri: avatarUri }}
                   style={[styles.avatarImage, isLandscape && styles.avatarImageLandscape]}
-                  onError={() =>
-                    setBrokenAvatars((prev) =>
-                      prev[item.hash] ? prev : { ...prev, [item.hash]: true }
-                    )
-                  }
+                  onError={() => onAvatarError(item.hash)}
                 />
               ) : (
                 <Text
