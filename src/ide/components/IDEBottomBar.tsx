@@ -2,15 +2,19 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
+import { BottomTabVisibility, DEFAULT_BOTTOM_TABS } from "../services/configService";
+
+export type IDEBottomTab = "editor" | "terminal" | "browser" | "git" | "desktop";
 
 interface IDEBottomBarProps {
-  bottomTab: "editor" | "terminal" | "browser" | "git" | "desktop";
-  onChangeTab: (tab: "editor" | "terminal" | "browser" | "git" | "desktop") => void;
+  bottomTab: IDEBottomTab;
+  onChangeTab: (tab: IDEBottomTab) => void;
   runningTaskCount?: number;
   compact?: boolean;
+  visibleTabs?: BottomTabVisibility;
 }
 
-export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, compact = false }: IDEBottomBarProps) {
+export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, compact = false, visibleTabs = DEFAULT_BOTTOM_TABS }: IDEBottomBarProps) {
   const { theme } = useTheme();
 
   return (
@@ -62,6 +66,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
         </Text>
       </TouchableOpacity>
 
+      {visibleTabs.browser && (
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
@@ -81,7 +86,9 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           Browser
         </Text>
       </TouchableOpacity>
+      )}
 
+      {visibleTabs.git && (
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
@@ -101,7 +108,9 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           Git
         </Text>
       </TouchableOpacity>
+      )}
 
+      {visibleTabs.desktop && (
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
@@ -121,6 +130,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           Desktop
         </Text>
       </TouchableOpacity>
+      )}
     </View>
   );
 }

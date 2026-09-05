@@ -103,7 +103,6 @@ export async function listWorkspaceMetas(): Promise<WorkspaceMeta[]> {
     id,
     name: id,
     dirPath: `${WORKSPACES_DIR}${id}/`,
-    template: "Blank",
     createdAt: Date.now(),
   });
 }
@@ -247,7 +246,6 @@ async function readDirectoryRecursive(
 
 export async function createWorkspace(
   name: string,
-  template = "Blank",
   customPath?: string
 ): Promise<Workspace> {
   await ensureWorkspacesDir();
@@ -271,7 +269,6 @@ export async function createWorkspace(
     id: workspaceId,
     name,
     dirPath: targetDir,
-    template,
     createdAt: Date.now(),
   });
 
@@ -295,26 +292,10 @@ export async function openExistingDirectoryAsProject(
   const name = customName?.trim() || folderName;
   const workspaceId = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
 
-  let detectedTemplate = "Custom Project";
-  try {
-    const entries = await readDirEntries(normalizedPath);
-    const fileNames = new Set(entries.map((e) => e.name.toLowerCase()));
-    if (fileNames.has("project.godot")) {
-      detectedTemplate = "Godot 4 (GDScript)";
-    } else if (fileNames.has("package.json")) {
-      detectedTemplate = "Node.js / Web";
-    } else if (fileNames.has("requirements.txt") || fileNames.has("main.py") || entries.some((e) => e.name.endsWith(".py"))) {
-      detectedTemplate = "Python";
-    } else if (fileNames.has("composer.json") || fileNames.has("artisan")) {
-      detectedTemplate = "PHP / Laravel";
-    }
-  } catch (_) {}
-
   await saveWorkspaceMeta({
     id: workspaceId,
     name,
     dirPath: normalizedPath,
-    template: detectedTemplate,
     createdAt: Date.now(),
   });
 

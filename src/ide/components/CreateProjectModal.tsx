@@ -12,19 +12,22 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
-
-const TEMPLATES = ['Blank', 'Godot 4 (GDScript)', 'Laravel (PHP)', 'React Native', 'Vite TS', 'Express API', 'Python CLI'];
+import {
+  formatDisplayPath,
+  getCustomDirPlaceholder,
+  getDefaultWorkspacePreviewPath,
+  getParentDirLabel,
+} from '../services/storagePaths';
 
 interface CreateProjectModalProps {
   visible: boolean;
   onClose: () => void;
-  onCreateProject: (name: string, template: string, customPath?: string) => void;
+  onCreateProject: (name: string, customPath?: string) => void;
 }
 
 export function CreateProjectModal({ visible, onClose, onCreateProject }: CreateProjectModalProps) {
   const { theme } = useTheme();
   const [projectName, setProjectName] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState('Blank');
   const [useCustomDirectory, setUseCustomDirectory] = useState(false);
   const [customDirectoryPath, setCustomDirectoryPath] = useState('');
   const [isDirectoryPickerVisible, setDirectoryPickerVisible] = useState(false);
@@ -41,11 +44,9 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
 
     onCreateProject(
       projectName.trim(),
-      selectedTemplate,
       useCustomDirectory ? customDirectoryPath.trim() : undefined
     );
     setProjectName('');
-    setSelectedTemplate('Blank');
     setUseCustomDirectory(false);
     setCustomDirectoryPath('');
     onClose();
@@ -61,7 +62,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
         }
         return `${clean}/`;
       })()
-    : (projectName.trim() ? `~/storage/workspaces/${projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}/` : "");
+    : (projectName.trim() ? formatDisplayPath(getDefaultWorkspacePreviewPath(projectName.trim())) : "");
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -82,32 +83,6 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
               autoCapitalize="none"
               autoFocus
             />
-
-            {/* Template Selection */}
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Select Starter Template</Text>
-            <View style={styles.templateGrid}>
-              {TEMPLATES.map((template) => (
-                <TouchableOpacity
-                  key={template}
-                  style={[
-                    styles.templateChip,
-                    { backgroundColor: theme.bgTertiary, borderColor: theme.border },
-                    selectedTemplate === template && { backgroundColor: theme.accent, borderColor: theme.accent },
-                  ]}
-                  onPress={() => setSelectedTemplate(template)}
-                >
-                  <Text
-                    style={[
-                      styles.templateChipText,
-                      { color: selectedTemplate === template ? theme.sendButtonIcon : theme.textSecondary },
-                      selectedTemplate === template && { fontWeight: "700" },
-                    ]}
-                  >
-                    {template}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
 
             {/* Workspace Directory Location Option */}
             <Text style={[styles.label, { color: theme.textSecondary }]}>Workspace Location</Text>
@@ -163,7 +138,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
             {useCustomDirectory && (
               <View style={[styles.customDirBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
                 <Text style={[styles.customDirLabel, { color: theme.textSecondary }]}>
-                  Parent Directory on Phone
+                  {getParentDirLabel()}
                 </Text>
                 <View style={styles.customDirInputRow}>
                   <TextInput
@@ -171,7 +146,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                       styles.customDirInput,
                       { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary },
                     ]}
-                    placeholder="/sdcard/Documents/..."
+                    placeholder={getCustomDirPlaceholder()}
                     placeholderTextColor={theme.textMuted}
                     value={customDirectoryPath}
                     onChangeText={setCustomDirectoryPath}
@@ -257,22 +232,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 8,
-  },
-  templateGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 16,
-  },
-  templateChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginRight: 6,
-    marginBottom: 6,
-    borderWidth: 1,
-  },
-  templateChipText: {
-    fontSize: 13,
   },
   locationToggleRow: {
     flexDirection: 'row',

@@ -6,14 +6,12 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  ScrollView,
   StatusBar,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  listWorkspaces,
   listWorkspaceMetas,
   createWorkspace,
   deleteWorkspace,
@@ -24,6 +22,7 @@ import { CreateProjectModal } from './CreateProjectModal';
 import { ProjectInspectorModal } from './ProjectInspectorModal';
 import { SettingsModal } from './SettingsModal';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
+import { formatDisplayPath } from '../services/storagePaths';
 import { useTheme } from '../../theme/themeContext';
 import { useOrientation } from '../../theme/useOrientation';
 
@@ -38,7 +37,6 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
   const { isLandscape } = useOrientation();
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('All');
 
   // Modals
   const [isCreateModalVisible, setCreateModalVisible] = useState(false);
@@ -57,8 +55,7 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
       const loaded: ProjectItem[] = metas.map((meta) => ({
         id: meta.id,
         name: meta.name || meta.id,
-        template: meta.template || 'React Native',
-        path: meta.dirPath ? meta.dirPath.replace(/^file:\/\//, '') : `~/storage/workspaces/${meta.id}`,
+        path: meta.dirPath ? formatDisplayPath(meta.dirPath) : formatDisplayPath('', meta.id),
         lastModified: 'Recently',
         fileCount: 1,
         branch: 'main',
@@ -69,9 +66,9 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
     }
   };
 
-  const handleCreateProject = async (name: string, template: string, customPath?: string) => {
+  const handleCreateProject = async (name: string, customPath?: string) => {
     try {
-      const ws = await createWorkspace(name, template, customPath);
+      const ws = await createWorkspace(name, customPath);
       await loadProjects();
       onOpenWorkspace(ws.id);
     } catch (e) {
@@ -104,9 +101,7 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
   };
 
   const filteredProjects = projects.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (activeFilter === 'All') return matchesSearch;
-    return matchesSearch && p.template.toLowerCase().includes(activeFilter.toLowerCase());
+    return p.name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   return (
@@ -150,35 +145,6 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
           </TouchableOpacity>
         ) : null}
       </View>
-
-      {/* Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScrollView}
-        contentContainerStyle={styles.filterScrollContent}
-      >
-        {['All', 'React Native', 'Node.js', 'Python', 'Web'].map((filter) => (
-          <TouchableOpacity
-            key={filter}
-            style={[
-              styles.filterChip,
-              { backgroundColor: theme.bgTertiary, borderColor: theme.border },
-              activeFilter === filter && { backgroundColor: theme.accent, borderColor: theme.accent },
-            ]}
-            onPress={() => setActiveFilter(filter)}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                { color: activeFilter === filter ? theme.sendButtonIcon : theme.textSecondary },
-              ]}
-            >
-              {filter}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
       {/* Project List */}
       <FlatList
@@ -298,29 +264,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     fontSize: 14,
-  },
-  filterScrollView: {
-    maxHeight: 45,
-    marginVertical: 4,
-  },
-  filterScrollContent: {
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    gap: 6,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  filterChipActive: {},
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  filterChipTextActive: {
-    fontWeight: 'bold',
   },
   listContent: {
     paddingHorizontal: 16,

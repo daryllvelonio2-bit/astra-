@@ -142,18 +142,6 @@ export function EditorTabBar({
               <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} style={{ marginRight: 8 }} />
               <Text style={[styles.dropdownItemText, { color: theme.accentGold }]}>Format Code (Prettier)</Text>
             </TouchableOpacity>
-            {collapseActions && onAskAi && (
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setShowDropdown(false);
-                  onAskAi();
-                }}
-              >
-                <Ionicons name="sparkles" size={16} color={theme.accent} style={{ marginRight: 8 }} />
-                <Text style={[styles.dropdownItemText, { color: theme.accent }]}>Ask AI About File</Text>
-              </TouchableOpacity>
-            )}
             <TouchableOpacity
               style={styles.dropdownItem}
               onPress={() => {

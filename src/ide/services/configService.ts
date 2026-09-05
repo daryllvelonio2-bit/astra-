@@ -23,6 +23,23 @@ const CONFIG_FILE = `${FileSystem.documentDirectory}config.json`;
 
 export type AppTheme = "dark" | "light" | "midnight";
 
+export type ToggleableBottomTab = "browser" | "git" | "desktop";
+export type BottomTabVisibility = Record<ToggleableBottomTab, boolean>;
+
+export const DEFAULT_BOTTOM_TABS: BottomTabVisibility = {
+  browser: true,
+  git: true,
+  desktop: true,
+};
+
+export function normalizeBottomTabs(value?: Partial<BottomTabVisibility> | null): BottomTabVisibility {
+  return {
+    browser: value?.browser ?? DEFAULT_BOTTOM_TABS.browser,
+    git: value?.git ?? DEFAULT_BOTTOM_TABS.git,
+    desktop: value?.desktop ?? DEFAULT_BOTTOM_TABS.desktop,
+  };
+}
+
 export interface AppConfig {
   apiKey: string;
   apiKeys?: string[];
@@ -32,6 +49,8 @@ export interface AppConfig {
   selectedEffort: AstraEffort;
   interactiveApproval: boolean;
   selectedTheme: AppTheme;
+  bottomTabs: BottomTabVisibility;
+  showAiButton: boolean;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -43,6 +62,8 @@ const DEFAULT_CONFIG: AppConfig = {
   selectedEffort: "default",
   interactiveApproval: false,
   selectedTheme: "dark",
+  bottomTabs: { ...DEFAULT_BOTTOM_TABS },
+  showAiButton: true,
 };
 
 export function normalizeApiKeys(keys?: string[], fallbackKey?: string): string[] {
@@ -81,6 +102,8 @@ export async function loadConfig(): Promise<AppConfig> {
       return {
         ...DEFAULT_CONFIG,
         ...parsed,
+        bottomTabs: normalizeBottomTabs(parsed.bottomTabs),
+        showAiButton: parsed.showAiButton ?? DEFAULT_CONFIG.showAiButton,
         apiKeys: normalizedKeys,
         apiKey: normalizedKeys[0] || parsed.apiKey || "",
       };
@@ -208,5 +231,23 @@ export async function saveTheme(theme: AppTheme): Promise<void> {
 export async function loadTheme(): Promise<AppTheme> {
   const config = await loadConfig();
   return config.selectedTheme || "dark";
+}
+
+export async function loadBottomTabs(): Promise<BottomTabVisibility> {
+  const config = await loadConfig();
+  return normalizeBottomTabs(config.bottomTabs);
+}
+
+export async function saveBottomTabs(tabs: BottomTabVisibility): Promise<void> {
+  await saveConfig({ bottomTabs: normalizeBottomTabs(tabs) });
+}
+
+export async function loadShowAiButton(): Promise<boolean> {
+  const config = await loadConfig();
+  return config.showAiButton ?? true;
+}
+
+export async function saveShowAiButton(visible: boolean): Promise<void> {
+  await saveConfig({ showAiButton: !!visible });
 }
 

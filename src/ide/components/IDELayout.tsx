@@ -42,6 +42,14 @@ import { useTheme } from "../../theme/themeContext";
 import { useOrientation } from "../../theme/useOrientation";
 import { ideActionService } from "../services/ideActionService";
 import { resolveChatPathToRelative } from "../services/chatFileLinkService";
+import {
+  BottomTabVisibility,
+  DEFAULT_BOTTOM_TABS,
+  loadBottomTabs,
+  loadShowAiButton,
+  subscribeConfigChanges,
+  ToggleableBottomTab,
+} from "../services/configService";
 
 interface IDELayoutProps {
   workspaceId?: string;
@@ -71,6 +79,42 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser" | "git" | "desktop">("editor");
+  const [visibleTabs, setVisibleTabs] = useState<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
+  const [showAiButton, setShowAiButton] = useState(true);
+  const visibleTabsRef = useRef<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
+
+  // Never land on a hidden tab: redirect toggleable tabs to editor.
+  const safeSetBottomTab = (tab: "editor" | "terminal" | "browser" | "git" | "desktop") => {
+    const toggleable: ToggleableBottomTab[] = ["browser", "git", "desktop"];
+    if ((toggleable as string[]).includes(tab) && !visibleTabsRef.current[tab as ToggleableBottomTab]) {
+      setBottomTab("editor");
+      return;
+    }
+    setBottomTab(tab);
+  };
+
+  useEffect(() => {
+    loadBottomTabs().then((tabs) => {
+      visibleTabsRef.current = tabs;
+      setVisibleTabs(tabs);
+    });
+    loadShowAiButton().then(setShowAiButton);
+    const unsub = subscribeConfigChanges((cfg) => {
+      const tabs = { ...DEFAULT_BOTTOM_TABS, ...(cfg.bottomTabs || {}) };
+      visibleTabsRef.current = tabs;
+      setVisibleTabs(tabs);
+      setShowAiButton(cfg.showAiButton ?? true);
+    });
+    return () => { unsub(); };
+  }, []);
+
+  // If the active tab gets disabled in settings, fall back to editor.
+  useEffect(() => {
+    const toggleable: ToggleableBottomTab[] = ["browser", "git", "desktop"];
+    if ((toggleable as string[]).includes(bottomTab) && !visibleTabs[bottomTab as ToggleableBottomTab]) {
+      setBottomTab("editor");
+    }
+  }, [visibleTabs, bottomTab]);
   const [desktopFullscreen, setDesktopFullscreen] = useState(false);
   const [browserUrl, setBrowserUrl] = useState<string>("http://127.0.0.1:8000");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -143,7 +187,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     const unsubOpenBrowser = ideActionService.subscribe("OPEN_BROWSER", ({ url }) => {
       if (url) {
         setBrowserUrl(url);
-        setBottomTab("browser");
+        safeSetBottomTab("browser");
       }
     });
 
@@ -153,7 +197,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
 
     const unsubSwitchTab = ideActionService.subscribe("SWITCH_TAB", ({ tab }) => {
       if (tab) {
-        setBottomTab(tab);
+        safeSetBottomTab(tab);
       }
     });
 
@@ -167,7 +211,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
 
   const handleOpenInBrowser = (targetUrl: string) => {
     setBrowserUrl(targetUrl);
-    setBottomTab("browser");
+    safeSetBottomTab("browser");
   };
 
   useEffect(() => {
@@ -228,14 +272,14 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
         const pendingTab = ideActionService.consumePendingAction("SWITCH_TAB");
         if (pendingBrowser?.payload?.userInitiated && pendingBrowser.payload.url) {
           setBrowserUrl(pendingBrowser.payload.url);
-          setBottomTab("browser");
+          safeSetBottomTab("browser");
         } else if (pendingTerminal?.payload?.userInitiated) {
           setBottomTab("terminal");
         } else if (pendingTab?.payload?.userInitiated) {
-          setBottomTab(pendingTab.payload.tab);
+          safeSetBottomTab(pendingTab.payload.tab);
         } else if (pendingBrowser?.payload?.url) {
           setBrowserUrl(pendingBrowser.payload.url);
-          setBottomTab("browser");
+          safeSetBottomTab("browser");
         } else if (pendingFile?.payload?.filePath) {
           const targetWsId = pendingFile.payload.workspaceId;
           if (!targetWsId || targetWsId === ws.id) {
@@ -399,7 +443,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
           </View>
 
           {/* AI Assistant Floating Button & Menu */}
-          {!desktopFullscreen && bottomTab !== "git" && (
+          {showAiButton && !desktopFullscreen && bottomTab !== "git" && (
             <AiAssistantMenu
               showAiMenu={showAiMenu}
               isOverlayRunning={isOverlayRunning}
@@ -424,9 +468,10 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
       {!isKeyboardVisible && !desktopFullscreen && (
         <IDEBottomBar
           bottomTab={bottomTab}
-          onChangeTab={setBottomTab}
+          onChangeTab={safeSetBottomTab}
           runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
           compact={isLandscape}
+          visibleTabs={visibleTabs}
         />
       )}
 
