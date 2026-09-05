@@ -8,6 +8,7 @@ export interface GitHubRepoRef {
 export interface CommitAvatarMap {
   bySha: Record<string, string>;
   byEmail: Record<string, string>;
+  byName: Record<string, string>;
 }
 
 // In-memory cache per repo (authed or public results only — failures are
@@ -52,43 +53,62 @@ export function parseGitHubRepo(remoteUrl?: string | null): GitHubRepoRef | null
 }
 
 /**
- * Maps commits to GitHub avatar URLs via the commits API, indexed by both
- * full SHA and lowercase author email (rebased/cherry-picked commits change
- * SHA but keep the email). Pass the user's token for private repos and a
- * 5,000/hr quota; without it, public repos only (60/hr). Results cached per
- * repo; failures are never cached so retries can succeed. Never throws.
+ * Maps commits to GitHub avatar URLs via the commits API, indexed by full
+ * SHA, lowercase author email, and lowercase display name. Pass the current
+ * branch: the API defaults to main, so branch-only commits (and their
+ * authors, e.g. a second contributor) would otherwise never resolve.
+ * Pass the user's token for private repos (5,000/hr quota); without it,
+ * public repos only (60/hr). Results cached per repo+branch; failures are
+ * never cached so retries can succeed. Never throws.
  */
 export async function fetchCommitAvatars(
   owner: string,
   repo: string,
-  token?: string
+  token?: string,
+  branch?: string | null
 ): Promise<CommitAvatarMap> {
-  const key = `${owner}/${repo}`.toLowerCase();
+  const cleanBranch = (branch || "").trim();
+  const useBranch = cleanBranch && cleanBranch !== "HEAD" ? cleanBranch : "";
+  const key = `${owner}/${repo}@${useBranch || "default"}`.toLowerCase();
   const cached = avatarCache.get(key);
   if (cached) return cached;
-  const empty: CommitAvatarMap = { bySha: {}, byEmail: {} };
+  const empty: CommitAvatarMap = { bySha: {}, byEmail: {}, byName: {} };
   try {
-    const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      // GitHub rejects API calls without a User-Agent; React Native sends
+      // none by default (browsers/curl do, which is why desktop tests pass).
+      "User-Agent": "AstraGitClient",
+    };
     if (token) headers.Authorization = `Bearer ${token}`;
-    const map: CommitAvatarMap = { bySha: {}, byEmail: {} };
+    const base =
+      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits` +
+      (useBranch ? `?sha=${encodeURIComponent(useBranch)}&` : "?");
+    const map: CommitAvatarMap = { bySha: {}, byEmail: {}, byName: {} };
     // Two pages cover ~200 commits; enough for a history list.
     for (let page = 1; page <= 2; page++) {
-      const res = await fetch(
-        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=100&page=${page}`,
-        { headers }
-      );
-      if (!res.ok) return empty;
+      const res = await fetch(`${base}per_page=100&page=${page}`, { headers });
+      if (!res.ok) {
+        // A token GitHub doesn't like can 404 even on public repos — retry
+        // once without it rather than failing the whole lookup.
+        if (token && res.status === 404) {
+          return fetchCommitAvatars(owner, repo);
+        }
+        return empty;
+      }
       const list: any[] = await res.json();
       if (!Array.isArray(list) || list.length === 0) break;
       for (const c of list) {
         const sha = typeof c?.sha === "string" ? c.sha : "";
         const url = typeof c?.author?.avatar_url === "string" ? c.author.avatar_url : "";
-        const email =
-          typeof c?.commit?.author?.email === "string"
-            ? c.commit.author.email.trim().toLowerCase()
-            : "";
+        const author = typeof c?.commit?.author === "object" && c.commit.author ? c.commit.author : null;
+        const email = typeof author?.email === "string" ? author.email.trim().toLowerCase() : "";
+        const name = typeof author?.name === "string" ? author.name.trim().toLowerCase() : "";
         if (sha && url) map.bySha[sha] = url;
         if (email && url) map.byEmail[email] = url;
+        // Display-name fallback: local-only commits share no SHA/email with
+        // the API, but the same human name reuses the resolved photo.
+        if (name && url && !map.byName[name]) map.byName[name] = url;
       }
       if (list.length < 100) break;
     }

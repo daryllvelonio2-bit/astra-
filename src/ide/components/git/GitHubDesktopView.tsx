@@ -396,6 +396,7 @@ export function GitHubDesktopView({
                 commits={commits}
                 selectedCommit={selectedCommit}
                 remoteUrl={remoteUrl}
+                currentBranch={status?.currentBranch}
                 onSelectCommit={loadCommitDiff}
               />
             )}

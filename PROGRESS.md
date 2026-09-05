@@ -13,9 +13,9 @@
 - **Feature:** History rows show the author's real GitHub profile picture instead of the initial letter: public commits API matched by SHA *and* author email (survives rebases), then Gravatar fallback for emails GitHub can't map to an account (`d=404` fails cleanly to initials). Bundled a compact MD5 verified against system crypto on 7 vectors (avoids a new native dep).
 - **Files:**
   - `GitHeaderBar.tsx` (301 lines): flex/shrink rules only, no visual redesign.
-  - `gitAvatarService.ts` (175 lines): remote parsing (HTTPS/SSH/shorthand) + cached `{ bySha, byEmail }` fetch + `gravatarUrl()`, never throws. Authed with the user's saved git token (`getGitHubApiToken` reads `~/.git-credentials`) so private repos resolve; failures never cached.
-  - `GitHistoryList.tsx` (380 lines): `remoteUrl` prop, one fetch per repo, SHA → email → Gravatar → initials chain with per-avatar error fallback.
-  - `GitHubDesktopView.tsx` (494 lines): passes `remoteUrl` through.
+  - `gitAvatarService.ts` (195 lines): remote parsing (HTTPS/SSH/shorthand) + cached `{ bySha, byEmail, byName }` fetch scoped to the current branch (`?sha=` — the API defaults to main and hides branch-only commits/authors) + `gravatarUrl()`, never throws. Authed with the user's saved git token so private repos resolve; tokened 404 auto-retries unauthenticated; failures never cached.
+  - `GitHistoryList.tsx` (395 lines): `remoteUrl` + `currentBranch` props, one fetch per repo+branch, SHA → email → name → Gravatar → initials chain with per-avatar error fallback.
+  - `GitHubDesktopView.tsx` (495 lines): passes `remoteUrl` + `currentBranch` through.
 - **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
 
 ### [2026-09-05] - Detached-HEAD Bug: Bogus "N Commits to Push"

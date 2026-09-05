@@ -10,6 +10,7 @@ interface GitHistoryListProps {
   commits: GitCommit[];
   selectedCommit: GitCommit | null;
   remoteUrl?: string | null;
+  currentBranch?: string | null;
   onSelectCommit: (commit: GitCommit) => void;
 }
 
@@ -17,39 +18,53 @@ export function GitHistoryList({
   commits,
   selectedCommit,
   remoteUrl,
+  currentBranch,
   onSelectCommit,
 }: GitHistoryListProps) {
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
-  const [avatars, setAvatars] = useState<CommitAvatarMap>({ bySha: {}, byEmail: {} });
+  const [avatars, setAvatars] = useState<CommitAvatarMap>({ bySha: {}, byEmail: {}, byName: {} });
   const [brokenAvatars, setBrokenAvatars] = useState<Record<string, boolean>>({});
 
-  // Load GitHub profile pictures once per repo (authed when the user saved
-  // a token, so private repos resolve too); initials remain the fallback.
+  // Load GitHub profile pictures once per repo+branch (authed when the
+  // user saved a token, so private repos resolve too); initials remain
+  // the fallback. Branch matters: the API defaults to main, hiding
+  // branch-only commits and their authors.
   useEffect(() => {
     let cancelled = false;
     const ref = parseGitHubRepo(remoteUrl);
     if (!ref) return;
+    const branch = (currentBranch || "").trim();
     getGitHubApiToken()
       .catch(() => null)
-      .then((token) => fetchCommitAvatars(ref.owner, ref.repo, token || undefined))
+      .then((token) =>
+        fetchCommitAvatars(ref.owner, ref.repo, token || undefined, branch || undefined)
+      )
       .then((map) => {
-        if (!cancelled && (Object.keys(map.bySha).length > 0 || Object.keys(map.byEmail).length > 0)) {
+        if (
+          !cancelled &&
+          (Object.keys(map.bySha).length > 0 ||
+            Object.keys(map.byEmail).length > 0 ||
+            Object.keys(map.byName).length > 0)
+        ) {
           setAvatars(map);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [remoteUrl]);
+  }, [remoteUrl, currentBranch]);
 
   // Resolution order: exact commit SHA → author email (survives rebases) →
-  // Gravatar for that email (d=404 fails cleanly) → initial letter.
+  // author display name (covers local-only commits) → Gravatar for that
+  // email (d=404 fails cleanly) → initial letter.
   const avatarUriFor = (item: GitCommit): string | null => {
     const email = (item.authorEmail || "").trim().toLowerCase();
+    const name = (item.authorName || "").trim().toLowerCase();
     return (
       avatars.bySha[item.hash] ||
       (email ? avatars.byEmail[email] : "") ||
+      (name ? avatars.byName[name] : "") ||
       gravatarUrl(email)
     );
   };
