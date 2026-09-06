@@ -27,11 +27,13 @@ interface AppearanceSectionProps {
   activeTheme: AppTheme;
   onSelectTheme: (theme: AppTheme) => void;
   theme: ThemeColors;
+  onRerunStartup?: () => void;
 }
 
-export function AppearanceSection({ activeTheme, onSelectTheme, theme }: AppearanceSectionProps) {
+export function AppearanceSection({ activeTheme, onSelectTheme, theme, onRerunStartup }: AppearanceSectionProps) {
   return (
     <View style={styles.container}>
+      <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>THEME PALETTE</Text>
       {THEME_OPTIONS.map((t) => {
         const isSelected = activeTheme === t.id;
         const accentColor = THEMES[t.id].accent;
@@ -59,16 +61,54 @@ export function AppearanceSection({ activeTheme, onSelectTheme, theme }: Appeara
           </TouchableOpacity>
         );
       })}
+
+      {onRerunStartup && (
+        <View style={styles.startupWrap}>
+          <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>ONBOARDING & SETUP</Text>
+          <TouchableOpacity
+            style={[styles.rerunCard, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}
+            onPress={onRerunStartup}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.rerunIconBox, { backgroundColor: `${theme.accent}20` }]}>
+              <Ionicons name="sparkles" size={16} color={theme.accent} />
+            </View>
+            <View style={styles.rerunTextCol}>
+              <Text style={[styles.rerunTitle, { color: theme.textPrimary }]}>
+                Re-run Setup Wizard
+              </Text>
+              <Text style={[styles.rerunDesc, { color: theme.textMuted }]}>
+                Reconfigure theme, default editor, and GitHub integration.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 8 },
+  container: { gap: 8, paddingBottom: 24 },
+  sectionHeading: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, marginTop: 4, marginBottom: 2 },
   themeCard: { padding: 10, borderRadius: 10, borderWidth: 1, gap: 4 },
   themeCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   themeIconRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   themeIconBox: { width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   themeTitle: { fontSize: 13, fontWeight: "700" },
   themeDesc: { fontSize: 11, marginLeft: 34 },
+  startupWrap: { marginTop: 12, gap: 6 },
+  rerunCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 10,
+  },
+  rerunIconBox: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  rerunTextCol: { flex: 1, gap: 2 },
+  rerunTitle: { fontSize: 13, fontWeight: "700" },
+  rerunDesc: { fontSize: 11 },
 });

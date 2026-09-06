@@ -19,6 +19,7 @@ import { FileActionModal } from "./FileActionModal";
 import { TerminalView } from "./TerminalView";
 import { WebBrowserPreview } from "./WebBrowserPreview";
 import { DesktopView } from "./DesktopView";
+import { VSCodeView } from "./VSCodeView";
 import { GitHubDesktopView } from "./git/GitHubDesktopView";
 import { IDEBottomBar } from "./IDEBottomBar";
 import { WorkspaceLoadingScreen } from "./WorkspaceLoadingScreen";
@@ -45,8 +46,11 @@ import { resolveChatPathToRelative } from "../services/chatFileLinkService";
 import {
   BottomTabVisibility,
   DEFAULT_BOTTOM_TABS,
+  firstVisibleTab,
+  loadAstraEnabled,
   loadBottomTabs,
-  loadShowAiButton,
+  loadDefaultEditorUi,
+  normalizeBottomTabs,
   subscribeConfigChanges,
   ToggleableBottomTab,
 } from "../services/configService";
@@ -67,16 +71,15 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser" | "git" | "desktop">("editor");
+  const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser" | "git" | "desktop" | "vscode">("editor");
   const [visibleTabs, setVisibleTabs] = useState<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
-  const [showAiButton, setShowAiButton] = useState(true);
+  const [astraEnabled, setAstraEnabled] = useState(true);
   const visibleTabsRef = useRef<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
 
-  // Never land on a hidden tab: redirect toggleable tabs to editor.
-  const safeSetBottomTab = (tab: "editor" | "terminal" | "browser" | "git" | "desktop") => {
-    const toggleable: ToggleableBottomTab[] = ["browser", "git", "desktop"];
-    if ((toggleable as string[]).includes(tab) && !visibleTabsRef.current[tab as ToggleableBottomTab]) {
-      setBottomTab("editor");
+  // Never land on a hidden tab: redirect to the first visible one.
+  const safeSetBottomTab = (tab: ToggleableBottomTab) => {
+    if (!visibleTabsRef.current[tab]) {
+      setBottomTab(firstVisibleTab(visibleTabsRef.current));
       return;
     }
     setBottomTab(tab);
@@ -86,22 +89,28 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     loadBottomTabs().then((tabs) => {
       visibleTabsRef.current = tabs;
       setVisibleTabs(tabs);
+      // Initial tab may have loaded hidden (e.g. editor off): correct it.
+      setBottomTab((current) => (!tabs[current] ? firstVisibleTab(tabs) : current));
     });
-    loadShowAiButton().then(setShowAiButton);
+    loadAstraEnabled().then(setAstraEnabled);
+    loadDefaultEditorUi().then((editor) => {
+      if (editor === "vscode" && visibleTabsRef.current.vscode) {
+        setBottomTab("vscode");
+      }
+    });
     const unsub = subscribeConfigChanges((cfg) => {
-      const tabs = { ...DEFAULT_BOTTOM_TABS, ...(cfg.bottomTabs || {}) };
+      const tabs = normalizeBottomTabs(cfg.bottomTabs);
       visibleTabsRef.current = tabs;
       setVisibleTabs(tabs);
-      setShowAiButton(cfg.showAiButton ?? true);
+      setAstraEnabled(cfg.astraEnabled ?? true);
     });
     return () => { unsub(); };
   }, []);
 
-  // If the active tab gets disabled in settings, fall back to editor.
+  // If the active tab gets disabled in settings, fall back to first visible.
   useEffect(() => {
-    const toggleable: ToggleableBottomTab[] = ["browser", "git", "desktop"];
-    if ((toggleable as string[]).includes(bottomTab) && !visibleTabs[bottomTab as ToggleableBottomTab]) {
-      setBottomTab("editor");
+    if (!visibleTabs[bottomTab]) {
+      setBottomTab(firstVisibleTab(visibleTabs));
     }
   }, [visibleTabs, bottomTab]);
   const [desktopFullscreen, setDesktopFullscreen] = useState(false);
@@ -131,14 +140,8 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
 
   useEffect(() => {
     const unsubTasks = runningTasksService.subscribe(setRunningTasks);
-    // Automatically trigger IDE terminal tab when background task starts
-    const unsubTrigger = runningTasksService.subscribeTrigger(() => {
-      setBottomTab("terminal");
-    });
-    return () => {
-      unsubTasks();
-      unsubTrigger();
-    };
+    const unsubTrigger = runningTasksService.subscribeTrigger(() => safeSetBottomTab("terminal"));
+    return () => { unsubTasks(); unsubTrigger(); };
   }, []);
 
   // Open a raw agent/chat file path inside the given workspace, normalizing
@@ -156,7 +159,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
         path: relative,
         content: content || "",
       });
-      setBottomTab("editor");
+      safeSetBottomTab("editor");
       if (!content) {
         Alert.alert("File opened", `${fileName} is empty or could not be read at:\n${relative}`);
       }
@@ -174,28 +177,11 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     });
 
     const unsubOpenBrowser = ideActionService.subscribe("OPEN_BROWSER", ({ url }) => {
-      if (url) {
-        setBrowserUrl(url);
-        safeSetBottomTab("browser");
-      }
+      if (url) { setBrowserUrl(url); safeSetBottomTab("browser"); }
     });
-
-    const unsubOpenTerminal = ideActionService.subscribe("OPEN_TERMINAL", () => {
-      setBottomTab("terminal");
-    });
-
-    const unsubSwitchTab = ideActionService.subscribe("SWITCH_TAB", ({ tab }) => {
-      if (tab) {
-        safeSetBottomTab(tab);
-      }
-    });
-
-    return () => {
-      unsubOpenFile();
-      unsubOpenBrowser();
-      unsubOpenTerminal();
-      unsubSwitchTab();
-    };
+    const unsubOpenTerminal = ideActionService.subscribe("OPEN_TERMINAL", () => safeSetBottomTab("terminal"));
+    const unsubSwitchTab = ideActionService.subscribe("SWITCH_TAB", ({ tab }) => { if (tab) safeSetBottomTab(tab); });
+    return () => { unsubOpenFile(); unsubOpenBrowser(); unsubOpenTerminal(); unsubSwitchTab(); };
   }, [workspace]);
 
   const handleOpenInBrowser = (targetUrl: string) => {
@@ -257,17 +243,14 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
           setBrowserUrl(pendingBrowser.payload.url);
           safeSetBottomTab("browser");
         } else if (pendingTerminal?.payload?.userInitiated) {
-          setBottomTab("terminal");
+          safeSetBottomTab("terminal");
         } else if (pendingTab?.payload?.userInitiated) {
           safeSetBottomTab(pendingTab.payload.tab);
         } else if (pendingBrowser?.payload?.url) {
           setBrowserUrl(pendingBrowser.payload.url);
           safeSetBottomTab("browser");
-        } else if (pendingFile?.payload?.filePath) {
-          const targetWsId = pendingFile.payload.workspaceId;
-          if (!targetWsId || targetWsId === ws.id) {
-            await applyOpenFile(ws, pendingFile.payload.filePath);
-          }
+        } else if (pendingFile?.payload?.filePath && (!pendingFile.payload.workspaceId || pendingFile.payload.workspaceId === ws.id)) {
+          await applyOpenFile(ws, pendingFile.payload.filePath);
         }
       } catch (_) {}
     };
@@ -296,22 +279,16 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     if (!activeFile || !workspace) return;
     setActiveFile({ ...activeFile, content: newContent });
 
-    const updateTree = (nodes: any[]): any[] => {
-      return nodes.map((node) => {
-        if (node.id === activeFile.id || (node.path && node.path === activeFile.path)) {
-          return { ...node, content: newContent };
-        }
-        if (node.children) return { ...node, children: updateTree(node.children) };
-        return node;
-      });
-    };
+    const updateTree = (nodes: any[]): any[] =>
+      nodes.map((node) =>
+        node.id === activeFile.id || (node.path && node.path === activeFile.path)
+          ? { ...node, content: newContent }
+          : node.children ? { ...node, children: updateTree(node.children) } : node
+      );
 
     setWorkspace({
       ...workspace,
-      root: {
-        ...workspace.root,
-        children: workspace.root.children ? updateTree(workspace.root.children) : [],
-      },
+      root: { ...workspace.root, children: workspace.root.children ? updateTree(workspace.root.children) : [] },
     });
 
     try {
@@ -338,7 +315,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     activeFile,
     setActiveFile,
     refreshWorkspace,
-    onOpenTerminal: () => setBottomTab("terminal"),
+    onOpenTerminal: () => safeSetBottomTab("terminal"),
     onOpenPreview: handleOpenInBrowser,
   });
 
@@ -403,29 +380,23 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
           </View>
 
           <View style={[styles.tabContent, bottomTab !== "browser" && styles.hiddenTab]}>
-            <WebBrowserPreview
-              initialUrl={browserUrl}
-              workspaceId={workspace?.id}
-            />
+            <WebBrowserPreview initialUrl={browserUrl} workspaceId={workspace?.id} />
           </View>
 
           <View style={[styles.tabContent, bottomTab !== "git" && styles.hiddenTab]}>
-            <GitHubDesktopView
-              workspaceId={workspace?.id}
-              projectName={workspace?.name}
-              visible={bottomTab === "git"}
-            />
+            <GitHubDesktopView workspaceId={workspace?.id} projectName={workspace?.name} visible={bottomTab === "git"} />
           </View>
 
           <View style={[styles.tabContent, bottomTab !== "desktop" && styles.hiddenTab]}>
-            <DesktopView
-              visible={bottomTab === "desktop"}
-              onFullscreenChange={setDesktopFullscreen}
-            />
+            <DesktopView visible={bottomTab === "desktop"} onFullscreenChange={setDesktopFullscreen} />
+          </View>
+
+          <View style={[styles.tabContent, bottomTab !== "vscode" && styles.hiddenTab]}>
+            <VSCodeView workspaceDir={workspace?.dirPath} visible={bottomTab === "vscode"} />
           </View>
 
           {/* AI Assistant Floating Button & Menu */}
-          {showAiButton && !desktopFullscreen && bottomTab !== "git" && (
+          {astraEnabled && !desktopFullscreen && bottomTab !== "git" && (
             <AiAssistantMenu
               showAiMenu={showAiMenu}
               isOverlayRunning={isOverlayRunning}
@@ -433,14 +404,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
               onToggleAiMenu={() => setShowAiMenu((prev) => !prev)}
               onLaunchSystemOverlay={handleLaunchSystemOverlay}
               onStopSystemOverlay={handleStopSystemOverlay}
-              onOpenFullChat={
-                onOpenFullChat
-                  ? () => {
-                      setShowAiMenu(false);
-                      onOpenFullChat();
-                    }
-                  : undefined
-              }
+              onOpenFullChat={onOpenFullChat ? () => { setShowAiMenu(false); onOpenFullChat(); } : undefined}
             />
           )}
         </View>

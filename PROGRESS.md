@@ -4,6 +4,40 @@
 - **Current Phase:** Project Documentation (docs/)
 - **Last Updated:** September 6, 2026
 
+### [2026-09-06] - Instant Native Check for VS Code Provisioning & Startup Race Fix
+- **Problem:** Opening the VS Code tab for the first time showed the installation card ("VS Code in your app - Install ~230MB") even though VS Code was already installed. Tapping "Recheck" immediately loaded the editor.
+- **Root Cause:**
+  1. `isVSCodeProvisioned()` spawned a fresh PRoot guest command to verify `/root/.vscode-provisioned`. Cold PRoot start took ~3.6s, causing `withTimeout(executeCommand(...), 3500)` to time out and return `stdout: "NO"`.
+  2. Concurrently, a legacy watchdog timer `setTimeout(() => setPhase("not-installed"), 4000)` in `VSCodeView.tsx` raced against the check and forced the install card onto the screen.
+  3. "Recheck" worked because PRoot was already warm in memory and completed in <500ms.
+- **Fix:**
+  - `vscodeService.ts`: Replaced PRoot command execution with an instant synchronous native filesystem check via `getFileInfoNative` on `${cleanDoc}/alpine/root/.vscode-provisioned` and the code-server binaries. This runs natively in Kotlin without spawning PRoot, resolving in `< 0.5ms` with zero cold-start delay.
+  - `vscodeService.ts`: Added direct host loopback HTTP probing via `fetch('http://127.0.0.1:8082/', { method: 'HEAD' })` with an AbortController in `isVSCodeRunning()`, checking server status in ~2ms. Added self-healing musl node symlink in `LAUNCH_SCRIPT`.
+  - `VSCodeView.tsx`: Removed the aggressive 4000ms watchdog timer that was racing against state resolution.
+- **Rule Compliance (`agent.md`):** All files ≤500 lines (`vscodeService.ts`: 429, `VSCodeView.tsx`: 261). `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-06] - Editor + Terminal Can Be Turned Off; Old AI-Button Switch Removed
+- **Feature:** Settings → Tabs now lists all six bottom tabs (Editor, Terminal, Browser, Git, Desktop, VS Code). The last visible tab's switch locks so the bar can never go empty; any hidden active tab falls back to the first visible one (`firstVisibleTab`, order editor → terminal → browser → git → desktop → vscode). All programmatic tab jumps (`OPEN_TERMINAL`, run output, task trigger, `OPEN_FILE`) route through `safeSetBottomTab`, so off means off everywhere.
+- **Removal:** the legacy `showAiButton` / FLOATING SHORTCUT switch is gone — the Astra AI master switch is the single AI control. `configService` drops the field/helpers (stale key stripped from stored `config.json` on load).
+- **Files:** `configService.ts` (289 lines: `TAB_ORDER` + `firstVisibleTab`, 6-key visibility), `IDELayout.tsx` (481), `IDEBottomBar.tsx` (215), `NavigationSection.tsx` (103), `SettingsModal.tsx`, `docs/configuration.md`, `docs/ide.md`.
+- **Rule Compliance (`agent.md`):** All files ≤500 lines, theme tokens only. `npx tsc --noEmit` 0 errors. JS-only — Metro reload, no rebuild.
+
+### [2026-09-06] - Startup Astra AI On/Off Prompt + Global Kill Switch
+- **Feature:** New "Astra AI" step in the startup wizard (Theme → Astra AI → Editor → GitHub): On/Off cards matching the editor-step visuals. Choice persists as `astraEnabled` (default on) in `config.json`. When off, every AI surface hides: fullscreen chat screen, editor floating button/menu, and the chathead entry; Settings → Tabs gains a master "Astra AI assistant" switch (floating-button row is disabled while AI is off) so it can be re-enabled without re-running startup.
+- **Files:** `configService.ts` (+`astraEnabled`, load/save helpers), `AstraAiStep.tsx` (new), `StartupWizard.tsx` (+step/state/save), `types.ts` (+`"astra"`), `App.tsx` (gates chat screen + `onOpenFullChat`), `IDELayout.tsx` (gates `AiAssistantMenu`), `NavigationSection.tsx` (+master switch), `SettingsModal.tsx` (autosave wiring).
+- **Rule Compliance (`agent.md`):** All files ≤500 lines, theme tokens only. `npx tsc --noEmit` 0 errors. JS-only — Metro reload, no rebuild.
+
+### [2026-09-06] - All Dependencies Optional: Required List + Auto-download Toggle
+- **Feature:** Every download is now a user choice. Settings → Linux gains an "Auto-download toolchain" switch (default on = current behavior) plus a "Required for Astra to work" list above Optional Extras: 28 base packages in 3 groups (Core Shell & Tools, Built-in Runtimes, Build Tools) mirroring the native stages, each with a why-the-app-needs-it line, per-package Get + install-all-missing, probed via `command -v` (or `apk info -e` for header-only pkgs like ca-certificates/linux-headers/icu).
+- **Files:**
+  - `optionalPackages.ts` (158 lines): `REQUIRED_GROUPS` + `probeApk?` field.
+  - `OptionalPackagesSection.tsx` (439 lines): extracted shared `PackageGroupCard`, dual probe, renders Required + Optional sections.
+  - `ToolchainProvisioner.kt`: `ensure()` returns early with a "Manual" status when auto-download is off (manual Re-download bypasses via `force=true`); `SharedPreferences` get/set.
+  - `LinuxRunnerModule.kt`: `isAutoProvisionEnabled` / `setAutoProvisionEnabled` bridge; `provisioning.ts` JS wrappers (default true when bridge missing).
+  - `EnvironmentSection.tsx` (426 lines): toggle row with explainer alert.
+  - `docs/ide.md`: Extras paragraph rewritten.
+- **Rule Compliance (`agent.md`):** All files ≤500 lines. `npx tsc --noEmit` 0 errors. Native Kotlin follows existing module patterns but needs on-device build verification.
+
 ### [2026-09-06] - Run Button Executes Projects On-Device
 - **Problem:** Run mapped every non-py/php file to JavaScript eval, sent Python to the Piston cloud API, had no HTML handling (dead `activeHtmlContent` prop), and showed output in a blocking Alert.
 - **Feature:** New `src/ide/services/runService.ts` (379 lines): save-first, then execute in the Alpine guest against real project files. HTML served via `http.server` + opened in Browser tab; JS/Python/PHP/TS/C/C++/Go/Rust/Java/Ruby/Lua/shell/SQL run with guest toolchain; unknown files use project-entry detection (package.json, artisan, manage.py, app/main/server.py, go.mod, Cargo.toml, index.html). Output streams to a dedicated ▶ Run terminal tab via new `RUN_IN_TERMINAL` IDE action (`useRunSession.ts`, 74 lines). Missing runtimes show the genuine shell error + Optional Extras hint — nothing auto-installed, per user decision.
@@ -19,6 +53,25 @@
   - `docs/ide.md`: Optional Extras paragraph + Linux tab row update.
 - **Package-name verification (Alpine v3.21):** `valkey`+`valkey-compat` (redis was replaced), `mariadb-client` (no `mysql-client`), `postgresql17-client` (clients are versioned), `mongodb-tools` (`mongosh` needs glibc, no apk), `magick` binary probe for ImageMagick 7.
 - **Rule Compliance (`agent.md`):** New files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-06] - ADB Deep-Dive: Guest Healthy, Direct Exec Blocked by run-as
+- **Verified via ADB (USB):** Alpine 3.21 aarch64 + node v20 intact, `gcompat` present, workspaces safe. `npm install -g code-server` died mid-install (dangling bin symlink, absent package dir) — the hardened provision (npm retry + standalone fallback) already in code covers it.
+- **Direct guest fix via ADB not possible:** proot runs under `run-as` but every guest execve fails with ENOENT — pristine `libproot.so` included. Only the app process itself can exec guest binaries (run-as context restriction, not a binary problem). Pi perasaan: `run-as` cwd is unreliable (sometimes `/`, sometimes data dir) — explains earlier phantom "missing file" readings; always use absolute `/data/user/0/...` paths. Helper files copied during probing removed afterwards.
+- **Action for user:** shake → Reload (also clears the stale-bundle `ReferenceError: Property 'VSCodeView' doesn't exist` in Metro log), open VS Code tab → Install. App-process provision will succeed where ADB shell cannot.
+
+### [2026-09-06] - VS Code Provision Fix (npm Partial-Install + Standalone Fallback)
+- **Diagnosis via ADB (USB, Nova 7i JNY-LX1):** provision failed, not start. Guest has node + Alpine 3.21, but `npm install -g code-server` died midway — dangling bin symlink (`/usr/local/bin/code-server → ../lib/node_modules/code-server/...`) with `node_modules/code-server/` absent (known arm64-musl flakiness, coder/code-server#7462). Side note: use absolute `/data/user/0/...` paths with `run-as` — relative paths gave phantom "missing" errors. Also: debug-over-release reinstall wiped guest `/root` (expected per storage map); workspaces survived.
+- **Fix (`vscodeService.ts`):** provision now cleans dangling partials, `npm cache clean --force`, adds `gcompat`+`curl` to deps, tries npm first, falls back to latest standalone arm64 release on gcompat (auto-resolved via GitHub API). Marker only on verified `code-server --version`.
+- **Rule Compliance (`agent.md`):** `npx tsc --noEmit` 0 errors. JS-only — Metro reload, user re-taps Install in VS Code tab.
+
+### [2026-09-05] - VS Code Tab (code-server + Extensions)
+- **Feature:** Full VS Code inside the app via `code-server` in the Alpine guest (official Alpine path: npm + `alpine-sdk bash libstdc++ libc6-compat python3 krb5-dev`), served localhost-only on port 8082 with random per-install password, rendered in a new 6th IDE tab.
+- **Files:**
+  - `vscodeService.ts` (new, 220 lines): on-demand provision, supervisor-PTY start/stop (same PRoot-safe pattern as desktop), pidfile + port-probe health, password, `publisher.name` extension installs (ID-validated), diagnostics. Fixed `stderr` type error (linux-runner `ExecutionResult` has no `stderr`).
+  - `VSCodeView.tsx` (new, 296 lines): install/start/stop, streamed log, password chip with copy, extension input, WebView viewer.
+  - Wiring: `vscode` added to tab unions (`configService`, `IDEBottomBar` + VS Code button, `IDELayout` state + slot opening current workspace dir, `ideActionService`, `NavigationSection` settings toggle).
+- **Rule Compliance (`agent.md`):** All files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors. JS-only — Metro reload, no rebuild. On-device provision + first launch still to verify (needs ~1GB free, app foreground).
+- **Note:** `IDELayout.tsx` now 522 lines (pre-existing ceiling breach, was 517) — split-out pending.
 
 ### [2026-09-05] - Floating Chat Overhaul (JSON Leak, Copy, Drag, Keyboard)
 - **Bug fixes:**

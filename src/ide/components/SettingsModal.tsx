@@ -29,25 +29,26 @@ interface SettingsModalProps {
   onClose: () => void;
   workspaceId?: string;
   onSyncWorkspace?: () => void;
+  onRerunStartup?: () => void;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
-export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsModalProps) {
+export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartup }: SettingsModalProps) {
   const { theme, themeMode, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<SettingsTabId>("appearance");
   const [apiKeys, setApiKeys] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash-lite");
   const [activeTheme, setActiveTheme] = useState<AppTheme>(themeMode);
   const [bottomTabs, setBottomTabs] = useState<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
-  const [showAiButton, setShowAiButton] = useState(true);
+  const [astraEnabled, setAstraEnabled] = useState(true);
   const [savedTick, setSavedTick] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const dirtyRef = useRef(false);
   const skipFirstRef = useRef(true);
   const saveTimer = useRef<any>(null);
-  const draftRef = useRef({ apiKeys, selectedModel, activeTheme, bottomTabs, showAiButton });
-  draftRef.current = { apiKeys, selectedModel, activeTheme, bottomTabs, showAiButton };
+  const draftRef = useRef({ apiKeys, selectedModel, activeTheme, bottomTabs, astraEnabled });
+  draftRef.current = { apiKeys, selectedModel, activeTheme, bottomTabs, astraEnabled };
 
   const flushSave = async () => {
     const draft = draftRef.current;
@@ -57,7 +58,7 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
       selectedModel: draft.selectedModel,
       selectedTheme: draft.activeTheme,
       bottomTabs: normalizeBottomTabs(draft.bottomTabs),
-      showAiButton: !!draft.showAiButton,
+      astraEnabled: draft.astraEnabled ?? true,
     });
     setTheme(draft.activeTheme);
     dirtyRef.current = false;
@@ -74,7 +75,7 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
         setSelectedModel(cfg.selectedModel || "gemini-3.5-flash-lite");
         setActiveTheme(cfg.selectedTheme || themeMode);
         setBottomTabs(normalizeBottomTabs(cfg.bottomTabs));
-        setShowAiButton(cfg.showAiButton ?? true);
+        setAstraEnabled(cfg.astraEnabled ?? true);
         setLoaded(true);
       });
     } else {
@@ -102,7 +103,7 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys, selectedModel, activeTheme, bottomTabs, showAiButton, loaded]);
+  }, [apiKeys, selectedModel, activeTheme, bottomTabs, astraEnabled, loaded]);
 
   const handleSelectTheme = (mode: AppTheme) => {
     setActiveTheme(mode);
@@ -141,7 +142,12 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
 
           <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
             {activeTab === "appearance" && (
-              <AppearanceSection activeTheme={activeTheme} onSelectTheme={handleSelectTheme} theme={theme} />
+              <AppearanceSection
+                activeTheme={activeTheme}
+                onSelectTheme={handleSelectTheme}
+                theme={theme}
+                onRerunStartup={onRerunStartup}
+              />
             )}
             {activeTab === "keys" && (
               <ApiKeyManager apiKeys={apiKeys} onChangeKeys={setApiKeys} theme={theme} />
@@ -156,8 +162,8 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace }: SettingsMod
               <NavigationSection
                 visibility={bottomTabs}
                 onChange={setBottomTabs}
-                showAiButton={showAiButton}
-                onChangeAiButton={setShowAiButton}
+                astraEnabled={astraEnabled}
+                onChangeAstraEnabled={setAstraEnabled}
                 theme={theme}
               />
             )}

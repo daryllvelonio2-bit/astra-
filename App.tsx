@@ -10,6 +10,8 @@ import { PRootService } from "./src/ide/services/prootService";
 import { FloatingChatOverlay } from "./src/ai/components/FloatingChatOverlay";
 import { ThemeProvider } from "./src/theme/themeContext";
 import { ideActionService } from "./src/ide/services/ideActionService";
+import { StartupWizard } from "./src/onboarding/StartupWizard";
+import { loadAstraEnabled, loadHasCompletedStartup, subscribeConfigChanges } from "./src/ide/services/configService";
 
 // Register Android System Overlay Root Component
 AppRegistry.registerComponent("FloatingChatOverlay", () => FloatingChatOverlay);
@@ -17,6 +19,8 @@ AppRegistry.registerComponent("FloatingChatOverlay", () => FloatingChatOverlay);
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<"chat" | "picker" | "editor">("picker");
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [hasCompletedStartup, setHasCompletedStartup] = useState<boolean | null>(null);
+  const [astraEnabled, setAstraEnabled] = useState(true);
   // Keep-alive: chat + editor stay mounted once opened and are only hidden.
   // Conditional unmounting used to orphan in-flight agent turns (the dead
   // hook instance kept streaming into discarded state while the remount
@@ -37,15 +41,21 @@ export default function App() {
 
   useEffect(() => {
     PRootService.ensureReady().catch(() => {});
+    loadHasCompletedStartup().then(setHasCompletedStartup);
+    loadAstraEnabled().then(setAstraEnabled);
 
     const unsubSwitchWs = ideActionService.subscribe("SWITCH_WORKSPACE", ({ workspaceId }) => {
       if (workspaceId) {
         handleOpenWorkspace(workspaceId);
       }
     });
+    const unsubConfig = subscribeConfigChanges((cfg) => {
+      setAstraEnabled(cfg.astraEnabled ?? true);
+    });
 
     return () => {
       unsubSwitchWs();
+      unsubConfig();
     };
   }, []);
 
@@ -55,6 +65,7 @@ export default function App() {
   };
 
   const handleNavigateToChat = (workspaceId?: string) => {
+    if (!astraEnabled) return;
     if (workspaceId) {
       setActiveWorkspaceId(workspaceId);
     }
@@ -64,29 +75,36 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        {visited.has("chat") && (
-          <View style={[styles.screen, currentScreen !== "chat" && styles.hidden]}>
-            <AstraChatScreen
-              workspaceId={activeWorkspaceId || undefined}
-              onNavigateToWorkspaces={() => showScreen("picker")}
-              onNavigateToEditor={() => showScreen("editor")}
-            />
-          </View>
-        )}
-        {currentScreen === "picker" && (
-          <ProjectPicker
-            onOpenWorkspace={handleOpenWorkspace}
-            onNavigateToChat={() => handleNavigateToChat()}
-          />
-        )}
-        {visited.has("editor") && (
-          <View style={[styles.screen, currentScreen !== "editor" && styles.hidden]}>
-            <IDELayout
-              workspaceId={activeWorkspaceId || undefined}
-              onBackToPicker={() => showScreen("picker")}
-              onOpenFullChat={() => handleNavigateToChat(activeWorkspaceId || undefined)}
-            />
-          </View>
+        {hasCompletedStartup === false ? (
+          <StartupWizard onComplete={() => setHasCompletedStartup(true)} />
+        ) : (
+          <>
+            {astraEnabled && visited.has("chat") && (
+              <View style={[styles.screen, currentScreen !== "chat" && styles.hidden]}>
+                <AstraChatScreen
+                  workspaceId={activeWorkspaceId || undefined}
+                  onNavigateToWorkspaces={() => showScreen("picker")}
+                  onNavigateToEditor={() => showScreen("editor")}
+                />
+              </View>
+            )}
+            {currentScreen === "picker" && (
+              <ProjectPicker
+                onOpenWorkspace={handleOpenWorkspace}
+                onNavigateToChat={() => handleNavigateToChat()}
+                onRerunStartup={() => setHasCompletedStartup(false)}
+              />
+            )}
+            {visited.has("editor") && (
+              <View style={[styles.screen, currentScreen !== "editor" && styles.hidden]}>
+                <IDELayout
+                  workspaceId={activeWorkspaceId || undefined}
+                  onBackToPicker={() => showScreen("picker")}
+                  onOpenFullChat={astraEnabled ? () => handleNavigateToChat(activeWorkspaceId || undefined) : undefined}
+                />
+              </View>
+            )}
+          </>
         )}
       </ThemeProvider>
     </SafeAreaProvider>

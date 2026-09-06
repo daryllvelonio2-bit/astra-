@@ -22,22 +22,35 @@ export const SUPPORTED_MODELS: ModelOption[] = [
 const CONFIG_FILE = `${FileSystem.documentDirectory}config.json`;
 
 export type AppTheme = "dark" | "light" | "midnight";
+export type EditorUiType = "native" | "vscode";
 
-export type ToggleableBottomTab = "browser" | "git" | "desktop";
+export type ToggleableBottomTab = "editor" | "terminal" | "browser" | "git" | "desktop" | "vscode";
 export type BottomTabVisibility = Record<ToggleableBottomTab, boolean>;
 
+export const TAB_ORDER: ToggleableBottomTab[] = ["editor", "terminal", "browser", "git", "desktop", "vscode"];
+
 export const DEFAULT_BOTTOM_TABS: BottomTabVisibility = {
+  editor: true,
+  terminal: true,
   browser: true,
   git: true,
   desktop: true,
+  vscode: true,
 };
 
 export function normalizeBottomTabs(value?: Partial<BottomTabVisibility> | null): BottomTabVisibility {
   return {
+    editor: value?.editor ?? DEFAULT_BOTTOM_TABS.editor,
+    terminal: value?.terminal ?? DEFAULT_BOTTOM_TABS.terminal,
     browser: value?.browser ?? DEFAULT_BOTTOM_TABS.browser,
     git: value?.git ?? DEFAULT_BOTTOM_TABS.git,
     desktop: value?.desktop ?? DEFAULT_BOTTOM_TABS.desktop,
+    vscode: value?.vscode ?? DEFAULT_BOTTOM_TABS.vscode,
   };
+}
+
+export function firstVisibleTab(tabs: BottomTabVisibility): ToggleableBottomTab {
+  return TAB_ORDER.find((t) => tabs[t]) ?? "editor";
 }
 
 export interface AppConfig {
@@ -50,7 +63,9 @@ export interface AppConfig {
   interactiveApproval: boolean;
   selectedTheme: AppTheme;
   bottomTabs: BottomTabVisibility;
-  showAiButton: boolean;
+  astraEnabled: boolean;
+  hasCompletedStartup?: boolean;
+  defaultEditorUi?: EditorUiType;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -63,7 +78,9 @@ const DEFAULT_CONFIG: AppConfig = {
   interactiveApproval: false,
   selectedTheme: "dark",
   bottomTabs: { ...DEFAULT_BOTTOM_TABS },
-  showAiButton: true,
+  astraEnabled: true,
+  hasCompletedStartup: false,
+  defaultEditorUi: "native",
 };
 
 export function normalizeApiKeys(keys?: string[], fallbackKey?: string): string[] {
@@ -98,12 +115,13 @@ export async function loadConfig(): Promise<AppConfig> {
     if (info.exists) {
       const data = await readFileText(CONFIG_FILE);
       const parsed = JSON.parse(data);
+      delete parsed.showAiButton; // legacy key, superseded by astraEnabled
       const normalizedKeys = normalizeApiKeys(parsed.apiKeys, parsed.apiKey);
       return {
         ...DEFAULT_CONFIG,
         ...parsed,
         bottomTabs: normalizeBottomTabs(parsed.bottomTabs),
-        showAiButton: parsed.showAiButton ?? DEFAULT_CONFIG.showAiButton,
+        astraEnabled: parsed.astraEnabled ?? DEFAULT_CONFIG.astraEnabled,
         apiKeys: normalizedKeys,
         apiKey: normalizedKeys[0] || parsed.apiKey || "",
       };
@@ -242,12 +260,30 @@ export async function saveBottomTabs(tabs: BottomTabVisibility): Promise<void> {
   await saveConfig({ bottomTabs: normalizeBottomTabs(tabs) });
 }
 
-export async function loadShowAiButton(): Promise<boolean> {
+export async function loadAstraEnabled(): Promise<boolean> {
   const config = await loadConfig();
-  return config.showAiButton ?? true;
+  return config.astraEnabled ?? true;
 }
 
-export async function saveShowAiButton(visible: boolean): Promise<void> {
-  await saveConfig({ showAiButton: !!visible });
+export async function saveAstraEnabled(enabled: boolean): Promise<void> {
+  await saveConfig({ astraEnabled: !!enabled });
+}
+
+export async function loadHasCompletedStartup(): Promise<boolean> {
+  const config = await loadConfig();
+  return !!config.hasCompletedStartup;
+}
+
+export async function saveHasCompletedStartup(completed: boolean): Promise<void> {
+  await saveConfig({ hasCompletedStartup: completed });
+}
+
+export async function loadDefaultEditorUi(): Promise<EditorUiType> {
+  const config = await loadConfig();
+  return config.defaultEditorUi || "native";
+}
+
+export async function saveDefaultEditorUi(editor: EditorUiType): Promise<void> {
+  await saveConfig({ defaultEditorUi: editor });
 }
 

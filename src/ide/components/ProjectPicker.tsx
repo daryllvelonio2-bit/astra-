@@ -30,9 +30,10 @@ import { useOrientation } from '../../theme/useOrientation';
 interface ProjectPickerProps {
   onOpenWorkspace: (workspaceId: string) => void;
   onNavigateToChat?: () => void;
+  onRerunStartup?: () => void;
 }
 
-export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPickerProps) {
+export function ProjectPicker({ onOpenWorkspace, onNavigateToChat, onRerunStartup }: ProjectPickerProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
@@ -252,6 +253,10 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
       <SettingsModal
         visible={isSettingsModalVisible}
         onClose={() => setSettingsModalVisible(false)}
+        onRerunStartup={() => {
+          setSettingsModalVisible(false);
+          onRerunStartup?.();
+        }}
       />
 
       <ProjectInspectorModal

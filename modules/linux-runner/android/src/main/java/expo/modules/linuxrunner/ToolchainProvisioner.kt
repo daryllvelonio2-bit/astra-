@@ -128,6 +128,26 @@ object ToolchainProvisioner {
         ensure(context, alpineDir, force = true)
     }
 
+    private const val PREFS_NAME = "astra_prefs"
+    private const val KEY_AUTO_DOWNLOAD = "auto_toolchain_download"
+
+    /** User choice: download the base toolchain automatically (default on). */
+    fun isAutoDownloadEnabled(context: Context): Boolean {
+        return try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_AUTO_DOWNLOAD, true)
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    fun setAutoDownloadEnabled(context: Context, enabled: Boolean) {
+        try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean(KEY_AUTO_DOWNLOAD, enabled).apply()
+        } catch (_: Exception) {}
+    }
+
     fun ensure(context: Context, alpineDir: File, force: Boolean = false) {
         // Reap proot trees orphaned by a previous dead app process first.
         try {
@@ -146,6 +166,23 @@ object ToolchainProvisioner {
                 stageIndex = 4,
                 isComplete = true
             )
+            return
+        }
+
+        // Everything is user-chosen: when auto-download is off, skip the
+        // background stages (manual Re-download still works via force=true).
+        if (!force && !isAutoDownloadEnabled(context)) {
+            Log.i(TAG, "Toolchain auto-download is disabled — leaving install to the user.")
+            currentStatus = currentStatus.copy(
+                isProvisioning = false,
+                stageName = "Manual",
+                stageIndex = 0,
+                currentPackage = "",
+                lastOutput = "Auto-download is off — install what you need from the lists below.",
+                isComplete = false,
+                hasError = false
+            )
+            onProgressUpdate?.invoke(currentStatus)
             return
         }
 

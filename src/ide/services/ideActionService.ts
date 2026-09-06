@@ -36,7 +36,7 @@ export interface RunInTerminalPayload {
 }
 
 export interface SwitchTabPayload {
-  tab: "editor" | "terminal" | "browser" | "git" | "desktop";
+  tab: "editor" | "terminal" | "browser" | "git" | "desktop" | "vscode";
   userInitiated?: boolean;
 }
 
@@ -186,7 +186,7 @@ class IDEActionServiceImpl {
   /**
    * Helper: Instruct the IDE to switch bottom tabs.
    */
-  switchTab(tab: "editor" | "terminal" | "browser" | "git" | "desktop", userInitiated = false) {
+  switchTab(tab: "editor" | "terminal" | "browser" | "git" | "desktop" | "vscode", userInitiated = false) {
     this.emit("SWITCH_TAB", { tab, userInitiated });
   }
 

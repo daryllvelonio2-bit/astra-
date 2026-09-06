@@ -12,30 +12,52 @@ interface TabRow {
 }
 
 const TAB_ROWS: TabRow[] = [
+  { id: "editor", title: "Editor", description: "Native code editor tab", icon: "code-slash-outline" },
+  { id: "terminal", title: "Terminal", description: "Shell + task output tab", icon: "terminal-outline" },
   { id: "browser", title: "Browser", description: "Web preview tab", icon: "globe-outline" },
   { id: "git", title: "Git", description: "Source control tab", icon: "git-branch-outline" },
   { id: "desktop", title: "Desktop", description: "Linux desktop tab", icon: "desktop-outline" },
+  { id: "vscode", title: "VS Code", description: "VS Code + extensions tab", icon: "code-slash-outline" },
 ];
 
 interface NavigationSectionProps {
   visibility: BottomTabVisibility;
   onChange: (next: BottomTabVisibility) => void;
-  showAiButton: boolean;
-  onChangeAiButton: (visible: boolean) => void;
+  astraEnabled: boolean;
+  onChangeAstraEnabled: (enabled: boolean) => void;
   theme: ThemeColors;
 }
 
-export function NavigationSection({ visibility, onChange, showAiButton, onChangeAiButton, theme }: NavigationSectionProps) {
+export function NavigationSection({ visibility, onChange, astraEnabled, onChangeAstraEnabled, theme }: NavigationSectionProps) {
   return (
     <View style={styles.container}>
+      <Text style={[styles.heading, { color: theme.textMuted }]}>
+        ASTRA AI
+      </Text>
+      <View style={[styles.row, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
+        <View style={[styles.iconBox, { backgroundColor: `${theme.accent}20` }]}>
+          <Ionicons name="sparkles-outline" size={16} color={theme.accent} />
+        </View>
+        <View style={styles.textWrap}>
+          <Text style={[styles.title, { color: theme.textPrimary }]}>Astra AI assistant</Text>
+          <Text style={[styles.desc, { color: theme.textMuted }]}>Chat, floating button + chathead. Off hides every AI surface.</Text>
+        </View>
+        <Switch
+          value={astraEnabled}
+          onValueChange={onChangeAstraEnabled}
+          trackColor={{ false: theme.bgTertiary, true: theme.accent }}
+          thumbColor={astraEnabled ? theme.sendButtonIcon : theme.textMuted}
+        />
+      </View>
       <Text style={[styles.heading, { color: theme.textMuted }]}>
         BOTTOM NAVIGATION
       </Text>
       <Text style={[styles.subheading, { color: theme.textMuted }]}>
-        Editor and Terminal are always shown.
+        The last visible tab cannot be turned off.
       </Text>
       {TAB_ROWS.map((row) => {
         const enabled = visibility[row.id];
+        const isLastOn = enabled && TAB_ROWS.filter((r) => visibility[r.id]).length <= 1;
         return (
           <View
             key={row.id}
@@ -51,30 +73,13 @@ export function NavigationSection({ visibility, onChange, showAiButton, onChange
             <Switch
               value={enabled}
               onValueChange={(v) => onChange({ ...visibility, [row.id]: v })}
+              disabled={isLastOn}
               trackColor={{ false: theme.bgTertiary, true: theme.accent }}
               thumbColor={enabled ? theme.sendButtonIcon : theme.textMuted}
             />
           </View>
         );
       })}
-      <Text style={[styles.heading, { color: theme.textMuted, marginTop: 8 }]}>
-        FLOATING SHORTCUT
-      </Text>
-      <View style={[styles.row, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
-        <View style={[styles.iconBox, { backgroundColor: `${theme.accent}20` }]}>
-          <Ionicons name="sparkles-outline" size={16} color={theme.accent} />
-        </View>
-        <View style={styles.textWrap}>
-          <Text style={[styles.title, { color: theme.textPrimary }]}>AI Assistant button</Text>
-          <Text style={[styles.desc, { color: theme.textMuted }]}>Fullscreen chat + floating chathead shortcut</Text>
-        </View>
-        <Switch
-          value={showAiButton}
-          onValueChange={onChangeAiButton}
-          trackColor={{ false: theme.bgTertiary, true: theme.accent }}
-          thumbColor={showAiButton ? theme.sendButtonIcon : theme.textMuted}
-        />
-      </View>
     </View>
   );
 }

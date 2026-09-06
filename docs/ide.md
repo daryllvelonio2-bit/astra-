@@ -134,20 +134,24 @@ autosave and a Saved indicator:
 | Keys | `ApiKeyManager` — multiple Gemini keys, masked display |
 | Model | `ModelSection` — `SUPPORTED_MODELS` picker |
 | Linux | `EnvironmentSection` — toolchain stages, live APK log, binary health, Optional Extras |
-| Tabs | `NavigationSection` — bottom-tab + AI-button visibility |
+| Tabs | `NavigationSection` — all six bottom-tab toggles + Astra AI master switch |
 
 All values persist in `config.json` via `configService.ts`.
 
 **Optional Extras** (`OptionalPackagesSection`, catalog in
-`optionalPackages.ts`): 24 one-tap Alpine packages in 4 groups — CLI Power
-Tools (neovim, tmux, fzf, bat, eza, htop, jq, yq, ncdu, rsync), Extra
-Languages (Go, Rust, Java 17, Ruby, Lua), Database Clients
-(PostgreSQL 17, MySQL/MariaDB, Valkey/Redis, MongoDB tools), Media & Docs
-(FFmpeg, ImageMagick, Pandoc, Graphviz, PDF utils). Installed on demand via
-the existing `installPackages` bridge, never part of base provisioning.
-Binaries are probed with `command -v` (single round-trip), heavy downloads
-show a LARGE badge + storage confirm, and installs are blocked while base
-provisioning holds the apk lock. Package names are pinned to Alpine v3.21:
+`optionalPackages.ts`): two halves. **Required for Astra to work**
+(`REQUIRED_GROUPS`, mirroring the native stages: core shell/tools, built-in
+runtimes, build tools) lists every base package with *why the app needs it*,
+probed via `command -v` or `apk info -e` for header-only packages — verify or
+reinstall each by hand. **Optional Extras** holds 24 one-tap boosts in 4
+groups (CLI Power Tools, Extra Languages, Database Clients, Media & Docs).
+An **Auto-download toolchain** switch (persisted natively in
+`SharedPreferences`, enforced in `ToolchainProvisioner.ensure()`, manual
+Re-download bypasses via `force=true`) makes every download a user choice:
+off means nothing downloads until tapped below. Installs reuse the existing
+`installPackages` bridge, heavy downloads show a LARGE badge + storage
+confirm, and installs are blocked while background provisioning holds the
+apk lock. Package names are pinned to Alpine v3.21:
 `valkey`+`valkey-compat` (not `redis`), `mariadb-client` (not
 `mysql-client`), `postgresql17-client`, `mongodb-tools` (`mongosh` has no
 apk — it needs glibc).

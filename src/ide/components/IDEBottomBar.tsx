@@ -4,7 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
 import { BottomTabVisibility, DEFAULT_BOTTOM_TABS } from "../services/configService";
 
-export type IDEBottomTab = "editor" | "terminal" | "browser" | "git" | "desktop";
+export type IDEBottomTab = "editor" | "terminal" | "browser" | "git" | "desktop" | "vscode";
 
 interface IDEBottomBarProps {
   bottomTab: IDEBottomTab;
@@ -19,6 +19,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
 
   return (
     <View style={[styles.bottomBar, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }, compact && styles.bottomBarCompact]}>
+      {visibleTabs.editor && (
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
@@ -38,7 +39,9 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           Editor
         </Text>
       </TouchableOpacity>
+      )}
 
+      {visibleTabs.terminal && (
       <TouchableOpacity
         style={[
           styles.bottomTabBtn,
@@ -65,6 +68,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           Terminal{runningTaskCount > 0 ? ` (${runningTaskCount})` : ""}
         </Text>
       </TouchableOpacity>
+      )}
 
       {visibleTabs.browser && (
       <TouchableOpacity
@@ -128,6 +132,28 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
           ]}
         >
           Desktop
+        </Text>
+      </TouchableOpacity>
+      )}
+
+      {visibleTabs.vscode && (
+      <TouchableOpacity
+        style={[
+          styles.bottomTabBtn,
+          bottomTab === "vscode" && { backgroundColor: theme.bgTertiary },
+        ]}
+        onPress={() => onChangeTab("vscode")}
+      >
+        <MaterialCommunityIcons name="microsoft-visual-studio-code" size={16} color={bottomTab === "vscode" ? theme.accent : theme.textMuted} />
+        <Text
+          style={[
+            styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
+            { color: theme.textMuted },
+            bottomTab === "vscode" && { color: theme.accent, fontWeight: "700" },
+          ]}
+        >
+          VS Code
         </Text>
       </TouchableOpacity>
       )}

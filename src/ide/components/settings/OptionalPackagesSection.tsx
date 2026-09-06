@@ -13,7 +13,12 @@ import {
   executeCommand,
   installPackages,
 } from "../../../../modules/linux-runner/src";
-import { OPTIONAL_GROUPS, OptionalPackage } from "../../services/optionalPackages";
+import {
+  OPTIONAL_GROUPS,
+  REQUIRED_GROUPS,
+  OptionalGroup,
+  OptionalPackage,
+} from "../../services/optionalPackages";
 
 interface OptionalPackagesSectionProps {
   theme: ThemeColors;
@@ -21,38 +26,225 @@ interface OptionalPackagesSectionProps {
   provisioningActive: boolean;
 }
 
-/** Probe every catalog binary in a single shell round-trip. Returns bin -> installed. */
-async function probeAll(bins: string[]): Promise<Record<string, boolean>> {
-  const script = `for b in ${bins.join(" ")}; do if command -v "$b" >/dev/null 2>&1; then echo "$b:yes"; else echo "$b:no"; fi; done`;
+interface ProbeResult {
+  bins: Record<string, boolean>;
+  apks: Record<string, boolean>;
+}
+
+/**
+ * Probe every catalog binary (`command -v`) and header-only apk
+ * (`apk info -e`) in a single shell round-trip.
+ */
+async function probeAll(bins: string[], apkPkgs: string[]): Promise<ProbeResult> {
+  const parts: string[] = [];
+  if (bins.length > 0) {
+    parts.push(`for b in ${bins.join(" ")}; do if command -v "$b" >/dev/null 2>&1; then echo "bin:$b:yes"; else echo "bin:$b:no"; fi; done`);
+  }
+  if (apkPkgs.length > 0) {
+    parts.push(`for p in ${apkPkgs.join(" ")}; do if apk info -e "$p" >/dev/null 2>&1; then echo "apk:$p:yes"; else echo "apk:$p:no"; fi; done`);
+  }
   try {
-    const res = await executeCommand(script);
-    const out: Record<string, boolean> = {};
+    const res = await executeCommand(parts.join("; "));
+    const out: ProbeResult = { bins: {}, apks: {} };
     for (const line of res.stdout.split("\n")) {
-      const m = line.trim().match(/^(\S+):(yes|no)$/);
-      if (m) out[m[1]] = m[2] === "yes";
+      const m = line.trim().match(/^(bin|apk):(\S+):(yes|no)$/);
+      if (m) out[m[1] === "bin" ? "bins" : "apks"][m[2]] = m[3] === "yes";
     }
     return out;
   } catch (_) {
-    return {};
+    return { bins: {}, apks: {} };
   }
 }
 
+const ALL_GROUPS: OptionalGroup[] = [...REQUIRED_GROUPS, ...OPTIONAL_GROUPS];
+const ALL_PACKAGES: OptionalPackage[] = ALL_GROUPS.flatMap((g) => g.packages);
+
+function isDetected(pkg: OptionalPackage, result: ProbeResult): boolean | undefined {
+  if (pkg.probeApk) {
+    return pkg.probeApk in result.apks ? result.apks[pkg.probeApk] : undefined;
+  }
+  return pkg.bin in result.bins ? result.bins[pkg.bin] : undefined;
+}
+
+interface GroupCardProps {
+  group: OptionalGroup;
+  theme: ThemeColors;
+  installed: Record<string, boolean>;
+  busy: Record<string, boolean>;
+  groupBusy: boolean;
+  probing: boolean;
+  provisioningActive: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onInstallOne: (pkg: OptionalPackage) => void;
+  onInstallGroup: (group: OptionalGroup) => void;
+}
+
+function PackageGroupCard({
+  group,
+  theme,
+  installed,
+  busy,
+  groupBusy,
+  probing,
+  provisioningActive,
+  expanded,
+  onToggle,
+  onInstallOne,
+  onInstallGroup,
+}: GroupCardProps) {
+  const doneCount = group.packages.filter((p) => installed[p.id]).length;
+  const allDone = doneCount === group.packages.length;
+  return (
+    <View
+      style={[
+        styles.groupCard,
+        {
+          backgroundColor: theme.bgSecondary,
+          borderColor: allDone ? `${theme.accentGreen}40` : theme.border,
+        },
+      ]}
+    >
+      <TouchableOpacity style={styles.groupHeader} onPress={onToggle} activeOpacity={0.7}>
+        <View style={styles.groupLeft}>
+          <View style={[styles.groupBadge, { backgroundColor: `${theme.accent}18` }]}>
+            <Ionicons name={group.icon as any} size={15} color={theme.accent} />
+          </View>
+          <View style={styles.titleCol}>
+            <Text style={[styles.groupTitle, { color: theme.textPrimary }]}>
+              {group.title}
+            </Text>
+            <Text style={[styles.groupDesc, { color: theme.textMuted }]} numberOfLines={1}>
+              {group.blurb}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.groupRight}>
+          {probing ? (
+            <ActivityIndicator size={12} color={theme.textMuted} />
+          ) : (
+            <Text
+              style={[
+                styles.groupCount,
+                { color: allDone ? theme.accentGreen : theme.textMuted },
+              ]}
+            >
+              {allDone ? "All installed" : `${doneCount}/${group.packages.length}`}
+            </Text>
+          )}
+          <Ionicons
+            name={expanded ? "chevron-up" : "chevron-down"}
+            size={14}
+            color={theme.textMuted}
+          />
+        </View>
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={[styles.packageList, { borderTopColor: theme.border }]}>
+          {group.packages.map((pkg) => {
+            const isInstalled = !!installed[pkg.id];
+            const isBusy = !!busy[pkg.id];
+            return (
+              <View key={pkg.id} style={styles.pkgRow}>
+                <View style={styles.pkgInfo}>
+                  <View style={styles.pkgNameRow}>
+                    <Text style={[styles.pkgName, { color: theme.textPrimary }]}>
+                      {pkg.name}
+                    </Text>
+                    <View style={[styles.apkChip, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
+                      <Text style={[styles.apkChipText, { color: theme.textSecondary }]}>
+                        {pkg.apk.join(" ")}
+                      </Text>
+                    </View>
+                    {pkg.heavy && (
+                      <View style={[styles.heavyChip, { backgroundColor: `${theme.accentGold}18`, borderColor: `${theme.accentGold}40` }]}>
+                        <Text style={[styles.heavyChipText, { color: theme.accentGold }]}>
+                          LARGE
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.pkgDesc, { color: theme.textSecondary }]}>
+                    {pkg.desc}
+                  </Text>
+                </View>
+                <View style={styles.pkgAction}>
+                  {isBusy || groupBusy ? (
+                    <ActivityIndicator size={14} color={theme.accent} />
+                  ) : isInstalled ? (
+                    <Ionicons name="checkmark-circle" size={20} color={theme.accentGreen} />
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.installBtn,
+                        {
+                          backgroundColor: `${theme.accent}15`,
+                          borderColor: `${theme.accent}40`,
+                          opacity: provisioningActive ? 0.4 : 1,
+                        },
+                      ]}
+                      onPress={() => onInstallOne(pkg)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="download-outline" size={13} color={theme.accent} />
+                      <Text style={[styles.installText, { color: theme.accent }]}>
+                        Get
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+
+          {!allDone && !probing && (
+            <TouchableOpacity
+              style={[
+                styles.installAllBtn,
+                {
+                  backgroundColor: `${theme.accent}12`,
+                  borderColor: `${theme.accent}30`,
+                  opacity: provisioningActive || groupBusy ? 0.5 : 1,
+                },
+              ]}
+              onPress={() => onInstallGroup(group)}
+              disabled={provisioningActive || groupBusy}
+              activeOpacity={0.7}
+            >
+              {groupBusy ? (
+                <ActivityIndicator size={13} color={theme.accent} />
+              ) : (
+                <Ionicons name="albums-outline" size={13} color={theme.accent} />
+              )}
+              <Text style={[styles.installAllText, { color: theme.accent }]}>
+                Install all missing ({group.packages.length - doneCount})
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export function OptionalPackagesSection({ theme, provisioningActive }: OptionalPackagesSectionProps) {
-  const [expandedGroup, setExpandedGroup] = useState<string | null>("cli");
+  const [expandedGroup, setExpandedGroup] = useState<string | null>("req-core");
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [groupBusy, setGroupBusy] = useState<Record<string, boolean>>({});
   const [probing, setProbing] = useState(true);
 
-  const allPackages: OptionalPackage[] = OPTIONAL_GROUPS.flatMap((g) => g.packages);
-
-  const refresh = useCallback(async (bins?: string[]) => {
-    const targets = bins ?? allPackages.map((p) => p.bin);
-    const result = await probeAll(targets);
+  const refresh = useCallback(async (pkgs?: OptionalPackage[]) => {
+    const targets = pkgs ?? ALL_PACKAGES;
+    const bins = [...new Set(targets.map((p) => p.bin).filter(Boolean))];
+    const apks = [...new Set(targets.map((p) => p.probeApk).filter((a): a is string => !!a))];
+    const result = await probeAll(bins, apks);
     setInstalled((prev) => {
       const next = { ...prev };
-      for (const p of allPackages) {
-        if (p.bin in result) next[p.id] = result[p.bin];
+      for (const p of targets) {
+        const detected = isDetected(p, result);
+        if (detected !== undefined) next[p.id] = detected;
       }
       return next;
     });
@@ -74,7 +266,7 @@ export function OptionalPackagesSection({ theme, provisioningActive }: OptionalP
     if (provisioningActive) {
       Alert.alert(
         "Provisioning Running",
-        "Wait for the base toolchain download to finish before installing extras (they share the apk lock)."
+        "Wait for the background download to finish before installing packages (they share the apk lock)."
       );
       return true;
     }
@@ -88,7 +280,7 @@ export function OptionalPackagesSection({ theme, provisioningActive }: OptionalP
       try {
         const res = await installPackages(pkg.apk);
         if (res.exitCode === 0) {
-          await refresh([pkg.bin]);
+          await refresh([pkg]);
         } else {
           Alert.alert(
             `Failed to install ${pkg.name}`,
@@ -110,20 +302,18 @@ export function OptionalPackagesSection({ theme, provisioningActive }: OptionalP
     }
   };
 
-  const handleInstallGroup = (groupId: string) => {
+  const handleInstallGroup = (group: OptionalGroup) => {
     if (guardProvisioning()) return;
-    const group = OPTIONAL_GROUPS.find((g) => g.id === groupId);
-    if (!group) return;
     const missing = group.packages.filter((p) => !installed[p.id]);
     if (missing.length === 0) return;
     const heavyOnes = missing.filter((p) => p.heavy);
     const run = async () => {
-      setGroupBusy((prev) => ({ ...prev, [groupId]: true }));
+      setGroupBusy((prev) => ({ ...prev, [group.id]: true }));
       try {
         const apks = missing.flatMap((p) => p.apk);
         const res = await installPackages(apks);
         if (res.exitCode === 0) {
-          await refresh(missing.map((p) => p.bin));
+          await refresh(missing);
         } else {
           Alert.alert(
             `Failed to install ${group.title}`,
@@ -131,7 +321,7 @@ export function OptionalPackagesSection({ theme, provisioningActive }: OptionalP
           );
         }
       } finally {
-        setGroupBusy((prev) => ({ ...prev, [groupId]: false }));
+        setGroupBusy((prev) => ({ ...prev, [group.id]: false }));
       }
     };
     Alert.alert(
@@ -141,157 +331,41 @@ export function OptionalPackagesSection({ theme, provisioningActive }: OptionalP
     );
   };
 
+  const renderGroup = (group: OptionalGroup) => (
+    <PackageGroupCard
+      key={group.id}
+      group={group}
+      theme={theme}
+      installed={installed}
+      busy={busy}
+      groupBusy={!!groupBusy[group.id]}
+      probing={probing}
+      provisioningActive={provisioningActive}
+      expanded={expandedGroup === group.id}
+      onToggle={() => setExpandedGroup(expandedGroup === group.id ? null : group.id)}
+      onInstallOne={handleInstallOne}
+      onInstallGroup={handleInstallGroup}
+    />
+  );
+
   return (
     <View style={styles.container}>
+      <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>
+        REQUIRED FOR ASTRA TO WORK
+      </Text>
+      <Text style={[styles.sectionSub, { color: theme.textMuted }]}>
+        What the app needs, and why. Auto-downloaded on first launch unless
+        turned off above — verify or reinstall each piece here, always your choice.
+      </Text>
+      {REQUIRED_GROUPS.map(renderGroup)}
+
       <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>
         OPTIONAL EXTRAS
       </Text>
       <Text style={[styles.sectionSub, { color: theme.textMuted }]}>
         One-tap dev boosts for your Linux environment. Installed outside the base toolchain, anytime.
       </Text>
-
-      {OPTIONAL_GROUPS.map((group) => {
-        const doneCount = group.packages.filter((p) => installed[p.id]).length;
-        const allDone = doneCount === group.packages.length;
-        const isExpanded = expandedGroup === group.id;
-        const isGroupBusy = !!groupBusy[group.id];
-        return (
-          <View
-            key={group.id}
-            style={[
-              styles.groupCard,
-              {
-                backgroundColor: theme.bgSecondary,
-                borderColor: allDone ? `${theme.accentGreen}40` : theme.border,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.groupHeader}
-              onPress={() => setExpandedGroup(isExpanded ? null : group.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.groupLeft}>
-                <View style={[styles.groupBadge, { backgroundColor: `${theme.accent}18` }]}>
-                  <Ionicons name={group.icon as any} size={15} color={theme.accent} />
-                </View>
-                <View style={styles.titleCol}>
-                  <Text style={[styles.groupTitle, { color: theme.textPrimary }]}>
-                    {group.title}
-                  </Text>
-                  <Text style={[styles.groupDesc, { color: theme.textMuted }]} numberOfLines={1}>
-                    {group.blurb}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.groupRight}>
-                {probing ? (
-                  <ActivityIndicator size={12} color={theme.textMuted} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.groupCount,
-                      { color: allDone ? theme.accentGreen : theme.textMuted },
-                    ]}
-                  >
-                    {allDone ? "All installed" : `${doneCount}/${group.packages.length}`}
-                  </Text>
-                )}
-                <Ionicons
-                  name={isExpanded ? "chevron-up" : "chevron-down"}
-                  size={14}
-                  color={theme.textMuted}
-                />
-              </View>
-            </TouchableOpacity>
-
-            {isExpanded && (
-              <View style={[styles.packageList, { borderTopColor: theme.border }]}>
-                {group.packages.map((pkg) => {
-                  const isInstalled = !!installed[pkg.id];
-                  const isBusy = !!busy[pkg.id];
-                  return (
-                    <View key={pkg.id} style={styles.pkgRow}>
-                      <View style={styles.pkgInfo}>
-                        <View style={styles.pkgNameRow}>
-                          <Text style={[styles.pkgName, { color: theme.textPrimary }]}>
-                            {pkg.name}
-                          </Text>
-                          <View style={[styles.apkChip, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
-                            <Text style={[styles.apkChipText, { color: theme.textSecondary }]}>
-                              {pkg.apk.join(" ")}
-                            </Text>
-                          </View>
-                          {pkg.heavy && (
-                            <View style={[styles.heavyChip, { backgroundColor: `${theme.accentGold}18`, borderColor: `${theme.accentGold}40` }]}>
-                              <Text style={[styles.heavyChipText, { color: theme.accentGold }]}>
-                                LARGE
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={[styles.pkgDesc, { color: theme.textSecondary }]}>
-                          {pkg.desc}
-                        </Text>
-                      </View>
-                      <View style={styles.pkgAction}>
-                        {isBusy || isGroupBusy ? (
-                          <ActivityIndicator size={14} color={theme.accent} />
-                        ) : isInstalled ? (
-                          <Ionicons name="checkmark-circle" size={20} color={theme.accentGreen} />
-                        ) : (
-                          <TouchableOpacity
-                            style={[
-                              styles.installBtn,
-                              {
-                                backgroundColor: `${theme.accent}15`,
-                                borderColor: `${theme.accent}40`,
-                                opacity: provisioningActive ? 0.4 : 1,
-                              },
-                            ]}
-                            onPress={() => handleInstallOne(pkg)}
-                            activeOpacity={0.7}
-                          >
-                            <Ionicons name="download-outline" size={13} color={theme.accent} />
-                            <Text style={[styles.installText, { color: theme.accent }]}>
-                              Get
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  );
-                })}
-
-                {!allDone && !probing && (
-                  <TouchableOpacity
-                    style={[
-                      styles.installAllBtn,
-                      {
-                        backgroundColor: `${theme.accent}12`,
-                        borderColor: `${theme.accent}30`,
-                        opacity: provisioningActive || isGroupBusy ? 0.5 : 1,
-                      },
-                    ]}
-                    onPress={() => handleInstallGroup(group.id)}
-                    disabled={provisioningActive || isGroupBusy}
-                    activeOpacity={0.7}
-                  >
-                    {isGroupBusy ? (
-                      <ActivityIndicator size={13} color={theme.accent} />
-                    ) : (
-                      <Ionicons name="albums-outline" size={13} color={theme.accent} />
-                    )}
-                    <Text style={[styles.installAllText, { color: theme.accent }]}>
-                      Install all missing ({group.packages.length - doneCount})
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        );
-      })}
+      {OPTIONAL_GROUPS.map(renderGroup)}
     </View>
   );
 }

@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemeColors } from "../../../theme/themeContext";
@@ -15,6 +16,8 @@ import {
   startProvisioning,
   cancelProvisioning,
   addProvisioningListener,
+  isAutoProvisionEnabled,
+  setAutoProvisionEnabled,
   ProvisioningStatus,
   DEFAULT_PROVISIONING_STATUS,
 } from "../../../../modules/linux-runner/src";
@@ -31,6 +34,7 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [expandedStage, setExpandedStage] = useState<number | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [autoDownload, setAutoDownload] = useState(true);
   const pollTimerRef = useRef<any>(null);
 
   const refreshStatus = () => {
@@ -42,6 +46,9 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
 
   useEffect(() => {
     refreshStatus();
+    try {
+      setAutoDownload(isAutoProvisionEnabled());
+    } catch (_) {}
 
     const sub = addProvisioningListener((newStatus) => {
       setStatus(newStatus);
@@ -96,6 +103,19 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
     }
   };
 
+  const handleToggleAutoDownload = (value: boolean) => {
+    setAutoDownload(value);
+    try {
+      setAutoProvisionEnabled(value);
+    } catch (_) {}
+    if (!value) {
+      Alert.alert(
+        "Auto-download Off",
+        "The base toolchain will no longer download by itself. Install what you need from the Required list below — every download stays your choice."
+      );
+    }
+  };
+
   const calculateProgress = (): number => {
     if (status.isComplete) return 100;
     if (!status.isProvisioning && status.stageIndex === 0) return 0;
@@ -109,6 +129,26 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
 
   return (
     <View style={styles.container}>
+      {/* 0. Auto-download toggle */}
+      <View style={[styles.autoRow, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
+        <View style={styles.autoInfo}>
+          <Text style={[styles.autoTitle, { color: theme.textPrimary }]}>
+            Auto-download toolchain
+          </Text>
+          <Text style={[styles.autoDesc, { color: theme.textSecondary }]}>
+            {autoDownload
+              ? "Base packages download on launch"
+              : "Off — you install from the lists below"}
+          </Text>
+        </View>
+        <Switch
+          value={autoDownload}
+          onValueChange={handleToggleAutoDownload}
+          trackColor={{ false: theme.bgTertiary, true: theme.accent }}
+          thumbColor={theme.sendButtonIcon}
+        />
+      </View>
+
       {/* 1. Main Status Banner */}
       <View
         style={[
@@ -344,6 +384,18 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
 
 const styles = StyleSheet.create({
   container: { gap: 12, paddingBottom: 24 },
+  autoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  autoInfo: { flex: 1, paddingRight: 8 },
+  autoTitle: { fontSize: 13, fontWeight: "700" },
+  autoDesc: { fontSize: 11, marginTop: 1 },
   card: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 10 },
   statusRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   statusLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },

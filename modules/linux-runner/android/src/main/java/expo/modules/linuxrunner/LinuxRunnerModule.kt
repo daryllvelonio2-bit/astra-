@@ -53,6 +53,17 @@ class LinuxRunnerModule : Module() {
             return@Function ToolchainProvisioner.cancel()
         }
 
+        Function("isAutoProvisionEnabled") {
+            val context = appContext.reactContext ?: return@Function true
+            return@Function ToolchainProvisioner.isAutoDownloadEnabled(context)
+        }
+
+        Function("setAutoProvisionEnabled") { enabled: Boolean ->
+            val context = appContext.reactContext ?: return@Function false
+            ToolchainProvisioner.setAutoDownloadEnabled(context, enabled)
+            return@Function true
+        }
+
         AsyncFunction("startProvisioning") {
             val context = appContext.reactContext ?: return@AsyncFunction false
             val alpineDir = java.io.File(context.filesDir, "alpine")

@@ -94,6 +94,25 @@ export async function startProvisioning(): Promise<boolean> {
   return false;
 }
 
+/** User choice: auto-download the base toolchain (default true = current behavior). */
+export function isAutoProvisionEnabled(): boolean {
+  if (LinuxRunnerModule?.isAutoProvisionEnabled) {
+    try {
+      return !!LinuxRunnerModule.isAutoProvisionEnabled();
+    } catch (_) {}
+  }
+  return true;
+}
+
+export function setAutoProvisionEnabled(enabled: boolean): boolean {
+  if (LinuxRunnerModule?.setAutoProvisionEnabled) {
+    try {
+      return !!LinuxRunnerModule.setAutoProvisionEnabled(enabled);
+    } catch (_) {}
+  }
+  return false;
+}
+
 export function addProvisioningListener(
   listener: (status: ProvisioningStatus) => void
 ): { remove: () => void } {

@@ -18,6 +18,8 @@ export interface OptionalPackage {
   apk: string[];
   /** Binary probed with `command -v` to detect "installed" */
   bin: string;
+  /** When set, `apk info -e` on this package is probed instead (header-only packages with no binary) */
+  probeApk?: string;
   /** Display name */
   name: string;
   /** Plain-language "what it does for you" */
@@ -89,6 +91,68 @@ export const OPTIONAL_GROUPS: OptionalGroup[] = [
       { id: "pandoc", apk: ["pandoc"], bin: "pandoc", name: "Pandoc", desc: "Convert Markdown docs to PDF, HTML and Word." },
       { id: "graphviz", apk: ["graphviz"], bin: "dot", name: "Graphviz", desc: "Render architecture diagrams from plain text descriptions." },
       { id: "poppler", apk: ["poppler-utils"], bin: "pdftotext", name: "PDF Utils", desc: "Read PDFs in the terminal and extract their text." },
+    ],
+  },
+];
+
+/**
+ * Packages Astra itself needs to work. Mirrors the base provisioning stages
+ * in ToolchainProvisioner.kt (which auto-downloads these on first launch
+ * unless the user turns auto-download off). Listed here so users can verify
+ * or reinstall each piece by hand — every install stays a user choice.
+ * `desc` explains why the app needs it.
+ */
+export const REQUIRED_GROUPS: OptionalGroup[] = [
+  {
+    id: "req-core",
+    title: "Core Shell & Tools",
+    icon: "terminal-outline",
+    blurb: "Terminal, file commands, search and downloads",
+    packages: [
+      { id: "r-bash", apk: ["bash"], bin: "bash", name: "Bash", desc: "Shell behind the terminal and Run commands — scripts and sessions need it." },
+      { id: "r-coreutils", apk: ["coreutils"], bin: "ls", name: "Coreutils", desc: "Basic file commands (ls, cp, mv, mkdir) the IDE and terminal rely on." },
+      { id: "r-findutils", apk: ["findutils"], bin: "find", name: "Findutils", desc: "File search used by workspace scanning and the AI agent." },
+      { id: "r-grep", apk: ["grep"], bin: "grep", name: "grep", desc: "Text search inside files, logs and command output." },
+      { id: "r-sed", apk: ["sed"], bin: "sed", name: "sed", desc: "Stream editing used by setup scripts and the agent." },
+      { id: "r-gawk", apk: ["gawk"], bin: "awk", name: "gawk", desc: "Text processing for scripts and tool-output parsing." },
+      { id: "r-ripgrep", apk: ["ripgrep"], bin: "rg", name: "ripgrep", desc: "Fast code search behind the editor and agent." },
+      { id: "r-tar", apk: ["tar"], bin: "tar", name: "tar", desc: "Extracts the Alpine rootfs itself plus project archives." },
+      { id: "r-gzip", apk: ["gzip"], bin: "gzip", name: "gzip", desc: "Decompression for downloads and the rootfs." },
+      { id: "r-zip", apk: ["zip", "unzip"], bin: "unzip", name: "zip / unzip", desc: "Archives for project export, import and sharing." },
+      { id: "r-tree", apk: ["tree"], bin: "tree", name: "tree", desc: "Directory listings shown around the IDE." },
+      { id: "r-cacerts", apk: ["ca-certificates"], bin: "", probeApk: "ca-certificates", name: "CA Certificates", desc: "TLS trust roots — HTTPS downloads, git, npm all fail without these." },
+      { id: "r-curl", apk: ["curl"], bin: "curl", name: "curl", desc: "File downloads and API calls from scripts." },
+      { id: "r-wget", apk: ["wget"], bin: "wget", name: "wget", desc: "Backup downloader for provisioning and scripts." },
+      { id: "r-git", apk: ["git"], bin: "git", name: "Git", desc: "Powers the Git tab — clone, stage, commit, push." },
+      { id: "r-ssh", apk: ["openssh-client"], bin: "ssh", name: "SSH Client", desc: "SSH remotes, deploy keys and git-over-SSH URLs." },
+      { id: "r-sqlite", apk: ["sqlite"], bin: "sqlite3", name: "SQLite", desc: "Bundled databases and running .sql files." },
+    ],
+  },
+  {
+    id: "req-lang",
+    title: "Built-in Runtimes",
+    icon: "code-slash-outline",
+    blurb: "Languages the Run button and agent execute",
+    packages: [
+      { id: "r-node", apk: ["nodejs"], bin: "node", name: "Node.js", desc: "Runs JavaScript files and the Astra CLI bridge.", heavy: true },
+      { id: "r-npm", apk: ["npm"], bin: "npm", name: "npm", desc: "Installs JavaScript project dependencies." },
+      { id: "r-python", apk: ["python3"], bin: "python3", name: "Python 3", desc: "Runs Python files and serves HTML previews." },
+      { id: "r-pip", apk: ["py3-pip"], bin: "pip3", name: "pip", desc: "Installs Python packages." },
+      { id: "r-php", apk: ["php83"], bin: "php", name: "PHP 8.3", desc: "Runs PHP files and Laravel projects." },
+      { id: "r-phpext", apk: ["php83-sqlite3", "php83-pdo_sqlite", "php83-curl", "php83-openssl", "php83-json", "php83-phar", "php83-mbstring", "php83-dom", "php83-xml"], bin: "php", name: "PHP Extensions", desc: "Database, network and XML support PHP apps expect." },
+      { id: "r-composer", apk: ["composer"], bin: "composer", name: "Composer", desc: "Installs PHP project dependencies." },
+    ],
+  },
+  {
+    id: "req-build",
+    title: "Build Tools",
+    icon: "construct-outline",
+    blurb: "Compilers for native modules and C/C++ runs",
+    packages: [
+      { id: "r-make", apk: ["make"], bin: "make", name: "make", desc: "Drives C/C++ and native-module builds." },
+      { id: "r-gcc", apk: ["gcc", "g++"], bin: "gcc", name: "GCC / G++", desc: "Compiles C/C++ runs and node-pty for the terminal.", heavy: true },
+      { id: "r-headers", apk: ["linux-headers"], bin: "", probeApk: "linux-headers", name: "Linux Headers", desc: "Kernel headers native code compiles against." },
+      { id: "r-icu", apk: ["icu-libs", "icu-data-full"], bin: "", probeApk: "icu-libs", name: "ICU Libraries", desc: "Unicode data Node.js needs to start at all.", heavy: true },
     ],
   },
 ];
