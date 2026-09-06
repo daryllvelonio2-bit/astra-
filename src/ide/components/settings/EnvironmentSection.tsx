@@ -20,6 +20,7 @@ import {
 } from "../../../../modules/linux-runner/src";
 import { STAGES } from "./environmentStages";
 import { EnvironmentStageCard } from "./EnvironmentStageCard";
+import { OptionalPackagesSection } from "./OptionalPackagesSection";
 
 interface EnvironmentSectionProps {
   theme: ThemeColors;
@@ -334,6 +335,9 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
           <Text style={[styles.diagText, { color: theme.textSecondary }]}>Git</Text>
         </View>
       </View>
+
+      {/* 5. Optional Extras */}
+      <OptionalPackagesSection theme={theme} provisioningActive={status.isProvisioning} />
     </View>
   );
 }

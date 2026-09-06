@@ -123,29 +123,40 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat }: ProjectPick
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}>
-        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Workspaces</Text>
-        <View style={styles.headerActions}>
+        <View style={styles.titleRow}>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Workspaces</Text>
+          <View style={[styles.countBadge, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
+            <Text style={[styles.countText, { color: theme.textSecondary }]}>{projects.length}</Text>
+          </View>
+          <View style={styles.titleSpacer} />
+          <TouchableOpacity onPress={() => setSettingsModalVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="settings-outline" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.actionRow}>
           <TouchableOpacity
-            style={[styles.headerBtn, { backgroundColor: `${theme.accentGold}18`, borderColor: `${theme.accentGold}40` }]}
-            onPress={() => setOpenProjectModalVisible(true)}
-            activeOpacity={0.7}
+            style={[styles.actionBtn, styles.actionPrimary, { backgroundColor: theme.accent }]}
+            onPress={() => setCreateModalVisible(true)}
+            activeOpacity={0.8}
           >
-            <Ionicons name="folder-open-outline" size={15} color={theme.accentGold} />
-            <Text style={[styles.headerBtnText, { color: theme.accentGold }]}>Open Project</Text>
+            <Ionicons name="add" size={16} color={theme.sendButtonIcon} />
+            <Text style={[styles.actionText, { color: theme.sendButtonIcon }]}>New</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.headerBtn, { backgroundColor: `${theme.accent}18`, borderColor: `${theme.accent}40` }]}
+            style={[styles.actionBtn, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}
             onPress={() => setCloneModalVisible(true)}
             activeOpacity={0.7}
           >
             <Ionicons name="cloud-download-outline" size={15} color={theme.accent} />
-            <Text style={[styles.headerBtnText, { color: theme.accent }]}>Clone Repo</Text>
+            <Text style={[styles.actionText, { color: theme.textPrimary }]}>Clone</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]} onPress={() => setCreateModalVisible(true)}>
-            <Ionicons name="add" size={24} color={theme.accent} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]} onPress={() => setSettingsModalVisible(true)}>
-            <Ionicons name="settings-outline" size={20} color={theme.textPrimary} />
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}
+            onPress={() => setOpenProjectModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="folder-open-outline" size={15} color={theme.accentGold} />
+            <Text style={[styles.actionText, { color: theme.textPrimary }]}>Open</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -262,31 +273,65 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  headerActions: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
-  iconButton: {
-    padding: 4,
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  countBadge: {
+    minWidth: 22,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  countText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  titleSpacer: {
+    flex: 1,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  actionPrimary: {
+    borderWidth: 0,
+  },
+  actionText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
     marginTop: 10,
-    marginBottom: 6,
+    marginBottom: 4,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
@@ -301,7 +346,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingBottom: 40,
   },
   listItem: {
@@ -321,22 +366,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
   },
-  headerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  headerBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
   emptyActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 10,
   },
   createBtn: {

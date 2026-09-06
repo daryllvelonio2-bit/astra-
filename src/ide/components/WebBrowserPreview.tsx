@@ -6,22 +6,17 @@ import { runningTasksService, RunningTask } from "../../ai/services/runningTasks
 import { PRootService } from "../services/prootService";
 import { startTerminalSession, writeTerminalInput } from "../../../modules/linux-runner/src";
 import { WebBrowserNavBar } from "./browser/WebBrowserNavBar";
-import { WebBrowserPortChips } from "./browser/WebBrowserPortChips";
 import { WebBrowserErrorView } from "./browser/WebBrowserErrorView";
 import { useTheme } from "../../theme/themeContext";
 import { useOrientation } from "../../theme/useOrientation";
 
 interface WebBrowserPreviewProps {
   initialUrl?: string;
-  activeHtmlContent?: string;
-  activeFileName?: string;
   workspaceId?: string;
 }
 
 export function WebBrowserPreview({
   initialUrl = "http://127.0.0.1:8000",
-  activeHtmlContent,
-  activeFileName,
   workspaceId,
 }: WebBrowserPreviewProps) {
   const { theme } = useTheme();
@@ -113,12 +108,6 @@ export function WebBrowserPreview({
     }
   };
 
-  const setPort = (port: string) => {
-    const newUrl = `http://127.0.0.1:${port}`;
-    setInputUrl(newUrl);
-    handleNavigate(newUrl);
-  };
-
   const currentPort = (() => {
     try {
       const match = url.match(/:(\d+)/);
@@ -173,15 +162,6 @@ export function WebBrowserPreview({
           onSubmit={() => handleNavigate()}
           onClearInput={() => setInputUrl("")}
           onOpenExternal={handleOpenExternal}
-        />
-      )}
-
-      {!isLandscape && (
-        <WebBrowserPortChips
-          runningTasks={runningTasks}
-          currentPort={currentPort}
-          onSelectTask={(t) => handleNavigate(t.url || `http://127.0.0.1:${t.port || "8080"}`)}
-          onSelectPort={setPort}
         />
       )}
 

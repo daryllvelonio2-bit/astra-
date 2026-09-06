@@ -2,7 +2,44 @@
 
 ## Status
 - **Current Phase:** Project Documentation (docs/)
-- **Last Updated:** September 5, 2026
+- **Last Updated:** September 6, 2026
+
+### [2026-09-06] - Run Button Executes Projects On-Device
+- **Problem:** Run mapped every non-py/php file to JavaScript eval, sent Python to the Piston cloud API, had no HTML handling (dead `activeHtmlContent` prop), and showed output in a blocking Alert.
+- **Feature:** New `src/ide/services/runService.ts` (379 lines): save-first, then execute in the Alpine guest against real project files. HTML served via `http.server` + opened in Browser tab; JS/Python/PHP/TS/C/C++/Go/Rust/Java/Ruby/Lua/shell/SQL run with guest toolchain; unknown files use project-entry detection (package.json, artisan, manage.py, app/main/server.py, go.mod, Cargo.toml, index.html). Output streams to a dedicated ▶ Run terminal tab via new `RUN_IN_TERMINAL` IDE action (`useRunSession.ts`, 74 lines). Missing runtimes show the genuine shell error + Optional Extras hint — nothing auto-installed, per user decision.
+- **Files:** `runService.ts` (new), `useRunSession.ts` (new), `ideActionService.ts` (+RUN_IN_TERMINAL), `useTerminalSession.ts` (subscribes via hook, kept at 500 lines), `useWorkspaceFileActions.ts` (rewired off `executeCode`/Alert), `IDELayout.tsx` (tab-switch callbacks), `WebBrowserPreview.tsx` (dead props removed), `docs/ide.md`.
+- **Rule Compliance (`agent.md`):** All files ≤500 lines, theme tokens untouched (no UI colors added). `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-06] - Optional Dependencies: Linux Extras Catalog
+- **Feature:** Settings → Linux tab gains an "Optional Extras" section: 24 curated one-tap Alpine packages in 4 groups (CLI Power Tools, Extra Languages, Database Clients, Media & Docs), each with a plain-language "what it does" line. Per-package Get button + per-group "Install all missing", installed state via single-round-trip `command -v` probe, LARGE badge + storage confirm for heavy items (Go/Rust/Java/FFmpeg), installs blocked while base provisioning holds the apk lock.
+- **Files:**
+  - `src/ide/services/optionalPackages.ts` (new, ~100 lines): `OPTIONAL_GROUPS` catalog (`id/apk/bin/name/desc/heavy?`).
+  - `src/ide/components/settings/OptionalPackagesSection.tsx` (new, ~300 lines): collapsible group cards matching `EnvironmentStageCard` visuals, reuses `installPackages` bridge.
+  - `EnvironmentSection.tsx`: renders section after the diagnostics bar with `provisioningActive` guard.
+  - `docs/ide.md`: Optional Extras paragraph + Linux tab row update.
+- **Package-name verification (Alpine v3.21):** `valkey`+`valkey-compat` (redis was replaced), `mariadb-client` (no `mysql-client`), `postgresql17-client` (clients are versioned), `mongodb-tools` (`mongosh` needs glibc, no apk), `magick` binary probe for ImageMagick 7.
+- **Rule Compliance (`agent.md`):** New files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - Editor Opens with No File (Empty State Default)
+- **Change (user request):** Opening a project no longer auto-opens the first file. `IDELayout.tsx` load path now resets `setActiveFile(null)` (also clears stale file on workspace switch); existing `EditorView` empty state ("Select a file from the explorer to begin editing") shows instead. Removed now-unused `findFirstFile` helper. Explicit taps + pending `OPEN_FILE` actions still open files normally.
+- **Rule Compliance (`agent.md`):** Minimal deletion-only change. `npx tsc --noEmit` verified with 0 errors. Note: `IDELayout.tsx` went 534 → 517 lines, still above the 500-line ceiling (pre-existing) — split-out pending.
+
+### [2026-09-05] - Browser Port Preset Strip Removed
+- **Change (user request):** Removed the suggestion strip (port preset pills + live task chips, `WebBrowserPortChips`) from the top of the browser tab. Deleted `src/ide/components/browser/WebBrowserPortChips.tsx`; `WebBrowserPreview.tsx` keeps NavBar + loading bar + WebView (port navigation still via address bar; `currentPort` retained for error view / quick server).
+- **Rule Compliance (`agent.md`):** Zero bloatware, dead code deleted. `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-05] - No-Cable Debug Install over Phone Hotspot (Nova 7i)
+- **Context:** Laptop on phone hotspot (phone `192.168.43.1`, PC `192.168.43.106`, ping 0% loss). Nova 7i = Android 10 based (even on EMUI 12) → no native Wireless debugging menu; old `adb tcpip` needs USB once, so went cable-free via HTTP.
+- **Build:** `./gradlew assembleDebug` → BUILD SUCCESSFUL (15 executed, 356 up-to-date), 349MB `app-debug.apk` current.
+- **Install path:** `python3 -m http.server 8000` serving `android/app/build/outputs/apk/debug/` on `0.0.0.0:8000` (verified 200 OK, `application/vnd.android.package-archive`) → phone browser downloads `http://192.168.43.106:8000/app-debug.apk`, tap to install. Note: `pkill -f "http.server ..."` self-matches the invoking shell — use `[h]` trick or avoid pkill.
+- **Run path:** `./start-wifi.sh` launched Metro LAN bundler in dedicated foot terminal (`metro-wifi.sh`, `expo start --dev-client --lan`), port 8081 LISTENING. Phone sets Dev Menu > Debug server host to `192.168.43.106:8081`. Metro foot terminal got closed once (died silently, no crash in log) → relaunched, pinned `--port 8081` + `tee /tmp/astra-metro-wifi.log` in `metro-wifi.sh`. User installed `app-debug.apk` via hotspot HTTP.
+- **Open item:** laptop firewalld `public` zone on `wlan0` may still block phone→laptop 8000/8081 — user to run `sudo firewall-cmd --zone=public --add-port=8000/tcp --add-port=8081/tcp`.
+- **Rule Compliance (`agent.md`):** Debug mode, dedicated terminal, scripts-only. PROGRESS.md updated.
+
+### [2026-09-05] - WiFi Debug Mode (No Cable, LAN)
+- **Feature:** Run debug app over local WiFi without USB: new `metro-wifi.sh` (`npx expo start --dev-client --lan`, auto-detects LAN IP via `ip route get 1.1.1.1`) + `start-wifi.sh` (launches Metro in dedicated foot/kitty/xterm per `agent.md` Rule 10, prints phone setup + ADB-over-WiFi pairing steps). No `adb reverse` (USB-only) — phone points at `PC_LAN_IP:8081` via Dev Menu > Debug server host. Current LAN IP verified: `192.168.43.106`.
+- **Files:** `metro-wifi.sh` (new), `start-wifi.sh` (new). USB scripts (`metro.sh`, `start-debug.sh`, `build-debug-apk.sh`) untouched.
+- **Rule Compliance (`agent.md`):** Scripts-only, no source changes. Syntax verified (`bash -n`), IP detection verified.
 
 ### [2026-09-05] - Project Documentation (docs/)
 - **Feature:** New `docs/` folder documenting the whole project: index + overview (`README.md`), setup/build/run (`getting-started.md`), layers/process model/storage map/data flows (`architecture.md`), IDE (`ide.md`: workspaces, picker, editor, terminal, browser, Git, desktop, nav, settings, themes), AI engine (`ai-engine.md`: agent core, Astra CLI bridge, 3-tier runner, chat UI, voice, tasks), native bridges + guest provisioning (`native-modules.md`), `config.json`/models/paths/permissions (`configuration.md`), repo rules (`conventions.md`), and failure playbook (`troubleshooting.md`).

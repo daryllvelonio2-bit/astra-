@@ -58,6 +58,15 @@ modals:
 - `chatFileLinkService.ts` — normalizes agent/PRoot/`file://` paths to
   workspace-relative paths; `ideActionService.ts` is the event bus the agent
   uses to open files, browser URLs, the terminal, or switch tabs.
+- **Run button** (`runService.ts`) — saves the file, then executes it in the
+  on-device Alpine guest: `.html` is served (`http.server`) and opened in
+  the Browser tab; `.js/.py/.php/.ts`, C/C++/Go/Rust/Java/Ruby/Lua/shell/SQL
+  run directly with the guest toolchain; unknown files fall back to project
+  detection (`package.json` start/main, `artisan serve`, Django `runserver`,
+  `app.py`/`main.py`, `go.mod`, `Cargo.toml`, `index.html`). Output streams
+  into the Terminal tab's dedicated ▶ Run session (`RUN_IN_TERMINAL` action,
+  `useRunSession.ts`). Nothing is auto-installed: a missing runtime shows
+  the real shell error plus a pointer to Optional Extras.
 
 ## Terminal tab
 
@@ -124,10 +133,24 @@ autosave and a Saved indicator:
 | Theme | `AppearanceSection` — dark / light / midnight |
 | Keys | `ApiKeyManager` — multiple Gemini keys, masked display |
 | Model | `ModelSection` — `SUPPORTED_MODELS` picker |
-| Linux | `EnvironmentSection` — toolchain stages, live APK log, binary health |
+| Linux | `EnvironmentSection` — toolchain stages, live APK log, binary health, Optional Extras |
 | Tabs | `NavigationSection` — bottom-tab + AI-button visibility |
 
 All values persist in `config.json` via `configService.ts`.
+
+**Optional Extras** (`OptionalPackagesSection`, catalog in
+`optionalPackages.ts`): 24 one-tap Alpine packages in 4 groups — CLI Power
+Tools (neovim, tmux, fzf, bat, eza, htop, jq, yq, ncdu, rsync), Extra
+Languages (Go, Rust, Java 17, Ruby, Lua), Database Clients
+(PostgreSQL 17, MySQL/MariaDB, Valkey/Redis, MongoDB tools), Media & Docs
+(FFmpeg, ImageMagick, Pandoc, Graphviz, PDF utils). Installed on demand via
+the existing `installPackages` bridge, never part of base provisioning.
+Binaries are probed with `command -v` (single round-trip), heavy downloads
+show a LARGE badge + storage confirm, and installs are blocked while base
+provisioning holds the apk lock. Package names are pinned to Alpine v3.21:
+`valkey`+`valkey-compat` (not `redis`), `mariadb-client` (not
+`mysql-client`), `postgresql17-client`, `mongodb-tools` (`mongosh` has no
+apk — it needs glibc).
 
 ## Theming
 

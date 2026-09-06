@@ -13,6 +13,7 @@ import {
 import { PTY_XTERM_ENABLED } from "./ptyConfig";
 import { TERMINAL_THEMES, TerminalTheme } from "./terminalThemes";
 import { runningTasksService, RunningTask } from "../../../ai/services/runningTasksService";
+import { useRunSessionEffect } from "./useRunSession";
 import { useTheme } from "../../../theme/themeContext";
 import {
   getBannerTitle,
@@ -33,8 +34,7 @@ interface UseTerminalSessionProps {
 
 const getBanner = (workspaceId?: string) => getBannerTitle(workspaceId);
 
-// Shell spawn honoring the Phase 2 flag: PTY sessions get a real controlling
-// terminal, legacy sessions keep the pipe shell + RN scrollback renderer.
+// Shell spawn honoring the Phase 2 flag (PTY vs legacy pipe shell).
 async function startShellSession(sessionId: string, workspaceId?: string) {
   if (PTY_XTERM_ENABLED) {
     await startPtySession(sessionId, workspaceId);
@@ -239,6 +239,17 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       unsubTrigger();
     };
   }, []);
+
+  // Editor Run button executes in the dedicated Run session (created once, reused).
+  useRunSessionEffect({
+    workspaceId,
+    setSessions,
+    setSessionOutputs,
+    setActiveSessionId,
+    scrollRef,
+    shellIdsRef,
+    bannerFor: getBanner,
+  });
 
   const sendInput = useCallback(
     (inputData: string) => {

@@ -60,17 +60,6 @@ interface IDELayoutProps {
 const shortLoadPath = (p: string) =>
   (p || "").replace(/^file:\/\//, "").split("/").filter(Boolean).slice(-2).join("/");
 
-const findFirstFile = (node: FileNode): FileNode | null => {
-  if (node.type === "file") return node;
-  if (node.children) {
-    for (const child of node.children) {
-      const found = findFirstFile(child);
-      if (found) return found;
-    }
-  }
-  return null;
-};
-
 export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELayoutProps) {
   const insets = useSafeAreaInsets();
   const { isLandscape } = useOrientation();
@@ -252,15 +241,9 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
       }
       if (cancelled) return;
       setWorkspace(ws);
-
-      const initialFile = findFirstFile(ws.root);
-      if (initialFile) {
-        let content = initialFile.content || "";
-        if (!content) {
-          content = await readFileContent(ws.id, initialFile.path || initialFile.name);
-        }
-        if (!cancelled) setActiveFile({ ...initialFile, content });
-      }
+      // No auto-open: editor starts with no file open (empty state).
+      // User picks a file from the explorer, or a pending OPEN_FILE action applies below.
+      if (!cancelled) setActiveFile(null);
 
       // Consume sticky actions emitted while the editor was unmounted
       // (e.g. file taps in fullscreen chat that navigated here).
@@ -355,6 +338,8 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     activeFile,
     setActiveFile,
     refreshWorkspace,
+    onOpenTerminal: () => setBottomTab("terminal"),
+    onOpenPreview: handleOpenInBrowser,
   });
 
   if (!workspace) {
@@ -421,8 +406,6 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
             <WebBrowserPreview
               initialUrl={browserUrl}
               workspaceId={workspace?.id}
-              activeHtmlContent={activeFile?.content}
-              activeFileName={activeFile?.name}
             />
           </View>
 

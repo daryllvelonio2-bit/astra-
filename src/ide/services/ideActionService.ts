@@ -2,6 +2,7 @@ export type IDEActionType =
   | "OPEN_FILE"
   | "OPEN_BROWSER"
   | "OPEN_TERMINAL"
+  | "RUN_IN_TERMINAL"
   | "SWITCH_TAB"
   | "SWITCH_WORKSPACE"
   | "SHOW_TOAST";
@@ -25,6 +26,15 @@ export interface OpenTerminalPayload {
   userInitiated?: boolean;
 }
 
+export interface RunInTerminalPayload {
+  /** Shell command to execute in the guest. */
+  command: string;
+  /** One-line label echoed above the output, e.g. "⚡ Run: node main.js". */
+  header?: string;
+  workspaceId?: string;
+  userInitiated?: boolean;
+}
+
 export interface SwitchTabPayload {
   tab: "editor" | "terminal" | "browser" | "git" | "desktop";
   userInitiated?: boolean;
@@ -43,6 +53,7 @@ export type IDEActionPayloadMap = {
   OPEN_FILE: OpenFilePayload;
   OPEN_BROWSER: OpenBrowserPayload;
   OPEN_TERMINAL: OpenTerminalPayload;
+  RUN_IN_TERMINAL: RunInTerminalPayload;
   SWITCH_TAB: SwitchTabPayload;
   SWITCH_WORKSPACE: SwitchWorkspacePayload;
   SHOW_TOAST: ShowToastPayload;
@@ -163,6 +174,13 @@ class IDEActionServiceImpl {
    */
   openTerminal(sessionId?: string, workspaceId?: string, userInitiated = false) {
     this.emit("OPEN_TERMINAL", { sessionId, workspaceId, userInitiated });
+  }
+
+  /**
+   * Helper: Execute a shell command in the terminal's dedicated Run session.
+   */
+  runInTerminal(command: string, header?: string, workspaceId?: string, userInitiated = false) {
+    this.emit("RUN_IN_TERMINAL", { command, header, workspaceId, userInitiated });
   }
 
   /**

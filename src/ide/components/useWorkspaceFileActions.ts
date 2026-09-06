@@ -7,9 +7,10 @@ import {
   deleteNodeInWorkspace,
   renameNodeInWorkspace,
   moveNodeInWorkspace,
+  saveFileContent,
   Workspace,
 } from "../services/workspaceService";
-import { executeCode } from "../../ai/runner";
+import { resolveRunPlan, executeRunPlan } from "../services/runService";
 
 interface UseWorkspaceFileActionsProps {
   workspace: Workspace | null;
@@ -17,6 +18,8 @@ interface UseWorkspaceFileActionsProps {
   activeFile: FileNode | null;
   setActiveFile: React.Dispatch<React.SetStateAction<FileNode | null>>;
   refreshWorkspace: () => Promise<void>;
+  onOpenTerminal?: () => void;
+  onOpenPreview?: (url: string) => void;
 }
 
 export function useWorkspaceFileActions({
@@ -25,6 +28,8 @@ export function useWorkspaceFileActions({
   activeFile,
   setActiveFile,
   refreshWorkspace,
+  onOpenTerminal,
+  onOpenPreview,
 }: UseWorkspaceFileActionsProps) {
   const [selectedNode, setSelectedNode] = useState<FileNode | null>(null);
   const [modalMode, setModalMode] = useState<"none" | "options" | "rename" | "add">("none");
@@ -125,13 +130,21 @@ export function useWorkspaceFileActions({
   };
 
   const handleRunActiveFile = async (code: string, fileName: string) => {
-    const ext = fileName.split(".").pop()?.toLowerCase();
-    const language = ext === "py" ? "python" : ext === "php" ? "php" : "javascript";
+    if (!workspace || !activeFile) return;
+    const filePath = activeFile.path || activeFile.name;
     try {
-      const res = await executeCode({ code, language, tier: "client" });
-      Alert.alert(`Execution [${fileName}]`, `Stdout:\n${res.stdout || "(none)"}\n\nStderr:\n${res.stderr || "(none)"}`);
+      // Persist first so the guest executes exactly what's on screen.
+      try {
+        await saveFileContent(workspace.id, filePath, code);
+      } catch (_) {}
+      const rootNames = (workspace.root.children || []).map((n) => n.name);
+      const plan = await resolveRunPlan(workspace.id, filePath, rootNames);
+      await executeRunPlan(workspace.id, plan, {
+        onOpenTerminal: () => onOpenTerminal?.(),
+        onOpenBrowser: (url) => onOpenPreview?.(url),
+      });
     } catch (err: any) {
-      Alert.alert("Execution Error", err.message);
+      Alert.alert("Run Error", err?.message || String(err));
     }
   };
 
