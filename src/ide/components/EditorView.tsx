@@ -206,14 +206,19 @@ export function EditorView({
 
   if (!fileName) {
     return (
-      <View style={[styles.emptyContainer, { backgroundColor: theme.bgPrimary }]}>
-        {onToggleSidebar && (
-          <TouchableOpacity onPress={onToggleSidebar} style={styles.emptyHamburgerBtn}>
-            <Ionicons name="menu" size={24} color={theme.textSecondary} />
-          </TouchableOpacity>
-        )}
-        <Ionicons name="code-working-outline" size={48} color={theme.textMuted} />
-        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Select a file from the explorer to begin editing</Text>
+      <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
+        <EditorTabBar
+          isEditing={false}
+          onToggleEdit={() => {}}
+          onDoneEdit={() => {}}
+          onFormatCode={() => {}}
+          onExitProject={onExitProject}
+          onToggleSidebar={onToggleSidebar}
+        />
+        <View style={[styles.emptyContainer, { backgroundColor: theme.bgPrimary }]}>
+          <Ionicons name="code-working-outline" size={48} color={theme.textMuted} />
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Select a file from the explorer to begin editing</Text>
+        </View>
       </View>
     );
   }
@@ -368,13 +373,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     position: "relative",
     gap: 12,
-  },
-  emptyHamburgerBtn: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    padding: 8,
-    zIndex: 10,
   },
   emptyText: {
     fontSize: 14,

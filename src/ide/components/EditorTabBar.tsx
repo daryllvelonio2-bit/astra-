@@ -4,7 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
 
 interface EditorTabBarProps {
-  fileName: string;
+  fileName?: string;
   isEditing: boolean;
   onToggleEdit: () => void;
   onDoneEdit: () => void;
@@ -51,10 +51,11 @@ export function EditorTabBar({
             <Ionicons name="menu" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
         )}
-        <Ionicons name="document-text-outline" size={16} color={theme.accent} style={{ marginRight: 6 }} />
-        <Text style={[styles.tabTitle, { color: theme.textPrimary }]} numberOfLines={1} ellipsizeMode="middle">
-          {fileName}
+        <Ionicons name="document-text-outline" size={16} color={fileName ? theme.accent : theme.textMuted} style={{ marginRight: 6 }} />
+        <Text style={[styles.tabTitle, { color: fileName ? theme.textPrimary : theme.textMuted }]} numberOfLines={1} ellipsizeMode="middle">
+          {fileName ?? "No file open"}
         </Text>
+        {fileName && (
         <TouchableOpacity
           style={[styles.modeBadge, styles.noShrink, { backgroundColor: theme.bgTertiary, borderColor: theme.border }, isEditing && { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen }]}
           onPress={onToggleEdit}
@@ -71,7 +72,8 @@ export function EditorTabBar({
             </Text>
           )}
         </TouchableOpacity>
-        {(errorCount > 0 || warningCount > 0) && (
+        )}
+        {fileName && (errorCount > 0 || warningCount > 0) && (
           <TouchableOpacity
             style={[styles.problemBadge, styles.noShrink, { backgroundColor: errorCount > 0 ? `${theme.accentRed}18` : `${theme.accentGold}18`, borderColor: errorCount > 0 ? theme.accentRed : theme.accentGold }]}
             onPress={onShowProblems}
@@ -89,22 +91,22 @@ export function EditorTabBar({
         )}
       </View>
 
-      {/* Quick Toolbar */}
+      {/* Quick Toolbar (file actions only when a file is open) */}
       <View style={[styles.tabActions, styles.noShrink]}>
-        {isEditing ? (
+        {fileName && isEditing ? (
           <TouchableOpacity style={[styles.doneEditBtn, { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen }]} onPress={onDoneEdit}>
             <Ionicons name="checkmark-outline" size={14} color={theme.accentGreen} />
             <Text style={[styles.doneEditText, { color: theme.accentGreen }]}>Done</Text>
           </TouchableOpacity>
         ) : (
-          !collapseActions && (
+          fileName && !collapseActions && (
             <TouchableOpacity style={styles.actionIconBtn} onPress={onFormatCode} activeOpacity={0.7}>
               <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} />
             </TouchableOpacity>
           )
         )}
 
-        {onRunFile && (
+        {fileName && onRunFile && (
           <TouchableOpacity style={styles.actionIconBtn} onPress={onRunFile}>
             <Ionicons name="play" size={16} color={theme.accentGreen} />
           </TouchableOpacity>
@@ -125,6 +127,7 @@ export function EditorTabBar({
             onPress={() => setShowDropdown(false)}
           />
           <View style={[styles.dropdownBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
+            {fileName && (
             <TouchableOpacity
               style={styles.dropdownItem}
               onPress={() => {
@@ -135,6 +138,7 @@ export function EditorTabBar({
               <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} style={{ marginRight: 8 }} />
               <Text style={[styles.dropdownItemText, { color: theme.accentGold }]}>Format Code (Prettier)</Text>
             </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.dropdownItem}
               onPress={() => {

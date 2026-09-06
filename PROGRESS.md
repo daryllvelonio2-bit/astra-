@@ -20,6 +20,10 @@
 - **Package-name verification (Alpine v3.21):** `valkey`+`valkey-compat` (redis was replaced), `mariadb-client` (no `mysql-client`), `postgresql17-client` (clients are versioned), `mongodb-tools` (`mongosh` needs glibc, no apk), `magick` binary probe for ImageMagick 7.
 - **Rule Compliance (`agent.md`):** New files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
 
+### [2026-09-05] - Editor Header Bar Persists with No File Open
+- **Change (user request):** Empty editor state now keeps the top header bar (`EditorTabBar`) so sidebar/exit buttons never hide. `fileName` prop optional: title shows muted "No file open", file-only actions (edit badge, format, run, problems) hidden; hamburger + ⋮ overflow (Exit Project) stay. `EditorView` empty branch renders header + centered prompt; removed obsolete absolute hamburger style.
+- **Rule Compliance (`agent.md`):** Theme tokens only. `npx tsc --noEmit` verified with 0 errors.
+
 ### [2026-09-05] - Editor Opens with No File (Empty State Default)
 - **Change (user request):** Opening a project no longer auto-opens the first file. `IDELayout.tsx` load path now resets `setActiveFile(null)` (also clears stale file on workspace switch); existing `EditorView` empty state ("Select a file from the explorer to begin editing") shows instead. Removed now-unused `findFirstFile` helper. Explicit taps + pending `OPEN_FILE` actions still open files normally.
 - **Rule Compliance (`agent.md`):** Minimal deletion-only change. `npx tsc --noEmit` verified with 0 errors. Note: `IDELayout.tsx` went 534 → 517 lines, still above the 500-line ceiling (pre-existing) — split-out pending.
