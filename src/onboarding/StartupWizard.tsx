@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,7 @@ import {
 import { StartupStepId } from "./types";
 import { ThemeSelectionStep } from "./steps/ThemeSelectionStep";
 import { AstraAiStep } from "./steps/AstraAiStep";
+import { PermissionsStep } from "./steps/PermissionsStep";
 import { EditorUiStep } from "./steps/EditorUiStep";
 import { GitHubSetupStep } from "./steps/GitHubSetupStep";
 
@@ -31,6 +33,7 @@ interface StartupWizardProps {
 const STEPS: { id: StartupStepId; label: string }[] = [
   { id: "theme", label: "Theme" },
   { id: "astra", label: "Astra AI" },
+  { id: "permissions", label: "System" },
   { id: "editor", label: "Editor" },
   { id: "github", label: "GitHub" },
 ];
@@ -100,9 +103,11 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
         {/* Header Bar */}
         <View style={[styles.headerBar, { borderBottomColor: theme.border }]}>
           <View style={styles.brandRow}>
-            <View style={[styles.logoWrap, { backgroundColor: `${theme.accent}1A` }]}>
-              <Ionicons name="sparkles" size={16} color={theme.accent} />
-            </View>
+            <Image
+              source={require("../../assets/icon.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
             <View>
               <Text style={[styles.brandTitle, { color: theme.textPrimary }]}>
                 Astra Setup
@@ -188,6 +193,13 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
             <AstraAiStep
               astraEnabled={astraEnabled}
               onSelectAstra={setAstraEnabled}
+              theme={theme}
+              isLandscape={isLandscape}
+            />
+          )}
+
+          {currentStep.id === "permissions" && (
+            <PermissionsStep
               theme={theme}
               isLandscape={isLandscape}
             />
@@ -298,12 +310,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  logoWrap: {
+  logoImage: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
   },
   brandTitle: {
     fontSize: 14,

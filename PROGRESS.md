@@ -22,6 +22,15 @@
   - `VSCodeView.tsx`: Removed the aggressive 4000ms watchdog timer that was racing against state resolution.
 - **Rule Compliance (`agent.md`):** All files ≤500 lines (`vscodeService.ts`: 429, `VSCodeView.tsx`: 261). `npx tsc --noEmit` verified with 0 errors.
 
+### [2026-09-06] - Browser Tab Empty by Default (Active Hosts Still Auto-Load)
+- **Change (user request):** the browser tab no longer auto-loads `http://127.0.0.1:8000` (or any recent host) — it opens on a neutral empty state ("Browser is empty", globe icon) with a Start Web Server button and tap-to-connect cards for detected running servers. New `WebBrowserEmptyView.tsx`; `WebBrowserPreview` defaults to empty URL and only auto-loads a background-server URL into an empty tab (never hijacks an open page); `IDELayout` default `browserUrl` cleared. Explicit navigation (address bar, OPEN_BROWSER, task cards) unchanged.
+- **Rule Compliance (`agent.md`):** New file 1 feature = 1 file, all files ≤500 lines. `npx tsc --noEmit` 0 errors. JS-only — Metro reload, no rebuild.
+
+### [2026-09-06] - VS Code Integrated Terminal Fix (Pty SIGSEGV + SHELL Leak)
+- **Root cause (from on-device `code-server.log` via ADB):** two failures. (1) `IPC "Pty Host" crashed ... SIGSEGV` in a restart loop — node-pty ships as a glibc binary built for the bundled Node 20, but runs under Alpine's musl Node 22 (`lib/node → /usr/bin/node`, guest has nodejs 22.23.2). (2) `spawn /system/bin/sh ENOENT` — Android leaks `SHELL=/system/bin/sh` into the guest env, which doesn't exist inside Alpine.
+- **Fix (`vscodeService.ts`, JS-only):** `ENV_PREFIX` now pins `SHELL=/bin/bash` + `TERM=xterm-256color`; provision compiles node-pty from source (`npm rebuild node-pty` in `lib/vscode`, toolchain auto-installed if missing) with a marker-gated one-time stage; server start self-heals (rebuilds when the marker is absent, so existing installs fix on next Start with no reinstall) and writes terminal-default `settings.json` (bash profile, GPU acceleration off) only when the user has none. Diagnose now reports node version, SHELL, pty marker/binary, and settings presence.
+- **Rule Compliance (`agent.md`):** `npx tsc --noEmit` 0 errors. JS-only — Metro reload, then re-tap Start in the VS Code tab (rebuild takes ~2 min, keep app open).
+
 ### [2026-09-06] - Model Picker Removed from Settings (Chat Picker Stays)
 - **Removal (user request):** Settings no longer has a Model tab — bar is Theme / Keys / Linux / Tabs. `ModelSection.tsx` deleted; `SettingsModal` drops all `selectedModel` draft/autosave wiring; `SettingsTabBar` drops the `"model"` id (flex layout reflows untouched).
 - **Unchanged:** `selectedModel` stays in `configService` as the runtime source of truth — chat-header `ModelPickerModal`, `astraCliService`, and git commit-summary keep working; previously saved model choices keep loading.

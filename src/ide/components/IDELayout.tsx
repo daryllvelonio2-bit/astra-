@@ -114,7 +114,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     }
   }, [visibleTabs, bottomTab]);
   const [desktopFullscreen, setDesktopFullscreen] = useState(false);
-  const [browserUrl, setBrowserUrl] = useState<string>("http://127.0.0.1:8000");
+  const [browserUrl, setBrowserUrl] = useState<string>("");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const {
     showPermissionModal,

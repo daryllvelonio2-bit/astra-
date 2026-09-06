@@ -110,6 +110,11 @@ object ProcessExecutor {
             pbArgs.add("-b")
             pbArgs.add("/storage")
         }
+        val extDir = try { android.os.Environment.getExternalStorageDirectory().absolutePath } catch (_: Throwable) { null }
+        if (extDir != null && File(extDir).exists() && !extDir.startsWith("/storage") && !extDir.startsWith("/sdcard")) {
+            pbArgs.add("-b")
+            pbArgs.add(extDir)
+        }
         if (targetDir.startsWith("/") &&
             !targetDir.startsWith("/workspaces") &&
             !targetDir.startsWith("/workspace") &&
@@ -141,8 +146,8 @@ object ProcessExecutor {
         env["LANG"] = "C.UTF-8"
         env["LC_ALL"] = "C.UTF-8"
         env["PROOT_TMP_DIR"] = tmpDir
-        env["PROOT_LOADER"] = loaderPath
-        env["PROOT_LOADER_32"] = loader32Path
+        if (File(loaderPath).exists()) env["PROOT_LOADER"] = loaderPath
+        if (File(loader32Path).exists()) env["PROOT_LOADER_32"] = loader32Path
         env["LD_LIBRARY_PATH"] = nativeLibDir
         env.remove("LD_PRELOAD")
 

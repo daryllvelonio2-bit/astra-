@@ -11,4 +11,9 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# Add any project specific keep options here:
+# Keep all native modules and JNI bindings from being stripped or renamed by R8
+-keep class expo.modules.linuxrunner.** { *; }
+-keep class expo.modules.voiceinput.** { *; }
+-keepclasseswithmembernames class * {
+    native <methods>;
+}

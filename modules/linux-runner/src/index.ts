@@ -353,6 +353,50 @@ export async function openMainApp(): Promise<boolean> {
   return false;
 }
 
+export function isIgnoringBatteryOptimizations(): boolean {
+  if (LinuxRunnerModule?.isIgnoringBatteryOptimizations) {
+    try {
+      return LinuxRunnerModule.isIgnoringBatteryOptimizations();
+    } catch (_) {
+      return true;
+    }
+  }
+  return true;
+}
+
+export async function requestIgnoreBatteryOptimizations(): Promise<boolean> {
+  if (LinuxRunnerModule?.requestIgnoreBatteryOptimizations) {
+    try {
+      return await LinuxRunnerModule.requestIgnoreBatteryOptimizations();
+    } catch (_) {
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function openBatteryOptimizationSettings(): Promise<boolean> {
+  if (LinuxRunnerModule?.openBatteryOptimizationSettings) {
+    try {
+      return await LinuxRunnerModule.openBatteryOptimizationSettings();
+    } catch (_) {
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function openAppDetailsSettings(): Promise<boolean> {
+  if (LinuxRunnerModule?.openAppDetailsSettings) {
+    try {
+      return await LinuxRunnerModule.openAppDetailsSettings();
+    } catch (_) {
+      return false;
+    }
+  }
+  return false;
+}
+
 export * from "./fileSystem";
 export * from "./provisioning";
 export { LinuxRunnerModule };

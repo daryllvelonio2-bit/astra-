@@ -256,8 +256,8 @@ object ToolchainProvisioner {
                             env["LANG"] = "C.UTF-8"
                             env["NODE_OPTIONS"] = "--dns-result-order=ipv4first"
                             env["PROOT_TMP_DIR"] = tmpDir
-                            env["PROOT_LOADER"] = loaderPath
-                            env["PROOT_LOADER_32"] = loader32Path
+                            if (File(loaderPath).exists()) env["PROOT_LOADER"] = loaderPath
+                            if (File(loader32Path).exists()) env["PROOT_LOADER_32"] = loader32Path
                             env["LD_LIBRARY_PATH"] = nativeLibDir
 
                             val process = pb.start()

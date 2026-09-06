@@ -71,6 +71,11 @@ object ProotSessionConfig {
             argv.add("-b")
             argv.add("/storage")
         }
+        val extDir = try { android.os.Environment.getExternalStorageDirectory().absolutePath } catch (_: Throwable) { null }
+        if (extDir != null && File(extDir).exists() && !extDir.startsWith("/storage") && !extDir.startsWith("/sdcard")) {
+            argv.add("-b")
+            argv.add(extDir)
+        }
         if (targetDir.startsWith("/") &&
             !targetDir.startsWith("/workspaces") &&
             !targetDir.startsWith("/workspace") &&
@@ -104,10 +109,10 @@ object ProotSessionConfig {
             // cursor math, so any ANSI color breaks erase/redraw.
             "PS1" to "astra:\\w# ",
             "PROOT_TMP_DIR" to tmpDir,
-            "PROOT_LOADER" to loaderPath,
-            "PROOT_LOADER_32" to loader32Path,
             "LD_LIBRARY_PATH" to nativeLibDir
         )
+        if (File(loaderPath).exists()) env["PROOT_LOADER"] = loaderPath
+        if (File(loader32Path).exists()) env["PROOT_LOADER_32"] = loader32Path
 
         return Config(argv, env, alpineDir)
     }

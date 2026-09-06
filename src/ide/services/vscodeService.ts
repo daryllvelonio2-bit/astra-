@@ -19,7 +19,11 @@ const PID_FILE = "/root/.vscode/code-server.pid";
 const LOG_FILE = "/root/.vscode/code-server.log";
 
 const ENV_PREFIX =
-  "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin:/root/.npm-global/bin; export HOME=/root; ";
+  "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin:/root/.npm-global/bin; export HOME=/root; " +
+  // Android leaks SHELL=/system/bin/sh into the guest env; code-server then
+  // tries to spawn it for env resolution AND the integrated terminal, which
+  // does not exist inside Alpine (-> ENOENT + dead terminals). Pin real values.
+  "export SHELL=/bin/bash; export TERM=xterm-256color; ";
 
 /**
  * Race a promise against a timeout with a safe fallback value.
@@ -67,7 +71,9 @@ export async function provisionVSCode(
     `CS_TAG=$(curl -fsSL -o /dev/null -w "%{url_effective}" https://github.com/coder/code-server/releases/latest 2>/dev/null | grep -o 'v[0-9.]*$' || echo "v4.135.0"); ` +
     `[ -n "$CS_TAG" ] || CS_TAG="v4.135.0"; ` +
     `CS_VER="\${CS_TAG#v}"; ` +
-    `CS_URL="https://github.com/coder/code-server/releases/download/\${CS_TAG}/code-server-\${CS_VER}-linux-arm64.tar.gz"; ` +
+    `ARCH=\$(uname -m 2>/dev/null || echo aarch64); ` +
+    `if [ "\$ARCH" = "x86_64" ] || [ "\$ARCH" = "amd64" ]; then CS_ARCH="linux-amd64"; else CS_ARCH="linux-arm64"; fi; ` +
+    `CS_URL="https://github.com/coder/code-server/releases/download/\${CS_TAG}/code-server-\${CS_VER}-\${CS_ARCH}.tar.gz"; ` +
     `echo "ASTRAPROGRESS:STAGE:Connecting to download server…:15"; ` +
     `TOTAL_BYTES=$(curl -sIL "$CS_URL" 2>/dev/null | grep -i '^content-length:' | tail -n1 | tr -d '\\r' | awk '{print $2}' || echo "229007734"); ` +
     `[ -n "$TOTAL_BYTES" ] && [ "$TOTAL_BYTES" -gt 0 ] 2>/dev/null || TOTAL_BYTES="229007734"; ` +
@@ -91,6 +97,17 @@ export async function provisionVSCode(
     `echo "ASTRAPROGRESS:STAGE:Configuring server…:90"; ` +
     `ln -sf $(which node || echo /usr/bin/node) /root/.vscode-standalone/lib/node; ` +
     `ln -sf /root/.vscode-standalone/bin/code-server /usr/local/bin/code-server; ` +
+    // node-pty ships as a glibc binary built for the bundled Node 20; under
+    // Alpine's musl Node 22 the pty host SIGSEGVs ("connection to the shell
+    // was lost" loop). Recompile it from source against the guest toolchain
+    // (one-time; marker lives inside the standalone dir so re-provision
+    // re-triggers it). Non-fatal: launch retries when the marker is missing.
+    `echo "ASTRAPROGRESS:STAGE:Building terminal backend…:93"; ` +
+    `if [ ! -f /root/.vscode-standalone/.pty-rebuilt ]; then ` +
+    `  command -v gcc >/dev/null 2>&1 || apk add --no-cache build-base python3 || true; ` +
+    `  if (cd /root/.vscode-standalone/lib/vscode && npm rebuild node-pty 2>&1 | tail -n 3); then touch /root/.vscode-standalone/.pty-rebuilt && echo "Terminal backend OK"; ` +
+    `  else echo "PTY_REBUILD_FAILED (continuing without working terminal)"; fi; ` +
+    `fi; ` +
     `code-server --version || { echo "Verification failed"; exit 1; }; ` +
     `touch ${PROVISION_MARKER}; ` +
     `echo "ASTRAPROGRESS:DONE:100:100"; ` +
@@ -390,6 +407,10 @@ export async function getVSCodeDiagnostics(): Promise<string> {
       executeCommand(
         `${ENV_PREFIX}echo '== binaries:'; for b in code-server node npm python3 curl; do printf '%s: ' "$b"; command -v $b 2>/dev/null || echo '(missing)'; done; ` +
         `echo '== version:'; code-server --version 2>&1 | head -3 || echo '(failed)'; ` +
+        `echo '== terminal backend:'; node --version 2>&1; echo "SHELL=$SHELL"; ` +
+        `[ -f /root/.vscode-standalone/.pty-rebuilt ] && echo 'pty marker: OK' || echo 'pty marker: MISSING (rebuild pending)'; ` +
+        `ls /root/.vscode-standalone/lib/vscode/node_modules/node-pty/build/Release/pty.node 2>/dev/null || echo 'pty.node: missing'; ` +
+        `[ -f /root/.local/share/code-server/User/settings.json ] && echo 'settings.json: present' || echo 'settings.json: absent'; ` +
         `echo '== http check:'; curl -sI http://127.0.0.1:${VSCODE_PORT}/ 2>&1 | head -5 || echo '(not responding)'; ` +
         `echo '== code-server.log:'; tail -n 25 ${LOG_FILE} 2>/dev/null || echo '(missing)'`
       ),
@@ -406,6 +427,8 @@ export async function getVSCodeDiagnostics(): Promise<string> {
 const LAUNCH_SCRIPT = (workspaceDir?: string) => {
   const guestDir = toGuestPath(workspaceDir);
   return `${ENV_PREFIX}mkdir -p /root/.vscode /root/.config/code-server "${guestDir}"
+if [ ! -f /root/.vscode-standalone/.pty-rebuilt ] && [ -d /root/.vscode-standalone/lib/vscode/node_modules/node-pty ]; then echo 'Terminal backend missing — rebuilding once (~2 min, keep app open)…'; command -v gcc >/dev/null 2>&1 || apk add --no-cache build-base python3 >/dev/null 2>&1 || true; (cd /root/.vscode-standalone/lib/vscode && npm rebuild node-pty 2>&1 | tail -n 3) && touch /root/.vscode-standalone/.pty-rebuilt && echo 'Terminal backend OK' || echo 'pty rebuild failed — terminal may not work'; fi
+if [ ! -f /root/.local/share/code-server/User/settings.json ]; then mkdir -p /root/.local/share/code-server/User; printf '%s' '{"terminal.integrated.defaultProfile.linux":"bash","terminal.integrated.profiles.linux":{"bash":{"path":"/bin/bash"}},"terminal.integrated.gpuAcceleration":"off"}' > /root/.local/share/code-server/User/settings.json; fi
 if [ -d /root/.vscode-standalone ] && [ ! -L /root/.vscode-standalone/lib/node ]; then ln -sf \$(which node || echo /usr/bin/node) /root/.vscode-standalone/lib/node 2>/dev/null; fi
 printf 'bind-addr: 127.0.0.1:${VSCODE_PORT}\\nauth: none\\ncert: false\\n' > /root/.config/code-server/config.yaml
 CS_PID=$(cat ${PID_FILE} 2>/dev/null); if [ -n "$CS_PID" ]; then kill -9 "$CS_PID" 2>/dev/null; rm -f ${PID_FILE}; fi

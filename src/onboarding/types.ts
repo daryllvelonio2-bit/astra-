@@ -1,6 +1,6 @@
 import { AppTheme, EditorUiType } from "../ide/services/configService";
 
-export type StartupStepId = "theme" | "astra" | "editor" | "github";
+export type StartupStepId = "theme" | "astra" | "permissions" | "editor" | "github";
 
 export interface StartupConfig {
   selectedTheme: AppTheme;

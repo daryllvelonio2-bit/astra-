@@ -297,7 +297,80 @@ class LinuxRunnerModule : Module() {
 
         Function("requestAllFilesPermission") {
             val context = appContext.reactContext ?: return@Function false
-            return@Function NativeFileSystemHelper.requestAllFilesPermission(context)
+            val activity = appContext.currentActivity
+            return@Function NativeFileSystemHelper.requestAllFilesPermission(context, activity)
+        }
+
+        Function("isIgnoringBatteryOptimizations") {
+            val context = appContext.reactContext ?: return@Function true
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+                return@Function powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+            }
+            return@Function true
+        }
+
+        Function("requestIgnoreBatteryOptimizations") {
+            val context = appContext.reactContext ?: return@Function false
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                try {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        android.net.Uri.parse("package:${context.packageName}")
+                    ).apply {
+                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    return@Function true
+                } catch (e: Exception) {
+                    try {
+                        val fallbackIntent = android.content.Intent(
+                            android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                        ).apply {
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(fallbackIntent)
+                        return@Function true
+                    } catch (_: Exception) {
+                        return@Function false
+                    }
+                }
+            }
+            return@Function false
+        }
+
+        Function("openBatteryOptimizationSettings") {
+            val context = appContext.reactContext ?: return@Function false
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                try {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                    ).apply {
+                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    return@Function true
+                } catch (_: Exception) {
+                    return@Function false
+                }
+            }
+            return@Function false
+        }
+
+        Function("openAppDetailsSettings") {
+            val context = appContext.reactContext ?: return@Function false
+            try {
+                val intent = android.content.Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:${context.packageName}")
+                ).apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                return@Function true
+            } catch (_: Exception) {
+                return@Function false
+            }
         }
     }
 }

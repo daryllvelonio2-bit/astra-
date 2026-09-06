@@ -7,6 +7,7 @@ import { PRootService } from "../services/prootService";
 import { startTerminalSession, writeTerminalInput } from "../../../modules/linux-runner/src";
 import { WebBrowserNavBar } from "./browser/WebBrowserNavBar";
 import { WebBrowserErrorView } from "./browser/WebBrowserErrorView";
+import { WebBrowserEmptyView } from "./browser/WebBrowserEmptyView";
 import { useTheme } from "../../theme/themeContext";
 import { useOrientation } from "../../theme/useOrientation";
 
@@ -16,7 +17,7 @@ interface WebBrowserPreviewProps {
 }
 
 export function WebBrowserPreview({
-  initialUrl = "http://127.0.0.1:8000",
+  initialUrl = "",
   workspaceId,
 }: WebBrowserPreviewProps) {
   const { theme } = useTheme();
@@ -54,21 +55,20 @@ export function WebBrowserPreview({
     }
   }, [initialUrl]);
 
-  // Subscribe to live background servers
+  // Subscribe to live background servers: auto-load only into an empty tab,
+  // never hijack a page the user already opened.
   useEffect(() => {
     const unsub = runningTasksService.subscribe((tasks) => {
       setRunningTasks(tasks);
-      if (tasks.length > 0) {
+      if (tasks.length > 0 && !url) {
         const activeTask = tasks.find((t) => t.url || t.port) || tasks[0];
         let taskUrl = activeTask.url || (activeTask.port ? `http://127.0.0.1:${activeTask.port}` : undefined);
         if (taskUrl) {
           taskUrl = taskUrl.replace(/^exp:\/\//i, "http://").replace(/localhost/gi, "127.0.0.1").replace(/0\.0\.0\.0/g, "127.0.0.1");
-          if (taskUrl !== url && (url === "http://127.0.0.1:8000" || url === "http://localhost:8000")) {
-            setUrl(taskUrl);
-            setInputUrl(taskUrl);
-            setHasError(false);
-            setReloadKey((k) => k + 1);
-          }
+          setUrl(taskUrl);
+          setInputUrl(taskUrl);
+          setHasError(false);
+          setReloadKey((k) => k + 1);
         }
       }
     });
@@ -173,7 +173,15 @@ export function WebBrowserPreview({
       )}
 
       <View style={[styles.previewContainer, { backgroundColor: theme.bgPrimary }]}>
-        {hasError ? (
+        {!url ? (
+          <WebBrowserEmptyView
+            runningTasks={runningTasks}
+            isStartingServer={isStartingServer}
+            currentPort={currentPort}
+            onNavigate={handleNavigate}
+            onStartServer={handleStartQuickServer}
+          />
+        ) : hasError ? (
           <WebBrowserErrorView
             url={url}
             errorMessage={errorMessage}

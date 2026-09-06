@@ -11,6 +11,7 @@ import { FloatingChatOverlay } from "./src/ai/components/FloatingChatOverlay";
 import { ThemeProvider } from "./src/theme/themeContext";
 import { ideActionService } from "./src/ide/services/ideActionService";
 import { StartupWizard } from "./src/onboarding/StartupWizard";
+import { AppBootScreen } from "./src/onboarding/AppBootScreen";
 import { loadAstraEnabled, loadHasCompletedStartup, subscribeConfigChanges } from "./src/ide/services/configService";
 
 // Register Android System Overlay Root Component
@@ -20,6 +21,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<"chat" | "picker" | "editor">("picker");
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [hasCompletedStartup, setHasCompletedStartup] = useState<boolean | null>(null);
+  const [bootVisible, setBootVisible] = useState(true);
   const [astraEnabled, setAstraEnabled] = useState(true);
   // Keep-alive: chat + editor stay mounted once opened and are only hidden.
   // Conditional unmounting used to orphan in-flight agent turns (the dead
@@ -75,6 +77,12 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
+        {bootVisible && (
+          <AppBootScreen
+            isReady={hasCompletedStartup !== null}
+            onAnimationEnd={() => setBootVisible(false)}
+          />
+        )}
         {hasCompletedStartup === false ? (
           <StartupWizard onComplete={() => setHasCompletedStartup(true)} />
         ) : (
