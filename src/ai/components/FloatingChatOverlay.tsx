@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   ActivityIndicator,
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
+  Keyboard,
+  PanResponder,
+  Animated,
   Platform,
   Alert,
 } from "react-native";
@@ -113,6 +116,31 @@ export function FloatingChatOverlay({
   const hiddenCount = Math.max(0, messages.length - renderLimit);
   const modeInfo = getAstraModeInfo(selectedCognitiveMode);
 
+  // Draggable card: header drag moves the whole card (persists per mount).
+  const pan = useRef(new Animated.ValueXY()).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => pan.extractOffset(),
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: () => {},
+    })
+  ).current;
+
+  // Android edge-to-edge: KeyboardAvoidingView is iOS-only, so lift the card
+  // by the live keyboard height (same pattern as TerminalView).
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS === "ios") return;
+    const show = Keyboard.addListener("keyboardDidShow", (e) => setKbHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKbHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
   const handleMinimize = () => FloatingOverlay.collapseToBubble();
   const handleOpenIDE = () => {
     FloatingOverlay.bringAppToFront();
@@ -136,12 +164,20 @@ export function FloatingChatOverlay({
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.centerContainer}
+        style={[styles.centerContainer, kbHeight > 0 && { paddingBottom: 24 + kbHeight }]}
         pointerEvents="box-none"
       >
-        <View style={[styles.floatingCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
-          {/* Header */}
-          <View style={[styles.cardHeader, { backgroundColor: theme.bgTertiary, borderBottomColor: theme.border }]}>
+        <Animated.View
+          style={[
+            styles.floatingCard,
+            { backgroundColor: theme.bgSecondary, borderColor: theme.border, transform: pan.getTranslateTransform() },
+          ]}
+        >
+          {/* Header (drag to move) */}
+          <View
+            style={[styles.cardHeader, { backgroundColor: theme.bgTertiary, borderBottomColor: theme.border }]}
+            {...panResponder.panHandlers}
+          >
             <TouchableOpacity
               style={styles.headerLeft}
               onPress={() => setShowSessionsModal(true)}
@@ -256,12 +292,14 @@ export function FloatingChatOverlay({
             />
           )}
 
-          {/* Cognitive Mode Quick Bar */}
-          <CognitiveModeBar
-            selectedMode={selectedCognitiveMode}
-            onSelectMode={handleSelectCognitiveMode}
-            onOpenModeModal={() => setShowCognitiveModeModal(true)}
-          />
+          {/* Cognitive Mode Quick Bar (hidden when default — still in chips modal) */}
+          {selectedCognitiveMode !== "default" && (
+            <CognitiveModeBar
+              selectedMode={selectedCognitiveMode}
+              onSelectMode={handleSelectCognitiveMode}
+              onOpenModeModal={() => setShowCognitiveModeModal(true)}
+            />
+          )}
 
           {/* Prompt Input Bar */}
           <View style={[styles.inputContainer, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
@@ -325,7 +363,7 @@ export function FloatingChatOverlay({
               </TouchableOpacity>
             )}
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
 
       {/* Modals */}

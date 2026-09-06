@@ -20,6 +20,15 @@
 - **Package-name verification (Alpine v3.21):** `valkey`+`valkey-compat` (redis was replaced), `mariadb-client` (no `mysql-client`), `postgresql17-client` (clients are versioned), `mongodb-tools` (`mongosh` needs glibc, no apk), `magick` binary probe for ImageMagick 7.
 - **Rule Compliance (`agent.md`):** New files `<500` lines, theme tokens only. `npx tsc --noEmit` verified with 0 errors.
 
+### [2026-09-05] - Floating Chat Overhaul (JSON Leak, Copy, Drag, Keyboard)
+- **Bug fixes:**
+  - Raw JSON transcript no longer renders as reply text: new `sanitizeAgentText.ts` (dump detection + human-text extraction) with render guard in `AgentMessageItem` (cleaned markdown, else collapsed `RawDumpView` with expand) — fixes already-polluted history too.
+  - Source hardening in `astraStreamParser.ts`: multi-line JSON stitching across `handleLine` calls, `result.response` sanitized, `parseFallbackStdout` drops step-JSON fragments; `useChatSession` final text sanitized (falls back to "✅ Completed.").
+  - Copy button actually copies now (was label-only) via native `clipboardService`.
+  - `StepCard` tool outputs truncated at 1500 chars with "Show full output (N KB)" toggle.
+- **UX:** Card draggable via header (PanReporter, persists per mount); chips bar horizontally scrollable with compact model label (`3.5 Lite` style); Android keyboard-height lift (iOS KAV untouched); body text 11.5→12.5; `CognitiveModeBar` hidden when mode is default.
+- **Rule Compliance (`agent.md`):** All files `<500` lines (`AgentMessageItem` hit 529 mid-work → extracted `RawDumpView.tsx`, now 486). Theme tokens only. `npx tsc --noEmit` verified with 0 errors. JS-only — Metro reload, no rebuild.
+
 ### [2026-09-05] - Editor Header Bar Persists with No File Open
 - **Change (user request):** Empty editor state now keeps the top header bar (`EditorTabBar`) so sidebar/exit buttons never hide. `fileName` prop optional: title shows muted "No file open", file-only actions (edit badge, format, run, problems) hidden; hamburger + ⋮ overflow (Exit Project) stay. `EditorView` empty branch renders header + centered prompt; removed obsolete absolute hamburger style.
 - **Rule Compliance (`agent.md`):** Theme tokens only. `npx tsc --noEmit` verified with 0 errors.

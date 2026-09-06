@@ -5,6 +5,9 @@ import { AstraLogo } from "./AstraLogo";
 import { StepCard } from "./StepCard";
 import { MarkdownMessageView } from "./MarkdownMessageView";
 import { AgentChatMessage, AgentStep } from "../agent/agentTypes";
+import { sanitizeAgentText, isMachineJsonDump } from "./sanitizeAgentText";
+import { RawDumpView } from "./RawDumpView";
+import { Clipboard } from "../../ide/services/clipboardService";
 import { useTheme } from "../../theme/themeContext";
 import { ideActionService } from "../../ide/services/ideActionService";
 
@@ -42,9 +45,14 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
   const visibleToolSteps = showAllHistory || totalToolSteps <= 3 ? toolSteps : toolSteps.slice(-3);
   const hiddenCount = totalToolSteps > 3 && !showAllHistory ? totalToolSteps - 3 : 0;
 
-  const handleCopyMessage = () => {
-    setCopiedMsg(true);
-    setTimeout(() => setCopiedMsg(false), 2000);
+  const handleCopyMessage = async () => {
+    try {
+      const ok = await Clipboard.setStringAsync(message.text || "");
+      if (ok) {
+        setCopiedMsg(true);
+        setTimeout(() => setCopiedMsg(false), 2000);
+      }
+    } catch (_) {}
   };
 
   const renderFormattedText = (text: string) => {
@@ -155,6 +163,23 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
     );
   };
 
+  // Machine JSON dump guard: serialized steps/tool results must never render raw.
+  const renderDumpGuard = (text: string) => {
+    if (!text || !isMachineJsonDump(text)) return null;
+    const cleaned = sanitizeAgentText(text);
+    if (cleaned) {
+      return (
+        <MarkdownMessageView
+          content={cleaned}
+          isUser={isUser}
+          onRunCodeSnippet={onRunCodeSnippet}
+          onApplyFile={onApplyFile}
+        />
+      );
+    }
+    return <RawDumpView text={text} />;
+  };
+
   // User message rendering (Aligned right)
   if (isUser) {
     return (
@@ -163,7 +188,7 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
           <Ionicons name="person" size={13} color={theme.textPrimary} />
         </View>
         <View style={[styles.userBubble, { backgroundColor: theme.bubbleUser, borderColor: theme.border }]}>
-          {renderFormattedText(message.text)}
+        {renderDumpGuard(message.text) || renderFormattedText(message.text)}
         </View>
       </View>
     );
@@ -388,11 +413,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   thoughtItemText: {
-    fontSize: 11.5,
-    lineHeight: 16.5,
+    fontSize: 12,
+    lineHeight: 17,
     fontStyle: "italic",
   },
-  messageText: { fontSize: 11.5, lineHeight: 17 },
+  messageText: { fontSize: 12.5, lineHeight: 18 },
   userText: { },
   assistantText: { },
   thinkingCard: {

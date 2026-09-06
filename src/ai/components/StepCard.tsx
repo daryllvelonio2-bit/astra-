@@ -16,6 +16,7 @@ interface StepCardProps {
 export function StepCard({ step, index, isCurrent }: StepCardProps) {
   const { theme, isMidnight } = useTheme();
   const [collapsed, setCollapsed] = useState(!isCurrent);
+  const [outputExpanded, setOutputExpanded] = useState(false);
 
   // Skip internal metadata tools or topic initialization summaries
   if (
@@ -258,9 +259,25 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
             )}
           </View>
           <View style={[styles.outputBox, { backgroundColor: theme.bgPrimary, borderColor: theme.border }, step.isError && { borderColor: theme.accentRed, backgroundColor: `${theme.accentRed}12` }]}>
-            <Text selectable style={[styles.outputText, { color: theme.textPrimary }, step.isError && { color: theme.accentRed }]} numberOfLines={12}>
-              {step.toolOutput}
+            <Text
+              selectable
+              style={[styles.outputText, { color: theme.textPrimary }, step.isError && { color: theme.accentRed }]}
+              numberOfLines={outputExpanded ? undefined : 12}
+            >
+              {outputExpanded ? step.toolOutput : step.toolOutput.slice(0, 1500)}
             </Text>
+            {step.toolOutput.length > 1500 && (
+              <TouchableOpacity
+                style={[styles.olderStepsBadge, { backgroundColor: theme.bgTertiary }]}
+                onPress={() => setOutputExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={outputExpanded ? "chevron-up" : "chevron-down"} size={11} color={theme.accent} />
+                <Text style={[styles.olderStepsText, { color: theme.accent }]}>
+                  {outputExpanded ? "Collapse output" : `Show full output (${Math.round(step.toolOutput.length / 1024)} KB)`}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       );
@@ -420,6 +437,8 @@ const styles = StyleSheet.create({
   outputBox: { padding: 5, borderRadius: 4, borderWidth: 1 },
   outputBoxError: { },
   outputText: { fontFamily: "monospace", fontSize: 9.5, lineHeight: 13.5 },
+  olderStepsBadge: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 3, borderRadius: 3, marginTop: 4 },
+  olderStepsText: { fontSize: 9, fontWeight: "600" },
   runningRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 2 },
   runningText: { fontSize: 9.5, fontStyle: "italic" },
   pendingApprovalRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 6, borderRadius: 4, borderWidth: 1 },

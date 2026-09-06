@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AstraCognitiveMode, getAstraModeInfo } from "../astra/astraModes";
 import { useTheme } from "../../theme/themeContext";
@@ -26,14 +26,20 @@ export function FloatingOverlayTopBar({
 
   return (
     <View style={[styles.topActionsBar, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipsScroll}
+        contentContainerStyle={styles.chipsContent}
+      >
       <TouchableOpacity
         style={[styles.actionChip, { backgroundColor: theme.bgTertiary }]}
         onPress={onOpenModelPicker}
         activeOpacity={0.7}
       >
         <Ionicons name="sparkles" size={11} color={theme.accent} />
-        <Text style={[styles.actionChipText, { color: theme.textSecondary }]} numberOfLines={1}>
-          {selectedModel.replace("gemini-", "").replace("flash-lite", "Lite")}
+        <Text style={[styles.actionChipText, styles.modelChipText, { color: theme.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">
+          {selectedModel.replace("gemini-", "").replace("-flash-lite", " Lite").replace("-flash", " Flash").replace("-pro", " Pro")}
         </Text>
       </TouchableOpacity>
 
@@ -77,6 +83,7 @@ export function FloatingOverlayTopBar({
         <Ionicons name="time-outline" size={11} color={theme.textMuted} />
         <Text style={[styles.actionChipText, { color: theme.textSecondary }]}>History</Text>
       </TouchableOpacity>
+      </ScrollView>
 
       <TouchableOpacity
         style={[styles.newChatIconBtn, { backgroundColor: theme.bgTertiary }]}
@@ -105,6 +112,18 @@ const styles = StyleSheet.create({
     paddingVertical: 3.5,
     borderRadius: 6,
     gap: 4,
+    flexShrink: 0,
+  },
+  chipsScroll: {
+    flex: 1,
+  },
+  chipsContent: {
+    alignItems: "center",
+    gap: 6,
+    paddingRight: 6,
+  },
+  modelChipText: {
+    maxWidth: 120,
   },
   engineChipActive: {
     borderWidth: 0.5,

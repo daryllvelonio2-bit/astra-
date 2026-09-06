@@ -1,4 +1,5 @@
 import { AgentStep } from "../agent/agentTypes";
+import { sanitizeAgentText, isMachineJsonDump } from "../components/sanitizeAgentText";
 import { runningTasksService } from "../services/runningTasksService";
 import { ideActionService } from "../../ide/services/ideActionService";
 import { formatToolAction, parseAndExecuteIdeActions } from "./astraFormatters";
@@ -50,6 +51,7 @@ export class AstraStreamParser {
   private steps: AgentStep[] = [];
   private modifiedFiles: string[] = [];
   private accumulatedReply = "";
+  private lineBuffer = "";
   private opts: StreamEventHandlerOptions;
 
   constructor(opts: StreamEventHandlerOptions) {
@@ -84,8 +86,20 @@ export class AstraStreamParser {
   }
 
   handleLine(rawLine: string): void {
-    const trimmed = rawLine.trim();
+    let trimmed = rawLine.trim();
     if (!trimmed) return;
+
+    // Stitch multi-line (pretty-printed) JSON events: a lone "{" opener or a
+    // continuation of a buffered object waits until braces balance.
+    if (this.lineBuffer) {
+      trimmed = `${this.lineBuffer}\n${trimmed}`;
+      this.lineBuffer = "";
+    }
+    if (trimmed.startsWith("{") && !trimmed.endsWith("}")) {
+      if (trimmed.length > 200000) return; // overflow guard: drop, never hang
+      this.lineBuffer = trimmed;
+      return;
+    }
 
     // Surface engine progress notes (rate-limit cooldowns, key rolls) as live
     // status so long backoff waits never look like a stuck spinner.
@@ -274,9 +288,13 @@ export class AstraStreamParser {
         this.accumulatedReply = (this.accumulatedReply ? this.accumulatedReply + "\n" : "") + errMsg;
         onTextDelta?.(errMsg);
       } else if (event.response && typeof event.response === "string" && !this.accumulatedReply) {
-        this.accumulatedReply = event.response;
-        onTextDelta?.(event.response);
-        runningTasksService.inspectAndRegisterFromText(event.response, workspaceId);
+        // Never let a machine blob become the reply: extract human text or drop.
+        const cleaned = isMachineJsonDump(event.response) ? sanitizeAgentText(event.response) : event.response;
+        if (cleaned) {
+          this.accumulatedReply = cleaned;
+          onTextDelta?.(cleaned);
+          runningTasksService.inspectAndRegisterFromText(cleaned, workspaceId);
+        }
       }
       onLiveStatus?.({ status: "idle", detail: "Completed", icon: "checkmark-circle" });
       onStatusChange?.("done");
@@ -317,6 +335,16 @@ export function parseFallbackStdout(rawOutput: string, query: string): string {
         }
       } catch (_) {}
     } else {
+      // Drop JSON fragments (pretty-printed step dumps split across lines) —
+      // these previously leaked raw into the reply text.
+      if (
+        isMachineJsonDump(tr) ||
+        /^[}\]],?\s*$/.test(tr) ||
+        /^\s*"(content|toolOutput|timestamp|approvalStatus|toolName|toolArgs|tool_result|type|id|status|isError)"\s*:/.test(tr) ||
+        (tr.startsWith('"') && tr.includes('\\"'))
+      ) {
+        continue;
+      }
       if (
         !tr.startsWith("proot warning:") &&
         !tr.startsWith("proot info:") &&

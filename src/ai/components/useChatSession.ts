@@ -28,6 +28,7 @@ import {
   saveReasoningEffort,
   subscribeConfigChanges,
 } from "../../ide/services/configService";
+import { sanitizeAgentText, isMachineJsonDump } from "./sanitizeAgentText";
 import { AstraCognitiveMode, AstraEffort } from "../astra/astraModes";
 import { executeCode } from "../runner";
 import { runningTasksService } from "../services/runningTasksService";
@@ -308,10 +309,13 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id !== assistantMsgId) return msg;
-            const finalReply =
+            const rawReply =
               msg.text && msg.text.trim().length > 0 && response.reply === "✅ Astra CLI task completed."
                 ? msg.text
                 : response.reply || msg.text;
+            // Never persist a machine JSON dump as message text.
+            const cleaned = isMachineJsonDump(rawReply) ? sanitizeAgentText(rawReply) : rawReply;
+            const finalReply = cleaned.trim().length > 0 ? cleaned : "✅ Completed.";
             return {
               ...msg,
               text: finalReply,
