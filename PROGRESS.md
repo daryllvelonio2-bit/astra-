@@ -4,6 +4,43 @@
 - **Current Phase:** Project Documentation (docs/)
 - **Last Updated:** September 6, 2026
 
+### [2026-09-06] - VS Code Terminal Double-Click Keyboard Guard & Mobile CLI UI Optimization
+- **User Request:**
+  1. The VS Code terminal should only trigger the soft keyboard when double-clicked (single clicks position cursor/focus without keyboard popup).
+  2. Fix damaged / wrapped UI when opening CLIs (like opencode) in the terminal.
+  3. Prevent scrolling in the terminal from typing `aN;Na` or arrow-key escape sequences.
+  - **Single-click focus, highlight & external keyboard support (no virtual keyboard):**
+    - The user needs single clicks to place the cursor, highlight code, and focus the editor/terminal so that **external/hardware keyboards** can type without the on-screen virtual keyboard popping up and covering the screen.
+    - Preserved full DOM focus (`origFocus.apply(this, arguments)`), selections, and active editor highlighting.
+    - Strictly enforced `inputmode="none"` by intercepting `setAttribute` and `removeAttribute` on `HTMLTextAreaElement.prototype` so Chromium tells Android that no virtual keyboard is required.
+    - Added host-level dismissal in `VSCodeView.tsx`: WebViews post `{ type: 'KEYBOARD_STATE', unlocked: boolean }` and host listens to `Keyboard.addListener('keyboardDidShow')` to immediately call `Keyboard.dismiss()` if Android's IME attempts to show on single-click. This keeps DOM focus, cursor, and selections active for external keyboards without showing the soft keyboard.
+    - Double-tapping anywhere (widened to a comfortable 500ms window and 60px radius) unlocks the virtual keyboard. In `unlockKeyboard`, calling `ta.blur()` followed immediately by `origFocus.call(ta)` forces Chromium to dispatch a brand new focus event with `inputmode="text"` directly during the user's `touchend` gesture, guaranteeing Android opens the soft keyboard effortlessly every time. Removed the host `keyboardDidShow` listener race condition that was prematurely dismissing the keyboard. Single-tapping dismisses the virtual keyboard while preserving the highlight/cursor.
+    - **No Code Selection/Deletion on Double-Tap:** On desktop VS Code, double-clicking selects words or code blocks, which on mobile caused whatever was clicked to be selected and subsequently overwritten/deleted as soon as the user typed. Suppressed synthetic mouse events with `e.preventDefault()` on `touchend`, intercepted `mousedown`/`pointerdown` with `e.detail > 1` in capture phase, and collapsed any helper textarea selection (`ta.selectionStart = ta.selectionEnd`). Now double-tapping opens the keyboard and places a clean blinking cursor at the target position with zero text selected for deletion.
+    - **Keep Virtual Keyboard Open When Clicking Code Lines:** Fixed an issue where tapping another line of code while the virtual keyboard was already open dismissed the keyboard. In `handleTouchEnd`, single taps inside `.monaco-editor`, `.xterm`, or inputs now keep the virtual keyboard active (`isKeyboardUnlocked` stays true, `inputmode="text"` maintained) so users can seamlessly reposition the cursor across different lines without losing the soft keyboard. Added `focusout` listener that only closes the keyboard when focus moves away from the editor/terminal/inputs entirely (e.g. clicking sidebar, tabs, status bar, or outside).
+  - **Damaged CLI UI in opencode:** In portrait mobile view with default 14px font, the terminal only had ~34 columns, causing 80-column CLI layouts (headers, columns, borders) to stack characters vertically. Also, artificial CSS overrides on `.xterm-screen` and `.xterm-char-measure-element` interfered with xterm's font metrics. Updated `vscodeService.ts` to configure `terminal.integrated.fontSize: 10.5`, `lineHeight: 1.15`, `letterSpacing: 0`, and `rescaleOverlappingGlyphs: true` in `/root/.local/share/code-server/User/settings.json`. Cleaned up CSS rules and added auto-resize dispatch (`window.dispatchEvent(new Event('resize'))`) so the terminal dynamically fits the screen.
+  - **Fast Typing & Input Rendering Optimization:**
+    - Fixed an issue where fast typing in the terminal caused input lag, dropped keystrokes, or misrendered characters.
+    - **Attribute thrashing eliminated:** Previously, calling `setAttribute('inputmode', ...)` repeatedly while focused triggered Chromium's internal `RestartInputMethod()`, which reset the IME buffer mid-composition and swallowed characters. Updated `safeSetInputMode` and `HTMLTextAreaElement.prototype.setAttribute` to only invoke DOM mutation when the value genuinely changes, skipping no-ops.
+    - **DOM MutationObserver filtered & debounced:** The observer now ignores typing, character updates, and cursor moves, only firing when top-level structural nodes (like new terminal tabs) are added, debounced by 400ms.
+    - **Hardware-accelerated rendering:** In `vscodeService.ts` (`settings.json`), enabled `"terminal.integrated.gpuAcceleration": "auto"` to use the fast Canvas renderer instead of the slow DOM renderer, disabled expensive character rescaling (`"rescaleOverlappingGlyphs": false`), and disabled cursor blink timer thrashing (`"cursorBlinking": false`).
+  - **KeyboardAvoidingView double-shrink:** Changed `behavior={Platform.OS === "ios" ? "padding" : undefined}` in `VSCodeView.tsx` so Android relies on native `adjustResize` without shrinking twice.
+- **Verification:** `npx tsc --noEmit` passed with 0 errors.
+
+### [2026-09-06] - VS Code Double-Tap Keyboard Guard & Mutual Exclusivity
+- **User Request:**
+  1. In VS Code, single click/tap places cursor or highlights without popping up the virtual keyboard; keyboard only opens on double click / double tap.
+  2. Choosing Native Code Editor vs VS Code enforces mutual exclusivity in both Setup Wizard and Settings:
+     - Choosing Native Editor enables `editor`, `terminal`, `browser`, and `git` (disables `vscode`).
+     - Choosing VS Code enables `vscode`, `git`, `browser`, and `terminal` (disables `editor`).
+  3. Re-running the Startup Wizard remembers previously chosen settings (theme, AI status, editor preference, bottom tabs).
+- **Implementation:**
+  - `src/ide/services/vscodeKeyboardScript.ts` (186 lines): Injected script for code-server/Monaco Editor in WebView. Intercepts `HTMLTextAreaElement.prototype.focus` and sets `inputmode="none"` by default so single taps position cursor and highlight selections without triggering the Android IME. Detects rapid double-taps (<380ms, <35px radius) and mouse `dblclick` to set `inputmode="text"` and focus the textarea to summon the virtual keyboard. Tapping away resets `inputmode="none"`.
+  - `src/ide/components/VSCodeView.tsx` (261 lines): Injects `INJECTED_KEYBOARD_GUARD` into the WebView on start and load. Clean, uncluttered UI with no extra overlay icons.
+  - `src/ide/services/configService.ts`: Added `getEditorBottomTabsPreset`, updated `DEFAULT_BOTTOM_TABS`, `normalizeBottomTabs`, and `saveDefaultEditorUi` for mutual exclusivity.
+  - `src/ide/components/settings/NavigationSection.tsx`: Mutual exclusivity switches between Editor and VS Code bottom tabs.
+  - `src/onboarding/StartupWizard.tsx` & `EditorUiStep.tsx`: State pre-filling from `loadConfig()`, updated step copy and feature checklists.
+- **Rule Compliance (`agent.md`):** All files ≤500 lines (`VSCodeView.tsx`: 347, `vscodeKeyboardScript.ts`: 186, `configService.ts`: 323, `StartupWizard.tsx`: 431). `npx tsc --noEmit` verified with 0 errors.
+
 ### [2026-09-06] - Startup Wizard Edge-to-Edge & Status Bar Safe Area Fix
 - **Problem:** The startup wizard header ("Astra Setup", subtitle, and step indicator) was completely overlapping with and hidden behind the Android status bar / notification bar. Bottom navigation buttons were also partially cut off.
 - **Cause:** Standard `SafeAreaView` from `react-native` has zero effect on Android.
@@ -21,6 +58,18 @@
   - `vscodeService.ts`: Added direct host loopback HTTP probing via `fetch('http://127.0.0.1:8082/', { method: 'HEAD' })` with an AbortController in `isVSCodeRunning()`, checking server status in ~2ms. Added self-healing musl node symlink in `LAUNCH_SCRIPT`.
   - `VSCodeView.tsx`: Removed the aggressive 4000ms watchdog timer that was racing against state resolution.
 - **Rule Compliance (`agent.md`):** All files ≤500 lines (`vscodeService.ts`: 429, `VSCodeView.tsx`: 261). `npx tsc --noEmit` verified with 0 errors.
+
+- **Splash truthful + bigger:** logo 132 → 172 with larger ASTRA title below; splash dismisses only when settings AND sandbox are actually ready (`bootDone` in `App.tsx`, 15s fallback); phase labels pace the 3s wave on a 1s timer (settings → sandbox → workspace) instead of racing instant async events, so each stage is visible during the animation. `tsc` 0 errors, JS-only.
+- **VS Code takes the Editor slot:** when VS Code is the chosen editor (native Editor hidden), its button now renders first in `IDEBottomBar` via a shared `VscodeTabButton` — instead of dangling last. Native-editor setups are unchanged. `tsc` 0 errors.
+- **Editor keeps cursor above the keyboard:** `EditorView` now tracks keyboard height + cursor line and centers the edited line only when it's actually hidden — on keyboard open, on cursor taps, and when typing near the edges; already-visible lines never move. Content gets `paddingBottom = keyboardHeight` so even the last line can lift above the keyboard. `tsc` 0 errors.
+
+### [2026-09-06] - Acode-Style Logo Wave + Setup Animations
+- **Logo (Acode technique):** researched Acode's `www/logo.svg` — its "A" is 4 separate vector parts with staggered 1500ms scale pulses (1→1.13→1, ease-out) forming a traveling wave. Replicated exactly in new `AstraMarkAnimated.tsx`: flat-vector redraw of the Astra mark (chevrons, A legs + crossbar, star, static orbit ring, cyan/violet gradients) as 5 layered `react-native-svg` parts, each scaled by its own native-driver `Animated.loop` (phases 0/300/600/900/1200ms). `AstraLogo` now renders the vector mark (animated by default) — chat headers, floating overlay, menus, permission modal all wave with zero call-site changes.
+- **Boot:** `AppBootScreen` drops the generic breathing PNG for the large wave mark + Acode-style live phase label ("Loading settings…" → "Preparing sandbox…" → "Readying workspace…", cross-faded, threaded from `App.tsx` which now chains config-load → proot-ready).
+- **Wizard:** `StartupWizard` step body slides + fades (direction-aware), active step dot pulses, header uses the animated mark.
+- **Installs:** `VSCodeInstallCard` header shows the wave mark (freezes at 100%) + shimmering fill bar; `EnvironmentSection` provisioning spinner replaced by the wave mark.
+- **Rule Compliance (`agent.md`):** new file = 1 feature, all files ≤500 lines, removed dead `logoImage` style + unused `ActivityIndicator` import. `npx tsc --noEmit` 0 errors. React 19 (`useId` for gradient ids), `react-native-svg` already present. JS-only — Metro reload, no rebuild.
+- **Logo cleanup:** removed the orbit ring from `AstraMarkAnimated` (mark only, no glow/circle artifacts); swept the last in-app old-PNG usage — `ProjectPicker` header now uses the animated `AstraLogo` (dead `headerLogo` style + `Image` import removed). Zero `assets/*.png` references remain in `src`/`App.tsx`. NOTE: `app.json` launcher icon / splash / adaptive-icon / favicon still point at the old PNGs — those are native build assets and need new PNG files + a rebuild to change (out of scope for JS-only edits).
 
 ### [2026-09-06] - Browser Tab Empty by Default (Active Hosts Still Auto-Load)
 - **Change (user request):** the browser tab no longer auto-loads `http://127.0.0.1:8000` (or any recent host) — it opens on a neutral empty state ("Browser is empty", globe icon) with a Start Web Server button and tap-to-connect cards for detected running servers. New `WebBrowserEmptyView.tsx`; `WebBrowserPreview` defaults to empty URL and only auto-loads a background-server URL into an empty tab (never hijacks an open page); `IDELayout` default `browserUrl` cleared. Explicit navigation (address bar, OPEN_BROWSER, task cards) unchanged.

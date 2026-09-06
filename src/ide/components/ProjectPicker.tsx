@@ -8,10 +8,10 @@ import {
   FlatList,
   StatusBar,
   Alert,
-  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { AstraLogo } from '../../ai/components/AstraLogo';
 import {
   listWorkspaceMetas,
   createWorkspace,
@@ -126,11 +126,7 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat, onRerunStartu
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}>
         <View style={styles.titleRow}>
-          <Image
-            source={require('../../../assets/icon.png')}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
+          <AstraLogo width={30} height={30} />
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Workspaces</Text>
           <View style={[styles.countBadge, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
             <Text style={[styles.countText, { color: theme.textSecondary }]}>{projects.length}</Text>
@@ -293,11 +289,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  headerLogo: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
   },
   headerTitle: {
     fontSize: 18,

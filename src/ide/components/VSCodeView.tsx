@@ -6,6 +6,9 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,15 +23,12 @@ import {
   VSCodeProvisionProgress,
 } from "../services/vscodeService";
 import { VSCodeInstallCard } from "./VSCodeInstallCard";
+import { INJECTED_KEYBOARD_GUARD } from "../services/vscodeKeyboardScript";
 
 const MAX_LOG_LINES = 200;
 
 type VSCodePhase = "checking" | "not-installed" | "installing" | "stopped" | "starting" | "running" | "error";
 
-/**
- * Full VS Code (code-server) tab: provisioned on demand into the Alpine
- * guest, served localhost-only with --auth none, rendered here full-screen in a WebView.
- */
 export function VSCodeView({
   workspaceDir,
   visible = true,
@@ -42,6 +42,40 @@ export function VSCodeView({
   const [log, setLog] = useState<string[]>([]);
   const [statusNote, setStatusNote] = useState("");
   const mountedRef = useRef(true);
+  const webViewRef = useRef<WebView>(null);
+  const isKeyboardUnlockedRef = useRef(false);
+
+  const handleMessage = useCallback((event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "KEYBOARD_STATE") {
+        isKeyboardUnlockedRef.current = !!data.unlocked;
+        if (!data.unlocked) {
+          Keyboard.dismiss();
+        }
+      }
+    } catch (_) {}
+  }, []);
+
+
+
+  const injectGuard = useCallback(() => {
+    try {
+      webViewRef.current?.injectJavaScript(INJECTED_KEYBOARD_GUARD);
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    if (visible && phase === "running") {
+      injectGuard();
+      const t1 = setTimeout(injectGuard, 600);
+      const t2 = setTimeout(injectGuard, 2000);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }
+  }, [visible, phase, injectGuard]);
 
   const pushLog = useCallback((line: string) => {
     setLog((prev) => {
@@ -141,25 +175,36 @@ export function VSCodeView({
 
   if (phase === "running") {
     return (
-      <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
-        <WebView
-          key={targetUrl}
-          source={{ uri: targetUrl }}
-          style={[styles.webview, { backgroundColor: theme.bgPrimary }]}
-          originWhitelist={["*"]}
-          javaScriptEnabled
-          domStorageEnabled
-          mixedContentMode="always"
-          allowsInlineMediaPlayback
-          startInLoadingState
-          renderLoading={() => (
-            <View style={[styles.center, { backgroundColor: theme.bgPrimary }]}>
-              <ActivityIndicator size="large" color={theme.accent} />
-              <Text style={[styles.note, { color: theme.accent }]}>Loading VS Code…</Text>
-            </View>
-          )}
-        />
-      </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={0}
+      >
+        <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
+          <WebView
+            ref={webViewRef}
+            key={targetUrl}
+            source={{ uri: targetUrl }}
+            style={[styles.webview, { backgroundColor: theme.bgPrimary }]}
+            originWhitelist={["*"]}
+            javaScriptEnabled
+            domStorageEnabled
+            mixedContentMode="always"
+            allowsInlineMediaPlayback
+            startInLoadingState
+            injectedJavaScriptBeforeContentLoaded={INJECTED_KEYBOARD_GUARD}
+            injectedJavaScript={INJECTED_KEYBOARD_GUARD}
+            onMessage={handleMessage}
+            onLoadEnd={injectGuard}
+            renderLoading={() => (
+              <View style={[styles.center, { backgroundColor: theme.bgPrimary }]}>
+                <ActivityIndicator size="large" color={theme.accent} />
+                <Text style={[styles.note, { color: theme.accent }]}>Loading VS Code…</Text>
+              </View>
+            )}
+          />
+        </View>
+      </KeyboardAvoidingView>
     );
   }
 

@@ -16,9 +16,14 @@ interface IDEBottomBarProps {
 
 export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, compact = false, visibleTabs = DEFAULT_BOTTOM_TABS }: IDEBottomBarProps) {
   const { theme } = useTheme();
+  // VS Code as chosen editor takes the native Editor's first slot; otherwise it stays last.
+  const vscodeFirst = visibleTabs.vscode && !visibleTabs.editor;
 
   return (
     <View style={[styles.bottomBar, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }, compact && styles.bottomBarCompact]}>
+      {vscodeFirst && (
+      <VscodeTabButton active={bottomTab === "vscode"} compact={compact} onPress={() => onChangeTab("vscode")} />
+      )}
       {visibleTabs.editor && (
       <TouchableOpacity
         style={[
@@ -136,28 +141,35 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
       </TouchableOpacity>
       )}
 
-      {visibleTabs.vscode && (
-      <TouchableOpacity
-        style={[
-          styles.bottomTabBtn,
-          bottomTab === "vscode" && { backgroundColor: theme.bgTertiary },
-        ]}
-        onPress={() => onChangeTab("vscode")}
-      >
-        <MaterialCommunityIcons name="microsoft-visual-studio-code" size={16} color={bottomTab === "vscode" ? theme.accent : theme.textMuted} />
-        <Text
-          style={[
-            styles.bottomTabText,
-            compact && styles.bottomTabTextCompact,
-            { color: theme.textMuted },
-            bottomTab === "vscode" && { color: theme.accent, fontWeight: "700" },
-          ]}
-        >
-          VS Code
-        </Text>
-      </TouchableOpacity>
+      {visibleTabs.vscode && !vscodeFirst && (
+      <VscodeTabButton active={bottomTab === "vscode"} compact={compact} onPress={() => onChangeTab("vscode")} />
       )}
     </View>
+  );
+}
+
+function VscodeTabButton({ active, compact, onPress }: { active: boolean; compact: boolean; onPress: () => void }) {
+  const { theme } = useTheme();
+  return (
+    <TouchableOpacity
+      style={[
+        styles.bottomTabBtn,
+        active && { backgroundColor: theme.bgTertiary },
+      ]}
+      onPress={onPress}
+    >
+      <MaterialCommunityIcons name="microsoft-visual-studio-code" size={16} color={active ? theme.accent : theme.textMuted} />
+      <Text
+        style={[
+          styles.bottomTabText,
+          compact && styles.bottomTabTextCompact,
+          { color: theme.textMuted },
+          active && { color: theme.accent, fontWeight: "700" },
+        ]}
+      >
+        VS Code
+      </Text>
+    </TouchableOpacity>
   );
 }
 

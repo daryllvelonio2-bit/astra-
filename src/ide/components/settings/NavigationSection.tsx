@@ -1,7 +1,13 @@
 import React from "react";
 import { View, Text, StyleSheet, Switch } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { BottomTabVisibility, ToggleableBottomTab } from "../../services/configService";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import {
+  BottomTabVisibility,
+  ToggleableBottomTab,
+  getEditorBottomTabsPreset,
+  saveDefaultEditorUi,
+  EditorUiType,
+} from "../../services/configService";
 import { ThemeColors } from "../../../theme/themeContext";
 
 interface TabRow {
@@ -9,15 +15,16 @@ interface TabRow {
   title: string;
   description: string;
   icon: any;
+  isMaterial?: boolean;
 }
 
 const TAB_ROWS: TabRow[] = [
-  { id: "editor", title: "Editor", description: "Native code editor tab", icon: "code-slash-outline" },
+  { id: "editor", title: "Native Editor", description: "Built-in lightweight mobile code editor", icon: "code-slash-outline" },
+  { id: "vscode", title: "VS Code", description: "Full VS Code web desktop editor", icon: "microsoft-visual-studio-code", isMaterial: true },
   { id: "terminal", title: "Terminal", description: "Shell + task output tab", icon: "terminal-outline" },
   { id: "browser", title: "Browser", description: "Web preview tab", icon: "globe-outline" },
   { id: "git", title: "Git", description: "Source control tab", icon: "git-branch-outline" },
   { id: "desktop", title: "Desktop", description: "Linux desktop tab", icon: "desktop-outline" },
-  { id: "vscode", title: "VS Code", description: "VS Code + extensions tab", icon: "code-slash-outline" },
 ];
 
 interface NavigationSectionProps {
@@ -29,6 +36,38 @@ interface NavigationSectionProps {
 }
 
 export function NavigationSection({ visibility, onChange, astraEnabled, onChangeAstraEnabled, theme }: NavigationSectionProps) {
+  const handleToggleTab = (tabId: ToggleableBottomTab, value: boolean) => {
+    if (tabId === "editor") {
+      const nextEditor: EditorUiType = value ? "native" : "vscode";
+      const nextTabs = getEditorBottomTabsPreset(nextEditor, visibility);
+      onChange(nextTabs);
+      saveDefaultEditorUi(nextEditor).catch(() => {});
+      return;
+    }
+    if (tabId === "vscode") {
+      const nextEditor: EditorUiType = value ? "vscode" : "native";
+      const nextTabs = getEditorBottomTabsPreset(nextEditor, visibility);
+      onChange(nextTabs);
+      saveDefaultEditorUi(nextEditor).catch(() => {});
+      return;
+    }
+    onChange({ ...visibility, [tabId]: value });
+  };
+
+  const getTabDescription = (row: TabRow, enabled: boolean) => {
+    if (row.id === "editor") {
+      return enabled
+        ? "Active code editor (VS Code disabled)"
+        : "Disabled (tap to switch to Native Editor)";
+    }
+    if (row.id === "vscode") {
+      return enabled
+        ? "Active code editor (Native editor disabled)"
+        : "Disabled (tap to switch to VS Code)";
+    }
+    return row.description;
+  };
+
   return (
     <View style={styles.container}>
       <Text style={[styles.heading, { color: theme.textMuted }]}>
@@ -53,7 +92,7 @@ export function NavigationSection({ visibility, onChange, astraEnabled, onChange
         BOTTOM NAVIGATION
       </Text>
       <Text style={[styles.subheading, { color: theme.textMuted }]}>
-        The last visible tab cannot be turned off.
+        Native Editor &amp; VS Code are mutually exclusive.
       </Text>
       {TAB_ROWS.map((row) => {
         const enabled = visibility[row.id];
@@ -64,15 +103,21 @@ export function NavigationSection({ visibility, onChange, astraEnabled, onChange
             style={[styles.row, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}
           >
             <View style={[styles.iconBox, { backgroundColor: `${theme.accent}20` }]}>
-              <Ionicons name={row.icon} size={16} color={theme.accent} />
+              {row.isMaterial ? (
+                <MaterialCommunityIcons name={row.icon} size={16} color={theme.accent} />
+              ) : (
+                <Ionicons name={row.icon} size={16} color={theme.accent} />
+              )}
             </View>
             <View style={styles.textWrap}>
               <Text style={[styles.title, { color: theme.textPrimary }]}>{row.title}</Text>
-              <Text style={[styles.desc, { color: theme.textMuted }]}>{row.description}</Text>
+              <Text style={[styles.desc, { color: theme.textMuted }]}>
+                {getTabDescription(row, enabled)}
+              </Text>
             </View>
             <Switch
               value={enabled}
-              onValueChange={(v) => onChange({ ...visibility, [row.id]: v })}
+              onValueChange={(v) => handleToggleTab(row.id, v)}
               disabled={isLastOn}
               trackColor={{ false: theme.bgTertiary, true: theme.accent }}
               thumbColor={enabled ? theme.sendButtonIcon : theme.textMuted}

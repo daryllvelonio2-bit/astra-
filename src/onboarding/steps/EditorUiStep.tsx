@@ -20,7 +20,11 @@ const EDITOR_OPTIONS: EditorUiOption[] = [
     subtitle: "Recommended for mobile",
     badge: "Lightweight",
     description: "Built-in mobile editor designed specifically for instant file opening, minimal battery drain, and fast touch navigation.",
-    features: ["Instant startup & zero lag", "Smooth mobile syntax highlighting", "Ultra-low memory footprint"],
+    features: [
+      "Native Editor, Terminal, Browser & Git enabled",
+      "VS Code disabled for optimal performance",
+      "Instant startup & zero lag",
+    ],
   },
   {
     id: "vscode",
@@ -28,7 +32,11 @@ const EDITOR_OPTIONS: EditorUiOption[] = [
     subtitle: "Desktop powerhouse",
     badge: "Extensions",
     description: "Full web-based code-server environment with access to extensions, themes, and full desktop editor capabilities.",
-    features: ["VS Code extension marketplace", "Full desktop command palette", "Integrated terminal & tooling"],
+    features: [
+      "VS Code, Terminal, Browser & Git enabled",
+      "Native Editor disabled",
+      "VS Code extension marketplace & tooling",
+    ],
   },
 ];
 
@@ -52,7 +60,7 @@ export function EditorUiStep({
           Select Your Editor Experience
         </Text>
         <Text style={[styles.stepSubtitle, { color: theme.textSecondary }]}>
-          Choose how you want to write and edit code. You can switch tabs anytime.
+          Choose your primary code editor. Selecting one enables its workspace tabs and disables the other.
         </Text>
       </View>
 

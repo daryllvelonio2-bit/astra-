@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   Alert,
   Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { AstraLogo } from "../../../ai/components/AstraLogo";
 import { ThemeColors } from "../../../theme/themeContext";
 import {
   getProvisioningStatus,
@@ -178,7 +178,7 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
               ]}
             >
               {status.isProvisioning ? (
-                <ActivityIndicator size="small" color={theme.accent} />
+                <AstraLogo width={26} height={26} />
               ) : status.isComplete ? (
                 <Ionicons name="checkmark-circle" size={22} color={theme.accentGreen} />
               ) : (

@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
   Keyboard,
+  Dimensions,
   GestureResponderEvent,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -55,6 +56,10 @@ export function EditorView({
   const lastTapRef = useRef<number>(0);
   const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startIndexRef = useRef(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const scrollYRef = useRef(0);
+  const scrollViewHeightRef = useRef(0);
+  const keyboardHeightRef = useRef(0);
 
   useEffect(() => {
     startIndexRef.current = startIndex;
@@ -68,10 +73,20 @@ export function EditorView({
   }, [fileName]);
 
   useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
+      const h = e?.endCoordinates?.height ?? 0;
+      keyboardHeightRef.current = h;
+      setKeyboardHeight(h);
+    });
     const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      keyboardHeightRef.current = 0;
+      setKeyboardHeight(0);
       setIsEditing(false);
     });
-    return () => hideSub.remove();
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   const rawLines = useMemo(() => (content || "").split("\n"), [content]);
@@ -107,12 +122,60 @@ export function EditorView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileName]);
 
+  // 0-based full-file line index of the cursor (edit mode).
+  const selectionLineIdx = useMemo(() => {
+    const fullOffset = chunkStartOffset + Math.min(assists.selection.start, visibleCodeChunk.length);
+    return Math.max(0, (content || "").slice(0, fullOffset).split("\n").length - 1);
+  }, [content, chunkStartOffset, assists.selection.start, visibleCodeChunk.length]);
+  const selectionLineIdxRef = useRef(0);
+  selectionLineIdxRef.current = selectionLineIdx;
+
+  // Scroll so the given full-file line lands in the vertical center of the
+  // keyboard-visible area (overshoots upward rather than leaving it hidden).
+  const centerCursorLine = useCallback((fullLineIdx: number) => {
+    const cursorY = fullLineIdx * LINE_HEIGHT + 8;
+    const layoutH = scrollViewHeightRef.current || Dimensions.get("window").height;
+    const visibleH = Math.max(160, layoutH - keyboardHeightRef.current);
+    scrollRef.current?.scrollTo({ y: Math.max(0, cursorY - visibleH / 2), animated: true });
+  }, []);
+
+  // Scroll the cursor line to the center only if it's outside the
+  // keyboard-visible area; already-visible lines stay exactly where they are.
+  const ensureCursorVisible = useCallback(
+    (fullLineIdx: number) => {
+      const kbH = keyboardHeightRef.current;
+      if (kbH <= 0) return;
+      const cursorY = fullLineIdx * LINE_HEIGHT + 8;
+      const layoutH = scrollViewHeightRef.current || Dimensions.get("window").height;
+      const visibleH = Math.max(160, layoutH - kbH);
+      const top = scrollYRef.current;
+      if (cursorY < top + 48 || cursorY + LINE_HEIGHT > top + visibleH - 48) {
+        centerCursorLine(fullLineIdx);
+      }
+    },
+    [centerCursorLine]
+  );
+
+  // When the keyboard opens, lift the cursor line into view only if hidden.
+  useEffect(() => {
+    if (keyboardHeight <= 0 || !isEditing) return;
+    const t = setTimeout(() => ensureCursorVisible(selectionLineIdxRef.current), 120);
+    return () => clearTimeout(t);
+  }, [keyboardHeight, isEditing, ensureCursorVisible]);
+
+  // While editing (taps, Enter, typing near the edges), keep the cursor visible.
+  useEffect(() => {
+    if (!isEditing || keyboardHeight <= 0) return;
+    ensureCursorVisible(selectionLineIdx);
+  }, [selectionLineIdx, isEditing, keyboardHeight, ensureCursorVisible]);
+
   const gutterWidth = totalLines >= 1000 ? 32 : totalLines >= 100 ? 26 : totalLines >= 10 ? 20 : 16;
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (totalLines <= WINDOW_SIZE) return;
       const scrollY = e.nativeEvent.contentOffset.y;
+      scrollYRef.current = scrollY;
+      if (totalLines <= WINDOW_SIZE) return;
       const approxLine = Math.floor(scrollY / LINE_HEIGHT);
       const targetStart = Math.max(
         0,
@@ -254,11 +317,18 @@ export function EditorView({
       <ScrollView
         ref={scrollRef}
         style={[styles.editorScroll, { backgroundColor: theme.bgPrimary }]}
-        contentContainerStyle={[styles.editorScrollContent, { backgroundColor: theme.bgPrimary }]}
+        contentContainerStyle={[
+          styles.editorScrollContent,
+          { backgroundColor: theme.bgPrimary },
+          keyboardHeight > 0 ? { paddingBottom: keyboardHeight } : null,
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
         scrollEventThrottle={80}
+        onLayout={(e) => {
+          scrollViewHeightRef.current = e.nativeEvent.layout.height;
+        }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >

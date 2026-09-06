@@ -2,63 +2,61 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  Image,
   Animated,
   StyleSheet,
   StatusBar,
   Dimensions,
 } from "react-native";
+import { AstraLogo } from "../ai/components/AstraLogo";
 
 interface AppBootScreenProps {
   isReady: boolean;
   onAnimationEnd: () => void;
+  /** Live setup-phase label, e.g. "Loading settings…" */
+  phase: string;
 }
 
-export function AppBootScreen({ isReady, onAnimationEnd }: AppBootScreenProps) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+export function AppBootScreen({ isReady, onAnimationEnd, phase }: AppBootScreenProps) {
   const glowAnim = useRef(new Animated.Value(0.4)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const phaseOpacity = useRef(new Animated.Value(1)).current;
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
 
-  // Gentle breathing / pulse animation for the logo
+  // Cross-fade the phase label each time the setup stage changes
   useEffect(() => {
-    const pulse = Animated.loop(
+    phaseOpacity.setValue(0);
+    Animated.timing(phaseOpacity, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [phase]);
+
+  // Soft shimmer for the loading bar only — no aura around the logo
+  useEffect(() => {
+    const shimmer = Animated.loop(
       Animated.sequence([
-        Animated.parallel([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1100,
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0.85,
-            duration: 1100,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(pulseAnim, {
-            toValue: 0.98,
-            duration: 1100,
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0.4,
-            duration: 1100,
-            useNativeDriver: true,
-          }),
-        ]),
+        Animated.timing(glowAnim, {
+          toValue: 0.85,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.4,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
       ])
     );
-    pulse.start();
+    shimmer.start();
 
-    // Ensure a minimum 650ms display to avoid jarring micro-flickers
+    // Hold the splash for 3s so the logo wave fully plays before landing
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
-    }, 650);
+    }, 3000);
 
     return () => {
-      pulse.stop();
+      shimmer.stop();
       clearTimeout(timer);
     };
   }, []);
@@ -92,38 +90,16 @@ export function AppBootScreen({ isReady, onAnimationEnd }: AppBootScreenProps) {
         translucent
       />
 
-      {/* Ambient background aura */}
-      <Animated.View
-        style={[
-          styles.ambientGlow,
-          {
-            opacity: glowAnim,
-            transform: [{ scale: pulseAnim }],
-          },
-        ]}
-      />
-
       {/* Central Logo & Brand Block */}
       <View style={styles.centerContent}>
-        <Animated.View
-          style={[
-            styles.logoContainer,
-            {
-              transform: [{ scale: pulseAnim }],
-            },
-          ]}
-        >
-          <Image
-            source={require("../../assets/icon.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </Animated.View>
+        <View style={styles.logoContainer}>
+          <AstraLogo width={172} height={172} />
+        </View>
 
         <Text style={styles.title}>ASTRA</Text>
         <Text style={styles.subtitle}>AI IDE &amp; LINUX SANDBOX</Text>
 
-        {/* Minimal loading indicator bar */}
+        {/* Shimmer loading bar + live setup-phase label */}
         <View style={styles.loaderTrack}>
           <Animated.View
             style={[
@@ -134,10 +110,9 @@ export function AppBootScreen({ isReady, onAnimationEnd }: AppBootScreenProps) {
             ]}
           />
         </View>
-      </View>
-
-      <View style={styles.bottomFooter}>
-        <Text style={styles.footerText}>READYING RUNTIME</Text>
+        <Animated.Text style={[styles.phaseText, { opacity: phaseOpacity }]}>
+          {phase}
+        </Animated.Text>
       </View>
     </Animated.View>
   );
@@ -153,38 +128,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  ambientGlow: {
-    position: "absolute",
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: "#00E5FF",
-    opacity: 0.08,
-  },
   centerContent: {
     alignItems: "center",
     justifyContent: "center",
   },
   logoContainer: {
-    width: 130,
-    height: 130,
+    width: 172,
+    height: 172,
     marginBottom: 20,
-    shadowColor: "#00E5FF",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  logo: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
-    fontSize: 26,
+    fontSize: 30,
     fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: 6,
+    letterSpacing: 8,
     marginBottom: 6,
   },
   subtitle: {
@@ -208,15 +167,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#00E5FF",
     borderRadius: 2,
   },
-  bottomFooter: {
-    position: "absolute",
-    bottom: 36,
-    alignItems: "center",
-  },
-  footerText: {
-    fontSize: 9,
+  phaseText: {
+    marginTop: 12,
+    fontSize: 11,
     fontWeight: "600",
-    color: "rgba(255, 255, 255, 0.35)",
+    color: "rgba(255, 255, 255, 0.6)",
     letterSpacing: 2,
   },
 });

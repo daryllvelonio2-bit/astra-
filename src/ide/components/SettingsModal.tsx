@@ -56,6 +56,7 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
       selectedTheme: draft.activeTheme,
       bottomTabs: normalizeBottomTabs(draft.bottomTabs),
       astraEnabled: draft.astraEnabled ?? true,
+      defaultEditorUi: draft.bottomTabs.vscode ? "vscode" : "native",
     });
     setTheme(draft.activeTheme);
     dirtyRef.current = false;

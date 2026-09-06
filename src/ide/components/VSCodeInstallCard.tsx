@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Easing } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
+import { AstraLogo } from "../../ai/components/AstraLogo";
 import { VSCodeProvisionProgress } from "../services/vscodeService";
 
 export interface VSCodeInstallCardProps {
@@ -18,13 +19,38 @@ export function VSCodeInstallCard({ progress, log }: VSCodeInstallCardProps) {
   const step2Done = currentPercent >= 75;
   const step3Done = currentPercent >= 90;
   const step4Done = currentPercent >= 100;
+  const isInstalling = currentPercent < 100;
+
+  // Gentle shimmer on the fill bar while work is in progress
+  const barGlow = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isInstalling) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(barGlow, {
+          toValue: 0.55,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(barGlow, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isInstalling]);
 
   return (
     <View style={[styles.center, { backgroundColor: theme.bgPrimary }]}>
       <View style={[styles.installCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
         <View style={styles.installHeader}>
           <View style={[styles.installIconCircle, { backgroundColor: `${theme.accent}1f` }]}>
-            <Ionicons name="cloud-download-outline" size={22} color={theme.accent} />
+            <AstraLogo width={30} height={30} animated={isInstalling} />
           </View>
           <View style={styles.installTitleBox}>
             <Text style={[styles.installTitle, { color: theme.textPrimary }]}>Installing VS Code</Text>
@@ -36,12 +62,13 @@ export function VSCodeInstallCard({ progress, log }: VSCodeInstallCardProps) {
 
         {/* Progress bar track */}
         <View style={[styles.progressTrack, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
-          <View
+          <Animated.View
             style={[
               styles.progressBar,
               {
                 width: `${currentPercent}%`,
                 backgroundColor: theme.accent,
+                opacity: isInstalling ? barGlow : 1,
               },
             ]}
           />

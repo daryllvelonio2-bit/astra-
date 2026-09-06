@@ -22,6 +22,10 @@ export default function App() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [hasCompletedStartup, setHasCompletedStartup] = useState<boolean | null>(null);
   const [bootVisible, setBootVisible] = useState(true);
+  const [bootPhase, setBootPhase] = useState("Loading settings…");
+  // True only when settings AND sandbox are actually ready — the splash
+  // waits for this (not just its timer) so the phase text stays truthful.
+  const [bootDone, setBootDone] = useState(false);
   const [astraEnabled, setAstraEnabled] = useState(true);
   // Keep-alive: chat + editor stay mounted once opened and are only hidden.
   // Conditional unmounting used to orphan in-flight agent turns (the dead
@@ -42,8 +46,19 @@ export default function App() {
   };
 
   useEffect(() => {
-    PRootService.ensureReady().catch(() => {});
-    loadHasCompletedStartup().then(setHasCompletedStartup);
+    // Phase labels pace the 3s wave (1s each) so every stage gets screen
+    // time; dismissal still waits for real readiness below.
+    setBootPhase("Loading settings…");
+    const phaseTimers = [
+      setTimeout(() => setBootPhase("Preparing sandbox…"), 1000),
+      setTimeout(() => setBootPhase("Readying workspace…"), 2000),
+    ];
+    Promise.all([
+      loadHasCompletedStartup().then(setHasCompletedStartup),
+      PRootService.ensureReady().catch(() => {}),
+    ]).then(() => setBootDone(true));
+    // Safety: never trap the user on the splash if init hangs
+    const bootFallback = setTimeout(() => setBootDone(true), 15000);
     loadAstraEnabled().then(setAstraEnabled);
 
     const unsubSwitchWs = ideActionService.subscribe("SWITCH_WORKSPACE", ({ workspaceId }) => {
@@ -56,6 +71,8 @@ export default function App() {
     });
 
     return () => {
+      phaseTimers.forEach(clearTimeout);
+      clearTimeout(bootFallback);
       unsubSwitchWs();
       unsubConfig();
     };
@@ -79,7 +96,8 @@ export default function App() {
       <ThemeProvider>
         {bootVisible && (
           <AppBootScreen
-            isReady={hasCompletedStartup !== null}
+            isReady={bootDone}
+            phase={bootPhase}
             onAnimationEnd={() => setBootVisible(false)}
           />
         )}

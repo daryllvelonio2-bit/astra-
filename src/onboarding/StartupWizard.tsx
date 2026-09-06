@@ -1,19 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Image,
+  Animated,
+  Easing,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { AstraLogo } from "../ai/components/AstraLogo";
 import { useTheme } from "../theme/themeContext";
 import { useOrientation } from "../theme/useOrientation";
 import {
   AppTheme,
   EditorUiType,
+  loadConfig,
   saveAstraEnabled,
   saveDefaultEditorUi,
   saveHasCompletedStartup,
@@ -52,7 +55,72 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
   const [selectedEditor, setSelectedEditor] = useState<EditorUiType>("native");
   const [githubConfigured, setGithubConfigured] = useState(false);
 
+  // Remember and pre-fill existing choices if the setup was completed or run previously
+  useEffect(() => {
+    loadConfig().then((cfg) => {
+      if (cfg.selectedTheme) {
+        setSelectedTheme(cfg.selectedTheme);
+        setTheme(cfg.selectedTheme);
+      }
+      if (typeof cfg.astraEnabled === "boolean") {
+        setAstraEnabled(cfg.astraEnabled);
+      }
+      if (cfg.defaultEditorUi) {
+        setSelectedEditor(cfg.defaultEditorUi);
+      }
+    });
+  }, []);
+
   const currentStep = STEPS[currentStepIndex];
+
+  // Slide + fade the step body on every step change (forward slides in from
+  // the right, back from the left).
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const bodyOpacity = useRef(new Animated.Value(1)).current;
+  const prevStepIndex = useRef(0);
+  useEffect(() => {
+    const dir = currentStepIndex >= prevStepIndex.current ? 1 : -1;
+    prevStepIndex.current = currentStepIndex;
+    slideAnim.setValue(40 * dir);
+    bodyOpacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(bodyOpacity, {
+        toValue: 1,
+        duration: 250,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [currentStepIndex]);
+
+  // Gentle pulse on the active step dot
+  const dotPulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dotPulse, {
+          toValue: 1.25,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(dotPulse, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
 
   const handleSelectTheme = (mode: AppTheme) => {
     setSelectedTheme(mode);
@@ -103,11 +171,7 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
         {/* Header Bar */}
         <View style={[styles.headerBar, { borderBottomColor: theme.border }]}>
           <View style={styles.brandRow}>
-            <Image
-              source={require("../../assets/icon.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
+            <AstraLogo width={32} height={32} />
             <View>
               <Text style={[styles.brandTitle, { color: theme.textPrimary }]}>
                 Astra Setup
@@ -125,7 +189,7 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
               const isPast = idx < currentStepIndex;
               return (
                 <View key={step.id} style={styles.stepDotWrap}>
-                  <View
+                  <Animated.View
                     style={[
                       styles.stepDot,
                       {
@@ -134,6 +198,7 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
                           : isPast
                           ? theme.accentGreen
                           : theme.borderLight,
+                        transform: [{ scale: isActive ? dotPulse : 1 }],
                       },
                     ]}
                   >
@@ -149,7 +214,7 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
                         {idx + 1}
                       </Text>
                     )}
-                  </View>
+                  </Animated.View>
                   {isActive && !isLandscape && (
                     <Text
                       style={[
@@ -180,6 +245,15 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
 
         {/* Step Body */}
         <View style={styles.bodyWrap}>
+          <Animated.View
+            style={[
+              styles.bodyAnimated,
+              {
+                opacity: bodyOpacity,
+                transform: [{ translateX: slideAnim }],
+              },
+            ]}
+          >
           {currentStep.id === "theme" && (
             <ThemeSelectionStep
               selectedTheme={selectedTheme}
@@ -222,6 +296,7 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
               onSkip={handleFinish}
             />
           )}
+          </Animated.View>
         </View>
 
         {/* Bottom Navigation Actions */}
@@ -310,11 +385,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  logoImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-  },
   brandTitle: {
     fontSize: 14,
     fontWeight: "800",
@@ -357,6 +427,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 14,
+  },
+  bodyAnimated: {
+    flex: 1,
   },
   bottomBar: {
     flexDirection: "row",

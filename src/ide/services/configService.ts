@@ -34,18 +34,43 @@ export const DEFAULT_BOTTOM_TABS: BottomTabVisibility = {
   terminal: true,
   browser: true,
   git: true,
-  desktop: true,
-  vscode: true,
+  desktop: false,
+  vscode: false,
 };
 
-export function normalizeBottomTabs(value?: Partial<BottomTabVisibility> | null): BottomTabVisibility {
+export function getEditorBottomTabsPreset(
+  editor: EditorUiType,
+  existingTabs?: Partial<BottomTabVisibility> | null
+): BottomTabVisibility {
+  const isVscode = editor === "vscode";
   return {
-    editor: value?.editor ?? DEFAULT_BOTTOM_TABS.editor,
+    editor: !isVscode,
+    vscode: isVscode,
+    terminal: true,
+    browser: true,
+    git: true,
+    desktop: existingTabs?.desktop ?? false,
+  };
+}
+
+export function normalizeBottomTabs(value?: Partial<BottomTabVisibility> | null): BottomTabVisibility {
+  const rawEditor = value?.editor ?? DEFAULT_BOTTOM_TABS.editor;
+  const rawVscode = value?.vscode ?? DEFAULT_BOTTOM_TABS.vscode;
+  let editor = rawEditor;
+  let vscode = rawVscode;
+  if (editor && vscode) {
+    vscode = false;
+  } else if (!editor && !vscode) {
+    editor = true;
+  }
+
+  return {
+    editor,
     terminal: value?.terminal ?? DEFAULT_BOTTOM_TABS.terminal,
     browser: value?.browser ?? DEFAULT_BOTTOM_TABS.browser,
     git: value?.git ?? DEFAULT_BOTTOM_TABS.git,
     desktop: value?.desktop ?? DEFAULT_BOTTOM_TABS.desktop,
-    vscode: value?.vscode ?? DEFAULT_BOTTOM_TABS.vscode,
+    vscode,
   };
 }
 
@@ -117,10 +142,16 @@ export async function loadConfig(): Promise<AppConfig> {
       const parsed = JSON.parse(data);
       delete parsed.showAiButton; // legacy key, superseded by astraEnabled
       const normalizedKeys = normalizeApiKeys(parsed.apiKeys, parsed.apiKey);
+      const defaultEditor: EditorUiType = parsed.defaultEditorUi || (parsed.bottomTabs?.vscode ? "vscode" : "native");
+      let tabs = normalizeBottomTabs(parsed.bottomTabs);
+      if (parsed.bottomTabs?.editor && parsed.bottomTabs?.vscode) {
+        tabs = getEditorBottomTabsPreset(defaultEditor, tabs);
+      }
       return {
         ...DEFAULT_CONFIG,
         ...parsed,
-        bottomTabs: normalizeBottomTabs(parsed.bottomTabs),
+        defaultEditorUi: defaultEditor,
+        bottomTabs: tabs,
         astraEnabled: parsed.astraEnabled ?? DEFAULT_CONFIG.astraEnabled,
         apiKeys: normalizedKeys,
         apiKey: normalizedKeys[0] || parsed.apiKey || "",
@@ -284,6 +315,8 @@ export async function loadDefaultEditorUi(): Promise<EditorUiType> {
 }
 
 export async function saveDefaultEditorUi(editor: EditorUiType): Promise<void> {
-  await saveConfig({ defaultEditorUi: editor });
+  const current = await loadConfig();
+  const tabs = getEditorBottomTabsPreset(editor, current.bottomTabs);
+  await saveConfig({ defaultEditorUi: editor, bottomTabs: tabs });
 }
 
