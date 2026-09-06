@@ -4,9 +4,9 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/themeContext";
 import { useOrientation } from "../theme/useOrientation";
@@ -36,8 +36,12 @@ const STEPS: { id: StartupStepId; label: string }[] = [
 ];
 
 export function StartupWizard({ onComplete }: StartupWizardProps) {
+  const insets = useSafeAreaInsets();
   const { theme, themeMode, setTheme } = useTheme();
   const { isLandscape } = useOrientation();
+
+  const topInset = Math.max(insets.top, StatusBar.currentHeight || 0);
+  const bottomInset = Math.max(insets.bottom, 12);
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [selectedTheme, setSelectedTheme] = useState<AppTheme>(themeMode);
@@ -75,10 +79,22 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bgPrimary }]}>
+    <View
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: theme.bgPrimary,
+          paddingTop: topInset,
+          paddingBottom: bottomInset,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        },
+      ]}
+    >
       <StatusBar
         barStyle={theme.isDark ? "light-content" : "dark-content"}
-        backgroundColor={theme.bgPrimary}
+        backgroundColor="transparent"
+        translucent
       />
       <View style={[styles.container, isLandscape && styles.containerLandscape]}>
         {/* Header Bar */}
@@ -116,23 +132,29 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
                       },
                     ]}
                   >
-                    {isPast && (
+                    {isPast ? (
                       <Ionicons name="checkmark" size={10} color="#ffffff" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.stepNumber,
+                          { color: isActive ? theme.sendButtonIcon : theme.textMuted },
+                        ]}
+                      >
+                        {idx + 1}
+                      </Text>
                     )}
                   </View>
-                  {!isLandscape && (
+                  {isActive && !isLandscape && (
                     <Text
                       style={[
                         styles.stepDotLabel,
                         {
-                          color: isActive
-                            ? theme.textPrimary
-                            : isPast
-                            ? theme.textSecondary
-                            : theme.textMuted,
-                          fontWeight: isActive ? "700" : "500",
+                          color: theme.textPrimary,
+                          fontWeight: "700",
                         },
                       ]}
+                      numberOfLines={1}
                     >
                       {step.label}
                     </Text>
@@ -249,7 +271,7 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
           </View>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -306,6 +328,10 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
+  },
+  stepNumber: {
+    fontSize: 9,
+    fontWeight: "700",
   },
   stepDotLabel: {
     fontSize: 11,

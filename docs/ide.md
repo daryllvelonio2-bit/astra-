@@ -132,7 +132,6 @@ autosave and a Saved indicator:
 |---|---|
 | Theme | `AppearanceSection` — dark / light / midnight |
 | Keys | `ApiKeyManager` — multiple Gemini keys, masked display |
-| Model | `ModelSection` — `SUPPORTED_MODELS` picker |
 | Linux | `EnvironmentSection` — toolchain stages, live APK log, binary health, Optional Extras |
 | Tabs | `NavigationSection` — all six bottom-tab toggles + Astra AI master switch |
 

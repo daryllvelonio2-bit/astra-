@@ -4,6 +4,12 @@
 - **Current Phase:** Project Documentation (docs/)
 - **Last Updated:** September 6, 2026
 
+### [2026-09-06] - Startup Wizard Edge-to-Edge & Status Bar Safe Area Fix
+- **Problem:** The startup wizard header ("Astra Setup", subtitle, and step indicator) was completely overlapping with and hidden behind the Android status bar / notification bar. Bottom navigation buttons were also partially cut off.
+- **Cause:** Standard `SafeAreaView` from `react-native` has zero effect on Android.
+- **Fix:** Switched to `useSafeAreaInsets` from `react-native-safe-area-context` combined with `StatusBar.currentHeight` fallback. Wrapped with dynamic top (`topInset`), bottom (`bottomInset`), left, and right insets with translucent status bar. Optimized the step indicator row to display numbers in dots and only the active step's text label on mobile portrait, preventing horizontal text overflow.
+- **Rule Compliance (`agent.md`):** All files ≤500 lines (`StartupWizard.tsx`: 403). `npx tsc --noEmit` verified with 0 errors.
+
 ### [2026-09-06] - Instant Native Check for VS Code Provisioning & Startup Race Fix
 - **Problem:** Opening the VS Code tab for the first time showed the installation card ("VS Code in your app - Install ~230MB") even though VS Code was already installed. Tapping "Recheck" immediately loaded the editor.
 - **Root Cause:**
@@ -15,6 +21,11 @@
   - `vscodeService.ts`: Added direct host loopback HTTP probing via `fetch('http://127.0.0.1:8082/', { method: 'HEAD' })` with an AbortController in `isVSCodeRunning()`, checking server status in ~2ms. Added self-healing musl node symlink in `LAUNCH_SCRIPT`.
   - `VSCodeView.tsx`: Removed the aggressive 4000ms watchdog timer that was racing against state resolution.
 - **Rule Compliance (`agent.md`):** All files ≤500 lines (`vscodeService.ts`: 429, `VSCodeView.tsx`: 261). `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-06] - Model Picker Removed from Settings (Chat Picker Stays)
+- **Removal (user request):** Settings no longer has a Model tab — bar is Theme / Keys / Linux / Tabs. `ModelSection.tsx` deleted; `SettingsModal` drops all `selectedModel` draft/autosave wiring; `SettingsTabBar` drops the `"model"` id (flex layout reflows untouched).
+- **Unchanged:** `selectedModel` stays in `configService` as the runtime source of truth — chat-header `ModelPickerModal`, `astraCliService`, and git commit-summary keep working; previously saved model choices keep loading.
+- **Rule Compliance (`agent.md`):** Dead code deleted, all files ≤500 lines. `npx tsc --noEmit` 0 errors. JS-only — Metro reload, no rebuild.
 
 ### [2026-09-06] - Editor + Terminal Can Be Turned Off; Old AI-Button Switch Removed
 - **Feature:** Settings → Tabs now lists all six bottom tabs (Editor, Terminal, Browser, Git, Desktop, VS Code). The last visible tab's switch locks so the bar can never go empty; any hidden active tab falls back to the first visible one (`firstVisibleTab`, order editor → terminal → browser → git → desktop → vscode). All programmatic tab jumps (`OPEN_TERMINAL`, run output, task trigger, `OPEN_FILE`) route through `safeSetBottomTab`, so off means off everywhere.

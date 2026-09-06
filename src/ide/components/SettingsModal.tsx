@@ -20,7 +20,6 @@ import { useTheme } from "../../theme/themeContext";
 import { ApiKeyManager } from "./ApiKeyManager";
 import { SettingsTabBar, SettingsTabId } from "./settings/SettingsTabBar";
 import { AppearanceSection } from "./settings/AppearanceSection";
-import { ModelSection } from "./settings/ModelSection";
 import { EnvironmentSection } from "./settings/EnvironmentSection";
 import { NavigationSection } from "./settings/NavigationSection";
 
@@ -38,7 +37,6 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
   const { theme, themeMode, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<SettingsTabId>("appearance");
   const [apiKeys, setApiKeys] = useState<string[]>([]);
-  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash-lite");
   const [activeTheme, setActiveTheme] = useState<AppTheme>(themeMode);
   const [bottomTabs, setBottomTabs] = useState<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
   const [astraEnabled, setAstraEnabled] = useState(true);
@@ -47,15 +45,14 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
   const dirtyRef = useRef(false);
   const skipFirstRef = useRef(true);
   const saveTimer = useRef<any>(null);
-  const draftRef = useRef({ apiKeys, selectedModel, activeTheme, bottomTabs, astraEnabled });
-  draftRef.current = { apiKeys, selectedModel, activeTheme, bottomTabs, astraEnabled };
+  const draftRef = useRef({ apiKeys, activeTheme, bottomTabs, astraEnabled });
+  draftRef.current = { apiKeys, activeTheme, bottomTabs, astraEnabled };
 
   const flushSave = async () => {
     const draft = draftRef.current;
     await saveConfig({
       apiKeys: draft.apiKeys,
       apiKey: draft.apiKeys[0] || "",
-      selectedModel: draft.selectedModel,
       selectedTheme: draft.activeTheme,
       bottomTabs: normalizeBottomTabs(draft.bottomTabs),
       astraEnabled: draft.astraEnabled ?? true,
@@ -72,7 +69,6 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
       skipFirstRef.current = true;
       loadConfig().then((cfg) => {
         setApiKeys(cfg.apiKeys || (cfg.apiKey ? [cfg.apiKey] : []));
-        setSelectedModel(cfg.selectedModel || "gemini-3.5-flash-lite");
         setActiveTheme(cfg.selectedTheme || themeMode);
         setBottomTabs(normalizeBottomTabs(cfg.bottomTabs));
         setAstraEnabled(cfg.astraEnabled ?? true);
@@ -103,7 +99,7 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys, selectedModel, activeTheme, bottomTabs, astraEnabled, loaded]);
+  }, [apiKeys, activeTheme, bottomTabs, astraEnabled, loaded]);
 
   const handleSelectTheme = (mode: AppTheme) => {
     setActiveTheme(mode);
@@ -151,9 +147,6 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
             )}
             {activeTab === "keys" && (
               <ApiKeyManager apiKeys={apiKeys} onChangeKeys={setApiKeys} theme={theme} />
-            )}
-            {activeTab === "model" && (
-              <ModelSection selectedModel={selectedModel} onSelectModel={setSelectedModel} theme={theme} />
             )}
             {activeTab === "environment" && (
               <EnvironmentSection theme={theme} />
