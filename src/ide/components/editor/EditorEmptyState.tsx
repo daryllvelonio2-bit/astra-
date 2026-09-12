@@ -23,7 +23,6 @@ export function EditorEmptyState({
         isEditing={false}
         onToggleEdit={() => {}}
         onDoneEdit={() => {}}
-        onFormatCode={() => {}}
         onExitProject={onExitProject}
         onToggleSidebar={onToggleSidebar}
         onOpenSettings={onOpenSettings}

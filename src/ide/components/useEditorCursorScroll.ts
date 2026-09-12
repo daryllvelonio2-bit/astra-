@@ -28,14 +28,21 @@ export function useEditorCursorScroll({
   selectionLineIdxRef,
   lineHeight = 20,
 }: UseEditorCursorScrollProps) {
+  const getVisibleHeight = useCallback(() => {
+    if (scrollViewHeightRef.current && scrollViewHeightRef.current > 0) {
+      return Math.max(160, scrollViewHeightRef.current);
+    }
+    const winH = Dimensions.get("window").height;
+    return Math.max(160, winH - keyboardHeightRef.current);
+  }, [keyboardHeightRef, scrollViewHeightRef]);
+
   const centerCursorLine = useCallback(
     (fullLineIdx: number) => {
       const cursorY = fullLineIdx * lineHeight + 8;
-      const layoutH = scrollViewHeightRef.current || Dimensions.get("window").height;
-      const visibleH = Math.max(160, layoutH - keyboardHeightRef.current);
+      const visibleH = getVisibleHeight();
       scrollRef.current?.scrollTo({ y: Math.max(0, cursorY - visibleH / 2), animated: true });
     },
-    [lineHeight, keyboardHeightRef, scrollRef, scrollViewHeightRef]
+    [lineHeight, getVisibleHeight, scrollRef]
   );
 
   const ensureCursorVisible = useCallback(
@@ -43,14 +50,13 @@ export function useEditorCursorScroll({
       const kbH = keyboardHeightRef.current;
       if (kbH <= 0) return;
       const cursorY = fullLineIdx * lineHeight + 8;
-      const layoutH = scrollViewHeightRef.current || Dimensions.get("window").height;
-      const visibleH = Math.max(160, layoutH - kbH);
+      const visibleH = getVisibleHeight();
       const top = scrollYRef.current;
       if (cursorY < top + 48 || cursorY + lineHeight > top + visibleH - 48) {
         centerCursorLine(fullLineIdx);
       }
     },
-    [centerCursorLine, lineHeight, keyboardHeightRef, scrollViewHeightRef, scrollYRef]
+    [centerCursorLine, lineHeight, keyboardHeightRef, getVisibleHeight, scrollYRef]
   );
 
   // When the keyboard opens, lift the cursor line into view only if hidden.

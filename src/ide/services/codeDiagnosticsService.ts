@@ -14,7 +14,7 @@ export interface CodeDiagnostic {
   endCol?: number;
   message: string;
   severity: "error" | "warning";
-  source: "ts" | "json" | "python" | "brackets";
+  source: "ts" | "json" | "python" | "brackets" | string;
 }
 
 export type BracketMatch =

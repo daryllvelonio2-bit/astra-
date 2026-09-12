@@ -21,16 +21,17 @@ export const SUPPORTED_MODELS: ModelOption[] = [
 
 const CONFIG_FILE = `${FileSystem.documentDirectory}config.json`;
 
-export type AppTheme = "dark" | "light" | "midnight";
+export type AppTheme = "dark" | "light" | "midnight" | (string & {});
 export type EditorUiType = "native" | "vscode";
 
-export type ToggleableBottomTab = "editor" | "terminal" | "browser" | "git" | "desktop" | "vscode";
+export type ToggleableBottomTab = "editor" | "agents" | "terminal" | "browser" | "git" | "desktop" | "vscode";
 export type BottomTabVisibility = Record<ToggleableBottomTab, boolean>;
 
-export const TAB_ORDER: ToggleableBottomTab[] = ["editor", "terminal", "browser", "git", "desktop", "vscode"];
+export const TAB_ORDER: ToggleableBottomTab[] = ["editor", "agents", "terminal", "browser", "git", "desktop", "vscode"];
 
 export const DEFAULT_BOTTOM_TABS: BottomTabVisibility = {
   editor: true,
+  agents: true,
   terminal: true,
   browser: true,
   git: true,
@@ -45,6 +46,7 @@ export function getEditorBottomTabsPreset(
   const isVscode = editor === "vscode";
   return {
     editor: !isVscode,
+    agents: existingTabs?.agents ?? DEFAULT_BOTTOM_TABS.agents,
     vscode: isVscode,
     terminal: true,
     browser: true,
@@ -66,6 +68,7 @@ export function normalizeBottomTabs(value?: Partial<BottomTabVisibility> | null)
 
   return {
     editor,
+    agents: value?.agents ?? DEFAULT_BOTTOM_TABS.agents,
     terminal: value?.terminal ?? DEFAULT_BOTTOM_TABS.terminal,
     browser: value?.browser ?? DEFAULT_BOTTOM_TABS.browser,
     git: value?.git ?? DEFAULT_BOTTOM_TABS.git,
@@ -83,10 +86,7 @@ export interface EditorSettings {
   autoCloseBrackets: boolean;
   autoCloseQuotes: boolean;
   autoIndentOnEnter: boolean;
-  formatOnSave: boolean;
   enableCompletions: boolean;
-  activeTypingPacks?: string[];
-  activeLanguagePacks?: string[];
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -94,7 +94,6 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   autoCloseBrackets: true,
   autoCloseQuotes: true,
   autoIndentOnEnter: true,
-  formatOnSave: false,
   enableCompletions: true,
 };
 

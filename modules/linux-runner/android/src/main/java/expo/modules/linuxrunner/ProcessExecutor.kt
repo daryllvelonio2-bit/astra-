@@ -62,10 +62,13 @@ object ProcessExecutor {
         val workspacesDir = File(filesDir, "workspaces").absolutePath
         val workspaceDir = File(filesDir, "workspace").absolutePath
         val tmpDir = File(filesDir, "tmp").absolutePath
+        val extensionsDir = File(filesDir, "extensions").absolutePath
 
         if (!File(filesDir, "workspaces").exists()) File(filesDir, "workspaces").mkdirs()
         if (!File(filesDir, "workspace").exists()) File(filesDir, "workspace").mkdirs()
         if (!File(filesDir, "tmp").exists()) File(filesDir, "tmp").mkdirs()
+        if (!File(filesDir, "extensions").exists()) File(filesDir, "extensions").mkdirs()
+        if (!File(alpineDir, "extensions").exists()) File(alpineDir, "extensions").mkdirs()
 
         EnvironmentManager.ensureSystemConfigs(context, File(filesDir, "alpine"))
 
@@ -100,7 +103,8 @@ object ProcessExecutor {
             "-b", "/sys",
             "-b", "$workspacesDir:/workspaces",
             "-b", "$workspaceDir:/workspace",
-            "-b", "$tmpDir:/tmp"
+            "-b", "$tmpDir:/tmp",
+            "-b", "$extensionsDir:/extensions"
         )
         if (File("/sdcard").exists()) {
             pbArgs.add("-b")

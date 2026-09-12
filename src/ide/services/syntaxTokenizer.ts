@@ -172,8 +172,15 @@ export const TOKEN_COLORS_LIGHT: Record<TokenType, string> = {
   plain: "#0f172a",     // Near-black
 };
 
-export function getTokenColors(isDark: boolean): Record<TokenType, string> {
-  return isDark ? TOKEN_COLORS_DARK : TOKEN_COLORS_LIGHT;
+export function getTokenColors(
+  themeOrIsDark: boolean | { isDark?: boolean; tokenColors?: Partial<Record<TokenType, string>> }
+): Record<TokenType, string> {
+  const isDark = typeof themeOrIsDark === "boolean" ? themeOrIsDark : (themeOrIsDark?.isDark ?? true);
+  const base = isDark ? { ...TOKEN_COLORS_DARK } : { ...TOKEN_COLORS_LIGHT };
+  if (typeof themeOrIsDark === "object" && themeOrIsDark?.tokenColors) {
+    return { ...base, ...themeOrIsDark.tokenColors };
+  }
+  return base;
 }
 
 const JS_KEYWORDS = new Set([
@@ -203,8 +210,7 @@ const PASCAL_CASE_WORD_REGEX = /^[A-Z][a-zA-Z0-9_$]*$/;
 export function tokenizeCode(
   code: string,
   fileName?: string,
-  startLineNumber = 1,
-  _activeLanguagePacks?: string[]
+  startLineNumber = 1
 ): TokenizedLine[] {
   if (!code) return [{ lineNumber: startLineNumber, tokens: [{ text: "", type: "plain" }], indentWidth: 0 }];
 

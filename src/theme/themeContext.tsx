@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { AppTheme, loadTheme, saveTheme, subscribeConfigChanges } from "../ide/services/configService";
+import {
+  loadAllExtensionThemeColors,
+  subscribeExtensionRegistry,
+  setActiveThemeId,
+} from "../ide/services/extensions/extensionRegistry";
 
 export interface ThemeColors {
   id: AppTheme;
@@ -32,6 +37,7 @@ export interface ThemeColors {
   statusPillBorder: string;
   cardBg: string;
   overlay: string;
+  tokenColors?: Record<string, string>;
 }
 
 export const THEMES: Record<AppTheme, ThemeColors> = {
@@ -153,23 +159,46 @@ const ThemeContext = createContext<ThemeContextType>({
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeMode, setThemeModeState] = useState<AppTheme>("dark");
+  const [customThemes, setCustomThemes] = useState<Record<string, ThemeColors>>({});
+
+  const refreshCustomThemes = useCallback(async () => {
+    try {
+      const map = await loadAllExtensionThemeColors();
+      setCustomThemes(map);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     loadTheme().then(setThemeModeState);
+    refreshCustomThemes();
+
     const unsubscribe = subscribeConfigChanges((cfg) => {
       if (cfg.selectedTheme && cfg.selectedTheme !== themeMode) {
         setThemeModeState(cfg.selectedTheme);
       }
     });
-    return unsubscribe;
-  }, []);
+
+    const unsubRegistry = subscribeExtensionRegistry(() => {
+      refreshCustomThemes();
+    });
+
+    return () => {
+      unsubscribe();
+      unsubRegistry();
+    };
+  }, [refreshCustomThemes]);
 
   const setTheme = useCallback((mode: AppTheme) => {
     setThemeModeState(mode);
     saveTheme(mode);
+    if (mode === "dark" || mode === "light" || mode === "midnight") {
+      setActiveThemeId(undefined);
+    } else {
+      setActiveThemeId(mode);
+    }
   }, []);
 
-  const theme = THEMES[themeMode] || THEMES.dark;
+  const theme = customThemes[themeMode] || THEMES[themeMode] || THEMES.dark;
 
   const value = useMemo(
     () => ({
@@ -177,7 +206,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       themeMode,
       setTheme,
       isDark: theme.isDark,
-      isLight: themeMode === "light",
+      isLight: !theme.isDark,
       isMidnight: themeMode === "midnight",
     }),
     [theme, themeMode, setTheme]

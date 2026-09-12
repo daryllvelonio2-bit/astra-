@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
 
 interface EditorTabBarProps {
@@ -8,7 +8,6 @@ interface EditorTabBarProps {
   isEditing: boolean;
   onToggleEdit: () => void;
   onDoneEdit: () => void;
-  onFormatCode: () => void;
   onRunFile?: () => void;
   onExitProject?: () => void;
   onToggleSidebar?: () => void;
@@ -23,7 +22,6 @@ export function EditorTabBar({
   isEditing,
   onToggleEdit,
   onDoneEdit,
-  onFormatCode,
   onRunFile,
   onExitProject,
   onToggleSidebar,
@@ -95,17 +93,11 @@ export function EditorTabBar({
 
       {/* Quick Toolbar (file actions only when a file is open) */}
       <View style={[styles.tabActions, styles.noShrink]}>
-        {fileName && isEditing ? (
+        {fileName && isEditing && (
           <TouchableOpacity style={[styles.doneEditBtn, { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen }]} onPress={onDoneEdit}>
             <Ionicons name="checkmark-outline" size={14} color={theme.accentGreen} />
             <Text style={[styles.doneEditText, { color: theme.accentGreen }]}>Done</Text>
           </TouchableOpacity>
-        ) : (
-          fileName && !collapseActions && (
-            <TouchableOpacity style={styles.actionIconBtn} onPress={onFormatCode} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} />
-            </TouchableOpacity>
-          )
         )}
 
         {fileName && onRunFile && (
@@ -129,18 +121,6 @@ export function EditorTabBar({
             onPress={() => setShowDropdown(false)}
           />
           <View style={[styles.dropdownBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
-            {fileName && (
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setShowDropdown(false);
-                  onFormatCode();
-                }}
-              >
-                <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} style={{ marginRight: 8 }} />
-                <Text style={[styles.dropdownItemText, { color: theme.accentGold }]}>Format Code (Prettier)</Text>
-              </TouchableOpacity>
-            )}
             {onOpenSettings && (
               <TouchableOpacity
                 style={styles.dropdownItem}

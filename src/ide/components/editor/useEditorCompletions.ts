@@ -8,7 +8,6 @@ interface UseEditorCompletionsProps {
   cursorOffset: number;
   fileName?: string;
   enabled: boolean;
-  activePacks?: string[];
   onApplyChunk: (newChunk: string, newCursor: number) => void;
 }
 
@@ -17,7 +16,6 @@ export function useEditorCompletions({
   cursorOffset,
   fileName,
   enabled,
-  activePacks,
   onApplyChunk,
 }: UseEditorCompletionsProps) {
 
@@ -45,12 +43,12 @@ export function useEditorCompletions({
     if (!enabled || cursorOffset < 0 || cursorOffset > visibleChunk.length) {
       return { prefix: "", items: [] };
     }
-    const res = getCompletions(visibleChunk, cursorOffset, fileName, activePacks, extensionSnippets);
+    const res = getCompletions(visibleChunk, cursorOffset, fileName, extensionSnippets);
     if (res.prefix === dismissedPrefix) {
       return { prefix: res.prefix, items: [] };
     }
     return res;
-  }, [visibleChunk, cursorOffset, fileName, enabled, activePacks, extensionSnippets, dismissedPrefix]);
+  }, [visibleChunk, cursorOffset, fileName, enabled, extensionSnippets, dismissedPrefix]);
 
   const applyCompletion = useCallback(
     (item: CompletionItem) => {

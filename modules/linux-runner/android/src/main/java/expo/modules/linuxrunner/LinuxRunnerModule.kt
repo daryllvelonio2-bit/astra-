@@ -54,7 +54,7 @@ class LinuxRunnerModule : Module() {
         }
 
         Function("isAutoProvisionEnabled") {
-            val context = appContext.reactContext ?: return@Function true
+            val context = appContext.reactContext ?: return@Function false
             return@Function ToolchainProvisioner.isAutoDownloadEnabled(context)
         }
 

@@ -1,28 +1,36 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { executeCommand } from "../../../../modules/linux-runner/src";
 import { CodeDiagnostic } from "../codeDiagnosticsService";
+import { loadExtensionRegistry } from "../extensions/extensionRegistry";
+import { InstalledExtension } from "../extensions/types";
 
 const DIAG_TIMEOUT_MS = 4000;
 
-let pyreflyCheckedAt = 0;
-let hasPyreflyCached = false;
+// Tool availability cache (25s TTL per tool)
+const toolCache = new Map<string, { available: boolean; timestamp: number }>();
 
-async function isPyreflyInstalled(workspaceId?: string): Promise<boolean> {
+async function isToolAvailable(toolName: string, workspaceId?: string): Promise<boolean> {
+  const cached = toolCache.get(toolName);
   const now = Date.now();
-  if (now - pyreflyCheckedAt < 20000) return hasPyreflyCached;
+  if (cached && now - cached.timestamp < 25000) return cached.available;
+
   try {
-    const res = await executeCommand("command -v pyrefly || test -f /usr/local/bin/pyrefly", workspaceId);
-    hasPyreflyCached = res.exitCode === 0;
-    pyreflyCheckedAt = now;
-    return hasPyreflyCached;
+    const res = await executeCommand(
+      `command -v "${toolName}" >/dev/null 2>&1 || test -f "/usr/local/bin/${toolName}" || test -f "/root/.local/bin/${toolName}"`,
+      workspaceId
+    );
+    const available = res.exitCode === 0;
+    toolCache.set(toolName, { available, timestamp: now });
+    return available;
   } catch {
     return false;
   }
 }
 
 /**
- * Runs real background compiler / linter diagnostics via Alpine Linux PRoot
- * without launching or relying on VS Code Web.
+ * Runs background compiler / linter diagnostics via Alpine Linux PRoot.
+ * Completely dynamic: runs whatever tools/binaries were provided by installed extensions.
+ * Zero hardcoded tool catalogs.
  */
 export async function runBackgroundDiagnostics(
   filePath: string,
@@ -30,150 +38,128 @@ export async function runBackgroundDiagnostics(
   workspaceId?: string
 ): Promise<CodeDiagnostic[] | null> {
   const ext = (filePath.split(".").pop() || "").toLowerCase();
+  if (!ext) return null;
 
-  if (ext === "py" || ext === "pyw") {
-    return runPythonDiagnostics(filePath, content, workspaceId);
-  }
-
-  return null;
-}
-
-/**
- * Runs Python diagnostics using Pyrefly (if installed from marketplace)
- * or built-in python3 compile syntax validation.
- */
-async function runPythonDiagnostics(
-  filePath: string,
-  content: string,
-  workspaceId?: string
-): Promise<CodeDiagnostic[] | null> {
   try {
-    if (await isPyreflyInstalled(workspaceId)) {
-      const pyreflyDiags = await runPyreflyDiagnostics(filePath, content, workspaceId);
-      if (pyreflyDiags !== null) {
-        return pyreflyDiags;
+    // 1. Discover tools provided by currently installed and enabled extensions
+    const reg = await loadExtensionRegistry();
+    const installedList = Object.values(reg.installed) as InstalledExtension[];
+
+    const candidateTools: string[] = [];
+    for (const item of installedList) {
+      if (!item.enabled || !item.binaries) continue;
+      for (const b of item.binaries) {
+        if (b && !candidateTools.includes(b)) {
+          candidateTools.push(b);
+        }
       }
     }
 
-    return runPythonSyntaxCompile(filePath, content, workspaceId);
-  } catch {
-    return null;
-  }
-}
+    if (candidateTools.length === 0) {
+      return null;
+    }
 
-/**
- * Executes Pyrefly CLI check on file content in Alpine PRoot.
- */
-async function runPyreflyDiagnostics(
-  _filePath: string,
-  content: string,
-  workspaceId?: string
-): Promise<CodeDiagnostic[] | null> {
-  try {
+    // 2. Prepare temporary file for checking in Linux
     const base = FileSystem.documentDirectory || "/data/user/0/com.janelle.aicoder/files/";
-    const tmpFileUri = `${base.replace(/\/+$/, "")}/tmp/.diag_pyrefly.py`;
+    const tmpFileName = `.astra_diag_${ext}`;
+    const tmpFileUri = `${base.replace(/\/+$/, "")}/tmp/${tmpFileName}`;
     await FileSystem.writeAsStringAsync(tmpFileUri, content);
+    const linuxPath = `/tmp/${tmpFileName}`;
 
-    const checkCmd = `pyrefly check /tmp/.diag_pyrefly.py 2>&1`;
-    const res = await Promise.race([
-      executeCommand(checkCmd, workspaceId),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), DIAG_TIMEOUT_MS)),
-    ]);
+    // 3. Find and run the active extension tool in Linux PRoot
+    for (const tool of candidateTools) {
+      if (!(await isToolAvailable(tool, workspaceId))) continue;
 
-    if (!res || !res.stdout) return null;
-    const output = res.stdout.trim();
-    if (!output || output.toLowerCase().includes("no errors found") || output === "OK") {
-      return [];
-    }
+      const checkCmd = `"${tool}" check "${linuxPath}" 2>&1 || "${tool}" "${linuxPath}" 2>&1`;
+      const res = await Promise.race([
+        executeCommand(checkCmd, workspaceId),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), DIAG_TIMEOUT_MS)),
+      ]);
 
-    const diagnostics: CodeDiagnostic[] = [];
-    const lines = output.split("\n");
-    const diagRegex = /(?:.*?:)?(\d+):(\d+)(?::\s*|\s+)(?:\[(\d+)\]\s*)?(?:(error|warning|info|note):?\s*)?(.*)/i;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("Checked ") || trimmed.startsWith("Summary:")) continue;
-      const match = trimmed.match(diagRegex);
-      if (match) {
-        const lineNum = parseInt(match[1], 10) || 1;
-        const colNum = parseInt(match[2], 10) || 1;
-        const rawSev = (match[4] || "error").toLowerCase();
-        const sev: "error" | "warning" = rawSev.includes("warn") ? "warning" : "error";
-        const message = match[5]?.trim() || "Type error";
-
-        diagnostics.push({
-          line: lineNum,
-          col: colNum,
-          message,
-          severity: sev,
-          source: "python",
-        });
+      if (res && res.stdout) {
+        const diagnostics = parseUniversalDiagnostics(res.stdout, tool);
+        if (diagnostics.length > 0) {
+          return diagnostics;
+        }
       }
     }
 
-    return diagnostics;
+    return null;
   } catch {
     return null;
   }
 }
 
 /**
- * Runs Python's built-in compile() syntax validation.
+ * Universal Unix / GCC / Clang / Linter diagnostic parser.
+ * Handles standard Unix output formats across all languages dynamically.
  */
-async function runPythonSyntaxCompile(
-  filePath: string,
-  content: string,
-  workspaceId?: string
-): Promise<CodeDiagnostic[] | null> {
-  try {
-    const pyCmd = `python3 -c "
-import sys, traceback
-try:
-    code = sys.stdin.read()
-    compile(code, '${filePath.replace(/'/g, "\\'")}', 'exec')
-    print('OK')
-except SyntaxError as err:
-    print(f'SYNTAX_ERROR:{err.lineno}:{err.offset or 1}:{err.msg}')
-except Exception as err:
-    print(f'ERROR:1:1:{str(err)}')
-"`;
+export function parseUniversalDiagnostics(
+  rawOutput: string,
+  sourceName: string
+): CodeDiagnostic[] {
+  if (!rawOutput) return [];
+  const trimmed = rawOutput.trim();
+  if (
+    !trimmed ||
+    trimmed === "OK" ||
+    trimmed.toLowerCase().includes("no errors found") ||
+    trimmed.toLowerCase().includes("no syntax errors detected") ||
+    trimmed.toLowerCase().includes("all checks passed")
+  ) {
+    return [];
+  }
 
-    const res = await Promise.race([
-      executeCommand(`printf '%s' ${escapeForShell(content)} | ${pyCmd}`, workspaceId),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), DIAG_TIMEOUT_MS)),
-    ]);
+  const diagnostics: CodeDiagnostic[] = [];
+  const lines = rawOutput.split(/\r?\n/);
 
-    if (!res || !res.stdout) return null;
+  // Standard unix format: [path:]line:col: [code] [severity:] message
+  const standardRegex = /(?:^|[\r\n])(?:[^\r\n:]+:)?(\d+):(?:(\d+):?)?\s*(?:\[([^\]]+)\]\s*)?(?:(error|warning|warn|info|note|fatal|syntax error):?\s*)?(.+)/i;
+  // PHP format: Parse error: syntax error... in path on line 12
+  const phpRegex = /(?:Parse error|Fatal error):\s*(.*?)\s+in\s+.*?\s+on\s+line\s+(\d+)/i;
 
-    const output = res.stdout.trim();
-    if (output === "OK") return [];
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("Checked ") || line.startsWith("Summary:") || line.startsWith("Found 0")) {
+      continue;
+    }
 
-    const diagnostics: CodeDiagnostic[] = [];
-    const lines = output.split("\n");
+    const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, "");
 
-    for (const line of lines) {
-      if (line.startsWith("SYNTAX_ERROR:") || line.startsWith("ERROR:")) {
-        const parts = line.split(":");
-        const lineNum = parseInt(parts[1], 10) || 1;
-        const colNum = parseInt(parts[2], 10) || 1;
-        const msg = parts.slice(3).join(":").trim() || "Syntax error";
+    const phpMatch = cleanLine.match(phpRegex);
+    if (phpMatch) {
+      diagnostics.push({
+        line: parseInt(phpMatch[2], 10) || 1,
+        col: 1,
+        message: phpMatch[1]?.trim() || "Syntax Error",
+        severity: "error",
+        source: sourceName,
+      });
+      continue;
+    }
 
+    const match = cleanLine.match(standardRegex);
+    if (match) {
+      const lineNum = parseInt(match[1], 10);
+      const colNum = match[2] ? parseInt(match[2], 10) : 1;
+      const rawSev = (match[4] || "error").toLowerCase();
+      const sev: "error" | "warning" = rawSev.includes("warn") ? "warning" : "error";
+      let msg = match[5]?.trim() || cleanLine;
+      if (match[3]) {
+        msg = `[${match[3]}] ${msg}`;
+      }
+
+      if (!isNaN(lineNum) && lineNum > 0) {
         diagnostics.push({
           line: lineNum,
-          col: colNum,
+          col: colNum || 1,
           message: msg,
-          severity: "error",
-          source: "python",
+          severity: sev,
+          source: sourceName,
         });
       }
     }
-
-    return diagnostics;
-  } catch {
-    return null;
   }
-}
 
-function escapeForShell(str: string): string {
-  return "'" + str.replace(/'/g, "'\\''") + "'";
+  return diagnostics;
 }

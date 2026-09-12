@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppTheme } from "../../services/configService";
 import { ThemeColors, THEMES } from "../../../theme/themeContext";
+import { getInstalledThemes, subscribeExtensionRegistry } from "../../services/extensions/extensionRegistry";
 
 interface ThemeOption {
   id: AppTheme;
@@ -31,6 +32,25 @@ interface AppearanceSectionProps {
 }
 
 export function AppearanceSection({ activeTheme, onSelectTheme, theme, onRerunStartup }: AppearanceSectionProps) {
+  const [extensionThemes, setExtensionThemes] = useState<Array<{ id: string; label: string }>>([]);
+
+  useEffect(() => {
+    const loadExtThemes = async () => {
+      try {
+        const list = await getInstalledThemes();
+        setExtensionThemes(list.map((t) => ({ id: t.id, label: t.label })));
+      } catch {}
+    };
+
+    loadExtThemes();
+    const unsub = subscribeExtensionRegistry(() => {
+      loadExtThemes();
+    });
+    return () => {
+      unsub();
+    };
+  }, []);
+
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>THEME PALETTE</Text>
@@ -61,6 +81,44 @@ export function AppearanceSection({ activeTheme, onSelectTheme, theme, onRerunSt
           </TouchableOpacity>
         );
       })}
+
+      {extensionThemes.length > 0 && (
+        <View style={styles.extThemesWrap}>
+          <Text style={[styles.sectionHeading, { color: theme.textMuted, marginTop: 8 }]}>
+            INSTALLED EXTENSION THEMES
+          </Text>
+          {extensionThemes.map((ext) => {
+            const isSelected = activeTheme === ext.id;
+            return (
+              <TouchableOpacity
+                key={ext.id}
+                style={[
+                  styles.themeCard,
+                  { backgroundColor: theme.bgPrimary, borderColor: isSelected ? theme.accent : theme.border },
+                  isSelected && { borderWidth: 1.5 },
+                ]}
+                onPress={() => onSelectTheme(ext.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.themeCardHeader}>
+                  <View style={styles.themeIconRow}>
+                    <View style={[styles.themeIconBox, { backgroundColor: `${theme.accent}20` }]}>
+                      <Ionicons name="color-palette" size={15} color={theme.accent} />
+                    </View>
+                    <Text style={[styles.themeTitle, { color: theme.textPrimary }]} numberOfLines={1}>
+                      {ext.label}
+                    </Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={16} color={theme.accent} />}
+                </View>
+                <Text style={[styles.themeDesc, { color: theme.textMuted }]}>
+                  {isSelected ? "Active extension theme" : "Tap to apply theme"}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       {onRerunStartup && (
         <View style={styles.startupWrap}>
@@ -98,6 +156,7 @@ const styles = StyleSheet.create({
   themeIconBox: { width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   themeTitle: { fontSize: 13, fontWeight: "700" },
   themeDesc: { fontSize: 11, marginLeft: 34 },
+  extThemesWrap: { gap: 8 },
   startupWrap: { marginTop: 12, gap: 6 },
   rerunCard: {
     flexDirection: "row",

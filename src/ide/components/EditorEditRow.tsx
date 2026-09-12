@@ -46,7 +46,7 @@ export const EditorEditRow = React.memo(function EditorEditRow({
   isEditing = true,
   keyboardMouseMode = false,
 }: EditorEditRowProps) {
-  const tokenPalette = useMemo(() => getTokenColors(theme.isDark), [theme.isDark]);
+  const tokenPalette = useMemo(() => getTokenColors(theme), [theme]);
 
   // One logical line = exactly one visual row (parity with view mode):
   // width fits the longest line so native never wraps a tail into a bogus

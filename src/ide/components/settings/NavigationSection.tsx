@@ -20,6 +20,7 @@ interface TabRow {
 
 const TAB_ROWS: TabRow[] = [
   { id: "editor", title: "Native Editor", description: "Built-in lightweight mobile code editor", icon: "code-slash-outline" },
+  { id: "agents", title: "Agents", description: "Dedicated AI Agents hub & installed agent chat", icon: "sparkles-outline" },
   { id: "vscode", title: "VS Code", description: "Full VS Code web desktop editor", icon: "microsoft-visual-studio-code", isMaterial: true },
   { id: "terminal", title: "Terminal", description: "Shell + task output tab", icon: "terminal-outline" },
   { id: "browser", title: "Browser", description: "Web preview tab", icon: "globe-outline" },

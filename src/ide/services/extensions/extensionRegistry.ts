@@ -8,6 +8,9 @@ import {
 } from "./types";
 import { downloadAndExtractVsix, readExtensionJson } from "./vsixExtractor";
 import { deletePath, makeDir, writeFileText } from "../nativeFs";
+import { convertVsCodeThemeToThemeColors } from "./themeAdapter";
+import type { ThemeColors } from "../../../theme/themeContext";
+import { saveTheme } from "../configService";
 
 function getRegistryFilePath(): string {
   const base = FileSystem.documentDirectory || "/data/user/0/com.janelle.aicoder/files/";
@@ -20,7 +23,9 @@ const listeners = new Set<(state: ExtensionRegistryState) => void>();
 export function subscribeExtensionRegistry(fn: (state: ExtensionRegistryState) => void) {
   listeners.add(fn);
   if (cachedState) fn(cachedState);
-  return () => listeners.delete(fn);
+  return () => {
+    listeners.delete(fn);
+  };
 }
 
 function notifyListeners(state: ExtensionRegistryState) {
@@ -94,10 +99,15 @@ export async function uninstallExtension(id: string): Promise<boolean> {
   } catch {}
 
   delete state.installed[id];
+  let resetTheme = false;
   if (state.activeThemeId?.startsWith(id)) {
     delete state.activeThemeId;
+    resetTheme = true;
   }
   await saveExtensionRegistry(state);
+  if (resetTheme) {
+    await saveTheme("dark");
+  }
   return true;
 }
 
@@ -202,4 +212,39 @@ export async function getInstalledThemes(): Promise<
   }
 
   return results;
+}
+
+/**
+ * Sets the active extension theme ID in the registry.
+ */
+export async function setActiveThemeId(themeId?: string): Promise<void> {
+  const state = await loadExtensionRegistry();
+  state.activeThemeId = themeId;
+  await saveExtensionRegistry(state);
+}
+
+/**
+ * Gets the current active extension theme ID from the registry.
+ */
+export async function getActiveThemeId(): Promise<string | undefined> {
+  const state = await loadExtensionRegistry();
+  return state.activeThemeId;
+}
+
+/**
+ * Loads all installed themes converted to ThemeColors instances.
+ */
+export async function loadAllExtensionThemeColors(): Promise<Record<string, ThemeColors>> {
+  const themes = await getInstalledThemes();
+  const map: Record<string, ThemeColors> = {};
+  for (const item of themes) {
+    const themeColors = convertVsCodeThemeToThemeColors(
+      item.id,
+      item.theme.label || item.label,
+      item.themeData,
+      item.theme.uiTheme
+    );
+    map[item.id] = themeColors;
+  }
+  return map;
 }

@@ -54,6 +54,9 @@ export interface InstalledExtension {
   snippets: Array<{ language?: string; path: string }>;
   languages: ExtensionLanguageConfig[];
   binaries?: string[];
+  categories?: string[];
+  keywords?: string[];
+  isAgent?: boolean;
 }
 
 

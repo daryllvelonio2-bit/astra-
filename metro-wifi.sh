@@ -8,5 +8,4 @@ LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p')
 echo "=== Starting Astra Metro Dev Server (WiFi/LAN mode) ==="
 echo "=== LAN IP: ${LAN_IP:-unknown} :8081 ==="
 echo "=== On phone set Debug server host to $LAN_IP:8081 ==="
-npx expo start --dev-client --lan --port 8081 --clear 2>&1 | tee /tmp/astra-metro-wifi.log
-
+npx expo start --dev-client --lan --port 8081 2>&1 | tee /tmp/astra-metro-wifi.log

@@ -52,3 +52,24 @@ export function computeGutterColor(
   return theme.textMuted;
 }
 
+export function spliceWindowChunk(
+  fullText: string,
+  newChunk: string,
+  startIndex: number,
+  windowSize: number
+): string {
+  const fullLines = fullText.split("\n");
+  if (fullLines.length <= windowSize) return newChunk;
+  const ei = Math.min(startIndex + windowSize, fullLines.length);
+  return [...fullLines.slice(0, startIndex), ...newChunk.split("\n"), ...fullLines.slice(ei)].join("\n");
+}
+
+export function computeChunkStartOffset(rawLines: string[], startIndex: number): number {
+  if (startIndex === 0) return 0;
+  let off = 0;
+  for (let k = 0; k < startIndex && k < rawLines.length; k++) {
+    off += rawLines[k].length + 1;
+  }
+  return off;
+}
+

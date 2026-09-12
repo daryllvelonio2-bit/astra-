@@ -57,17 +57,21 @@ const withLibs = html
   .replaceAll("__MONACO_JS__", () => bundleJs)
   .replaceAll("__ENGINE_JS__", () => ENGINE_JS);
 
+const jsonPath = path.join(ROOT, "src/ide/components/editor/monacoEngineHtml.json");
+fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
+fs.writeFileSync(jsonPath, JSON.stringify({ html: withLibs }));
+console.log("wrote", jsonPath, Buffer.byteLength(fs.readFileSync(jsonPath)), "bytes");
+
 const out = `// GENERATED — do not hand-edit. Regenerate with: node scripts/build-monaco-html.js
 // Headless VS Code core (Monarch tokenize only) for a hidden WebView.
 // Background is token-replaced at runtime to avoid any visible flash.
-const BLOB = ${JSON.stringify(withLibs)};
+import monacoData from "./monacoEngineHtml.json";
 
 export function buildMonacoHtml(background: string): string {
-  return BLOB.replaceAll("__BG__", () => background);
+  return monacoData.html.replaceAll("__BG__", () => background);
 }
 `;
 
 const outPath = path.join(ROOT, "src/ide/components/editor/monacoEngineHtml.generated.ts");
-fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, out);
 console.log("wrote", outPath, Buffer.byteLength(out), "bytes");

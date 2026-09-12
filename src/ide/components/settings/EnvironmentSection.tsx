@@ -34,7 +34,7 @@ export function EnvironmentSection({ theme }: EnvironmentSectionProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [expandedStage, setExpandedStage] = useState<number | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const [autoDownload, setAutoDownload] = useState(true);
+  const [autoDownload, setAutoDownload] = useState(false);
   const pollTimerRef = useRef<any>(null);
 
   const refreshStatus = () => {

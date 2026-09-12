@@ -7,11 +7,12 @@ import { useTheme } from "../../theme/themeContext";
 interface ProblemsPanelProps {
   diagnostics: CodeDiagnostic[];
   onJumpToLine: (line: number) => void;
+  onClose?: () => void;
 }
 
 const MAX_ROWS = 30;
 
-export function ProblemsPanel({ diagnostics, onJumpToLine }: ProblemsPanelProps) {
+export function ProblemsPanel({ diagnostics, onJumpToLine, onClose }: ProblemsPanelProps) {
   const { theme } = useTheme();
   const [collapsed, setCollapsed] = React.useState(false);
   const errors = diagnostics.filter((d) => d.severity === "error").length;
@@ -21,7 +22,12 @@ export function ProblemsPanel({ diagnostics, onJumpToLine }: ProblemsPanelProps)
     return (
       <View style={[styles.cleanBar, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
         <Ionicons name="checkmark-circle" size={12} color={theme.accentGreen} />
-        <Text style={[styles.cleanText, { color: theme.accentGreen }]}>No problems</Text>
+        <Text style={[styles.cleanText, { color: theme.accentGreen, flex: 1 }]}>No problems</Text>
+        {onClose && (
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={14} color={theme.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -46,7 +52,14 @@ export function ProblemsPanel({ diagnostics, onJumpToLine }: ProblemsPanelProps)
             </View>
           )}
         </View>
-        <Text style={[styles.hint, { color: theme.textMuted }]}>tap to jump</Text>
+        <View style={styles.headerRight}>
+          <Text style={[styles.hint, { color: theme.textMuted }]}>tap to jump</Text>
+          {onClose && (
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close" size={14} color={theme.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
       </TouchableOpacity>
 
       {!collapsed && (
@@ -99,6 +112,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   countBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
   countText: { fontSize: 10.5, fontWeight: "700" },
   hint: { fontSize: 10, fontStyle: "italic" },

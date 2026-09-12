@@ -24,16 +24,17 @@ import {
   getInstalledThemes,
 } from "../../services/extensions/extensionRegistry";
 import { ExtensionMarketplaceItem, InstalledExtension } from "../../services/extensions/types";
+import { ExtensionThemesTab } from "./ExtensionThemesTab";
 
 interface ExtensionMarketplaceModalProps {
   visible: boolean;
   onClose: () => void;
 }
 
-type TabType = "marketplace" | "installed" | "themes";
+export type TabType = "marketplace" | "installed" | "themes";
 
 export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketplaceModalProps) {
-  const { theme } = useTheme();
+  const { theme, themeMode, setTheme } = useTheme();
   const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(8);
 
   const [activeTab, setActiveTab] = useState<TabType>("marketplace");
@@ -56,26 +57,15 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
 
   const executeSearch = useCallback(async (q: string) => {
     setLoading(true);
-    try {
-      const results = await searchMarketplace(q);
-      setItems(results);
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
+    try { setItems(await searchMarketplace(q)); } catch { setItems([]); } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     if (visible) {
       refreshRegistry();
       executeSearch("");
-      const unsub = subscribeExtensionRegistry(() => {
-        refreshRegistry();
-      });
-      return () => {
-        unsub();
-      };
+      const unsub = subscribeExtensionRegistry(refreshRegistry);
+      return () => { unsub(); };
     }
   }, [visible, refreshRegistry, executeSearch]);
 
@@ -343,24 +333,11 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
           )}
 
           {activeTab === "themes" && (
-            <FlatList
-              data={themesList}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              ListEmptyComponent={
-                <View style={styles.emptyView}>
-                  <Ionicons name="color-palette-outline" size={32} color={theme.textMuted} />
-                  <Text style={[styles.emptyText, { color: theme.textMuted }]}>
-                    Install a theme extension (like Dracula or GitHub Theme) from Marketplace to use it here.
-                  </Text>
-                </View>
-              }
-              renderItem={({ item }) => (
-                <View style={[styles.themeRow, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
-                  <Ionicons name="color-palette-outline" size={18} color={theme.accent} />
-                  <Text style={[styles.themeLabel, { color: theme.textPrimary }]}>{item.label}</Text>
-                </View>
-              )}
+            <ExtensionThemesTab
+              themes={themesList}
+              activeThemeId={themeMode}
+              theme={theme}
+              onApplyTheme={(id) => setTheme(id)}
             />
           )}
         </View>
@@ -372,75 +349,23 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end" },
   backdrop: { ...StyleSheet.absoluteFillObject },
-  sheet: {
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderWidth: 1,
-    height: "85%",
-    paddingTop: 12,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-  },
+  sheet: { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderWidth: 1, height: "85%", paddingTop: 12 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 10, borderBottomWidth: 1 },
   headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontSize: 16, fontWeight: "700" },
   closeBtn: { padding: 4 },
-  infoBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 16,
-    marginTop: 10,
-    padding: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    gap: 6,
-  },
+  infoBanner: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 10, padding: 8, borderRadius: 6, borderWidth: 1, gap: 6 },
   infoText: { fontSize: 11, flex: 1 },
-  tabBar: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    marginTop: 8,
-    borderBottomWidth: 1,
-  },
-  tabBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-  },
+  tabBar: { flexDirection: "row", paddingHorizontal: 16, marginTop: 8, borderBottomWidth: 1 },
+  tabBtn: { paddingVertical: 8, paddingHorizontal: 12, marginRight: 8 },
   tabText: { fontSize: 13, fontWeight: "600" },
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 16,
-    marginTop: 10,
-    paddingHorizontal: 10,
-    height: 38,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 8,
-  },
+  searchRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 10, paddingHorizontal: 10, height: 38, borderRadius: 8, borderWidth: 1, gap: 8 },
   searchInput: { flex: 1, fontSize: 13 },
   listContent: { padding: 16, gap: 10 },
-  card: {
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    gap: 8,
-  },
+  card: { borderRadius: 8, padding: 12, borderWidth: 1, gap: 8 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardIcon: { width: 34, height: 34, borderRadius: 6 },
-  cardIconFallback: {
-    width: 34,
-    height: 34,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  cardIconFallback: { width: 34, height: 34, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   cardMeta: { flex: 1 },
   cardTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cardTitle: { fontSize: 13, fontWeight: "700", flex: 1 },
@@ -448,14 +373,7 @@ const styles = StyleSheet.create({
   cardPublisher: { fontSize: 11, marginTop: 2 },
   cardDesc: { fontSize: 12 },
   cardActions: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", marginTop: 2 },
-  installBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
+  installBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   installBtnText: { fontSize: 12, fontWeight: "700" },
   installingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   installingText: { fontSize: 12 },
@@ -465,26 +383,9 @@ const styles = StyleSheet.create({
   toggleBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 },
   uninstallBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   uninstallBtnText: { fontSize: 12, fontWeight: "600" },
-  themeRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 8, borderWidth: 1 },
-  themeLabel: { fontSize: 13, fontWeight: "600" },
-  hintCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 6,
-  },
+  hintCard: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 6 },
   hintText: { fontSize: 11, lineHeight: 15, flex: 1 },
-  featureBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
+  featureBadgeRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   featureBadgeText: { fontSize: 11, fontWeight: "500", flex: 1 },
   emptyView: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 10 },
   emptyText: { fontSize: 13, textAlign: "center", paddingHorizontal: 20 },

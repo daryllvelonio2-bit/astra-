@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../theme/themeContext";
 import { BottomTabVisibility, DEFAULT_BOTTOM_TABS } from "../services/configService";
 
-export type IDEBottomTab = "editor" | "terminal" | "browser" | "git" | "desktop" | "vscode";
+export type IDEBottomTab = "editor" | "agents" | "terminal" | "browser" | "git" | "desktop" | "vscode";
 
 interface IDEBottomBarProps {
   bottomTab: IDEBottomTab;
@@ -65,6 +65,28 @@ export function IDEBottomBar({
           ]}
         >
           Editor
+        </Text>
+      </TouchableOpacity>
+      )}
+
+      {visibleTabs.agents && (
+      <TouchableOpacity
+        style={[
+          styles.bottomTabBtn,
+          bottomTab === "agents" && { backgroundColor: theme.bgTertiary },
+        ]}
+        onPress={() => onChangeTab("agents")}
+      >
+        <Ionicons name="sparkles" size={16} color={bottomTab === "agents" ? theme.accent : theme.textMuted} />
+        <Text
+          style={[
+            styles.bottomTabText,
+            compact && styles.bottomTabTextCompact,
+            { color: theme.textMuted },
+            bottomTab === "agents" && { color: theme.accent, fontWeight: "700" },
+          ]}
+        >
+          Agents
         </Text>
       </TouchableOpacity>
       )}

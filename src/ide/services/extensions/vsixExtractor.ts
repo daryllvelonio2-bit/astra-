@@ -111,60 +111,92 @@ export async function downloadAndExtractVsix(
     configuration: l.configuration,
   }));
 
-  // 4. Process Binaries & Executable Tools (e.g. extension/bin/pyrefly)
+  // 4. Process Binaries & Executable Tools dynamically (e.g. extension/bin/*, pkg.bin)
   const binaries: string[] = [];
   const binDir = `${installDir}/bin`;
   let hasBinDir = false;
 
   const fileKeys = Object.keys(zip.files);
+  const candidateBinaryKeys = new Set<string>();
+
   for (const k of fileKeys) {
-    if (k.startsWith("extension/bin/") && !zip.files[k].dir) {
-      const fileName = k.replace(/^extension\/bin\//, "");
-      if (!hasBinDir) {
-        await makeDir(binDir);
-        hasBinDir = true;
+    if (zip.files[k].dir) continue;
+    if (
+      k.startsWith("extension/bin/") ||
+      k.startsWith("extension/binaries/") ||
+      k.startsWith("extension/tools/") ||
+      k.startsWith("extension/server/bin/")
+    ) {
+      candidateBinaryKeys.add(k);
+    }
+  }
+
+  // Also check package.json "bin" declaration if present
+  if (pkg.bin) {
+    if (typeof pkg.bin === "string") {
+      const rel = pkg.bin.replace(/^\.\//, "");
+      const key = `extension/${rel}`;
+      if (zip.files[key] && !zip.files[key].dir) candidateBinaryKeys.add(key);
+    } else if (typeof pkg.bin === "object") {
+      for (const val of Object.values(pkg.bin)) {
+        if (typeof val === "string") {
+          const rel = val.replace(/^\.\//, "");
+          const key = `extension/${rel}`;
+          if (zip.files[key] && !zip.files[key].dir) candidateBinaryKeys.add(key);
+        }
       }
-      const b64 = await zip.files[k].async("base64");
-      const targetBin = `${binDir}/${fileName}`;
-      await FileSystem.writeAsStringAsync(targetBin, b64, {
+    }
+  }
+
+  for (const k of candidateBinaryKeys) {
+    const fileName = k.split("/").pop();
+    if (!fileName) continue;
+
+    if (!hasBinDir) {
+      await makeDir(binDir);
+      hasBinDir = true;
+    }
+    const b64 = await zip.files[k].async("base64");
+    const targetBin = `${binDir}/${fileName}`;
+    await FileSystem.writeAsStringAsync(targetBin, b64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    binaries.push(fileName);
+
+    // Deploy binary directly to Linux PRoot environment
+    try {
+      // 1. Place in tmp/ so PRoot's /tmp mount can access it directly
+      const tmpBin = `${FileSystem.documentDirectory}tmp/${fileName}`;
+      await FileSystem.writeAsStringAsync(tmpBin, b64, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      binaries.push(fileName);
 
-      // Deploy binary directly to Linux PRoot environment
+      // 2. Also write directly to alpine rootfs usr/local/bin if accessible
+      const alpineBin = `${FileSystem.documentDirectory}alpine/usr/local/bin/${fileName}`;
       try {
-        // 1. Place in tmp/ so PRoot's /tmp mount can access it directly
-        const tmpBin = `${FileSystem.documentDirectory}tmp/${fileName}`;
-        await FileSystem.writeAsStringAsync(tmpBin, b64, {
+        await FileSystem.writeAsStringAsync(alpineBin, b64, {
           encoding: FileSystem.EncodingType.Base64,
         });
-
-        // 2. Also write directly to alpine rootfs usr/local/bin if it exists
-        const alpineBin = `${FileSystem.documentDirectory}alpine/usr/local/bin/${fileName}`;
-        try {
-          await FileSystem.writeAsStringAsync(alpineBin, b64, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-        } catch {}
-
-        // 3. Ensure permissions and path in PRoot
-        await executeCommand(
-          `cp -f "/tmp/${fileName}" "/usr/local/bin/${fileName}" 2>/dev/null || true; ` +
-          `chmod +x "/usr/local/bin/${fileName}" 2>/dev/null || true; ` +
-          `mkdir -p "/root/.local/bin" 2>/dev/null || true; ` +
-          `cp -f "/usr/local/bin/${fileName}" "/root/.local/bin/${fileName}" 2>/dev/null || true; ` +
-          `chmod +x "/root/.local/bin/${fileName}" 2>/dev/null || true; ` +
-          `rm -f "/tmp/${fileName}" 2>/dev/null || true`
-        );
       } catch {}
-    }
+
+      // 3. Ensure permissions and paths in PRoot + glibc compatibility
+      await executeCommand(
+        `cp -f "/tmp/${fileName}" "/usr/local/bin/${fileName}" 2>/dev/null || true; ` +
+        `chmod +x "/usr/local/bin/${fileName}" 2>/dev/null || true; ` +
+        `mkdir -p "/root/.local/bin" 2>/dev/null || true; ` +
+        `cp -f "/tmp/${fileName}" "/root/.local/bin/${fileName}" 2>/dev/null || true; ` +
+        `chmod +x "/root/.local/bin/${fileName}" 2>/dev/null || true; ` +
+        `rm -f "/tmp/${fileName}" 2>/dev/null || true; ` +
+        `if ! apk info -e gcompat >/dev/null 2>&1; then apk add --no-cache gcompat 2>/dev/null || true; fi`
+      );
+    } catch {}
   }
 
   // Mirror into code-server extensions dir so VS Code Web also recognizes it
   try {
     const codeServerExtDir = `/root/.local/share/code-server/extensions/${item.id}`;
     await executeCommand(
-      `mkdir -p "${codeServerExtDir}" && cp -rf "${installDir}/"* "${codeServerExtDir}/" 2>/dev/null || true`
+      `mkdir -p "${codeServerExtDir}" && if [ -d "/extensions/${item.id}" ]; then cp -rf "/extensions/${item.id}/"* "${codeServerExtDir}/" 2>/dev/null || true; fi`
     );
   } catch {}
 
@@ -172,6 +204,16 @@ export async function downloadAndExtractVsix(
   await writeFileText(`${installDir}/package.json`, pkgJsonStr);
 
   onProgress?.(100, "Installation complete!");
+
+  // Extract categories and detect if extension is an AI coding agent
+  const categories: string[] = Array.isArray(pkg.categories) ? pkg.categories : [];
+  const keywords: string[] = Array.isArray(pkg.keywords) ? pkg.keywords : [];
+  const contributesChat = Boolean(pkg.contributes?.chatParticipants || pkg.contributes?.interactiveEditor);
+  const isAgentCategory = categories.some((c: string) => /ai|chat|machine learning/i.test(c));
+  const isAgentKeyword = keywords.some((k: string) => /agent|chat-participant|copilot|ai-assistant/i.test(k));
+  const isKnownAgent = /(cody|continue|cline|codeium|tabnine|copilot|chatgpt|claude|roo-code|aider)/i.test(item.id);
+  const isLinterOrTool = /linter|formatter|lsp|language server|pyrefly|typechecker/i.test(pkg.name || item.id);
+  const isAgent = Boolean((contributesChat || isAgentCategory || isAgentKeyword || isKnownAgent) && !isLinterOrTool);
 
   return {
     id: item.id,
@@ -187,6 +229,9 @@ export async function downloadAndExtractVsix(
     snippets,
     languages,
     binaries,
+    categories,
+    keywords,
+    isAgent,
   };
 }
 

@@ -31,7 +31,7 @@ export function CodeSyntaxHighlighter({
 }: CodeSyntaxHighlighterProps) {
   const { theme: globalTheme } = useTheme();
   const theme = themeProp || globalTheme;
-  const tokenPalette = getTokenColors(theme.isDark);
+  const tokenPalette = getTokenColors(theme);
 
   const gutterColorFor = (lineNumber: number): string => {
     if (errorLines?.has(lineNumber)) return theme.accentRed;

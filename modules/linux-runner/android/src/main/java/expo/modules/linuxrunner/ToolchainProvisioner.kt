@@ -131,13 +131,13 @@ object ToolchainProvisioner {
     private const val PREFS_NAME = "astra_prefs"
     private const val KEY_AUTO_DOWNLOAD = "auto_toolchain_download"
 
-    /** User choice: download the base toolchain automatically (default on). */
+    /** User choice: download the base toolchain automatically (default off). */
     fun isAutoDownloadEnabled(context: Context): Boolean {
         return try {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean(KEY_AUTO_DOWNLOAD, true)
+                .getBoolean(KEY_AUTO_DOWNLOAD, false)
         } catch (_: Exception) {
-            true
+            false
         }
     }
 

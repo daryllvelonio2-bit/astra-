@@ -65,7 +65,6 @@ export function getCompletions(
   code: string,
   cursorOffset: number,
   fileName?: string,
-  _activePackIds?: string[],
   extensionSnippets: ExtensionSnippet[] = []
 ): CompletionResult {
   if (!code || cursorOffset < 0 || cursorOffset > code.length) {

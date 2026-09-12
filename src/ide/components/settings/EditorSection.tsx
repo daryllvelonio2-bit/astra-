@@ -23,166 +23,13 @@ export function EditorSection({
   const [showExtensionsModal, setShowExtensionsModal] = useState(false);
 
 
-  const handleUpdate = <K extends keyof EditorSettings>(key: K, value: EditorSettings[K]) => {
-    onChangeEditorSettings({
-      ...editorSettings,
-      [key]: value,
-    });
-  };
+
 
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>
-        EDITOR BEHAVIOR & FORMATTING
+        EXTENSIONS & MARKETPLACE
       </Text>
-
-      {/* Tab Size Selection */}
-      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
-        <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
-            <Ionicons name="reorder-two-outline" size={18} color={theme.accent} />
-          </View>
-          <View style={styles.textCol}>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Tab Size</Text>
-            <Text style={[styles.description, { color: theme.textMuted }]}>
-              Spaces inserted on Tab or Enter auto-indent
-            </Text>
-          </View>
-          <View style={styles.tabSizeGroup}>
-            {([2, 4] as const).map((size) => {
-              const active = editorSettings.tabSize === size;
-              return (
-                <TouchableOpacity
-                  key={size}
-                  style={[
-                    styles.tabSizeBtn,
-                    {
-                      backgroundColor: active ? `${theme.accent}20` : theme.bgSecondary,
-                      borderColor: active ? theme.accent : theme.border,
-                    },
-                  ]}
-                  onPress={() => handleUpdate("tabSize", size)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.tabSizeBtnText,
-                      { color: active ? theme.accent : theme.textMuted },
-                    ]}
-                  >
-                    {size} sp
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      </View>
-
-      {/* Auto-Close Brackets */}
-      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
-        <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
-            <Ionicons name="shapes-outline" size={18} color={theme.accent} />
-          </View>
-          <View style={styles.textCol}>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Auto-Close Brackets</Text>
-            <Text style={[styles.description, { color: theme.textMuted }]}>
-              Automatically insert closing brackets: (), [], {"{}"}
-            </Text>
-          </View>
-          <Switch
-            value={editorSettings.autoCloseBrackets}
-            onValueChange={(val) => handleUpdate("autoCloseBrackets", val)}
-            trackColor={{ false: theme.border, true: `${theme.accent}80` }}
-            thumbColor={editorSettings.autoCloseBrackets ? theme.accent : theme.textMuted}
-          />
-        </View>
-      </View>
-
-      {/* Auto-Close Quotes */}
-      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
-        <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
-            <Ionicons name="chatbox-outline" size={18} color={theme.accent} />
-          </View>
-          <View style={styles.textCol}>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Auto-Close Quotes</Text>
-            <Text style={[styles.description, { color: theme.textMuted }]}>
-              Automatically insert matching quotes: &apos;&apos;, &quot;&quot;, ``
-            </Text>
-          </View>
-          <Switch
-            value={editorSettings.autoCloseQuotes}
-            onValueChange={(val) => handleUpdate("autoCloseQuotes", val)}
-            trackColor={{ false: theme.border, true: `${theme.accent}80` }}
-            thumbColor={editorSettings.autoCloseQuotes ? theme.accent : theme.textMuted}
-          />
-        </View>
-      </View>
-
-      {/* Smart Indent on Enter */}
-      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
-        <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
-            <Ionicons name="return-down-forward-outline" size={18} color={theme.accent} />
-          </View>
-          <View style={styles.textCol}>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Smart Indent on Enter</Text>
-            <Text style={[styles.description, { color: theme.textMuted }]}>
-              Align indentation and expand open brackets and colons
-            </Text>
-          </View>
-          <Switch
-            value={editorSettings.autoIndentOnEnter}
-            onValueChange={(val) => handleUpdate("autoIndentOnEnter", val)}
-            trackColor={{ false: theme.border, true: `${theme.accent}80` }}
-            thumbColor={editorSettings.autoIndentOnEnter ? theme.accent : theme.textMuted}
-          />
-        </View>
-      </View>
-
-      {/* Format on Save */}
-      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
-        <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: `${theme.accentGold}18` }]}>
-            <Ionicons name="sparkles-outline" size={18} color={theme.accentGold} />
-          </View>
-          <View style={styles.textCol}>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Format on Save</Text>
-            <Text style={[styles.description, { color: theme.textMuted }]}>
-              Automatically beautify and format code when done editing
-            </Text>
-          </View>
-          <Switch
-            value={editorSettings.formatOnSave}
-            onValueChange={(val) => handleUpdate("formatOnSave", val)}
-            trackColor={{ false: theme.border, true: `${theme.accentGold}80` }}
-            thumbColor={editorSettings.formatOnSave ? theme.accentGold : theme.textMuted}
-          />
-        </View>
-      </View>
-
-      {/* Code Completion (IntelliSense) */}
-      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
-        <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
-            <Ionicons name="flash-outline" size={18} color={theme.accent} />
-          </View>
-          <View style={styles.textCol}>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Code Completion (IntelliSense)</Text>
-            <Text style={[styles.description, { color: theme.textMuted }]}>
-              Display mobile suggestion bar for symbols, keywords, and functions
-            </Text>
-          </View>
-          <Switch
-            value={editorSettings.enableCompletions !== false}
-            onValueChange={(val) => handleUpdate("enableCompletions", val)}
-            trackColor={{ false: theme.border, true: `${theme.accent}80` }}
-            thumbColor={editorSettings.enableCompletions !== false ? theme.accent : theme.textMuted}
-          />
-        </View>
-      </View>
 
       {/* VS Code Extensions Marketplace */}
       <TouchableOpacity
@@ -342,21 +189,5 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: "700",
     letterSpacing: 0.3,
-  },
-  tabSizeGroup: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  tabSizeBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    minWidth: 46,
-    alignItems: "center",
-  },
-  tabSizeBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
   },
 });
