@@ -78,6 +78,27 @@ export function firstVisibleTab(tabs: BottomTabVisibility): ToggleableBottomTab 
   return TAB_ORDER.find((t) => tabs[t]) ?? "editor";
 }
 
+export interface EditorSettings {
+  tabSize: 2 | 4;
+  autoCloseBrackets: boolean;
+  autoCloseQuotes: boolean;
+  autoIndentOnEnter: boolean;
+  formatOnSave: boolean;
+  enableCompletions: boolean;
+  activeTypingPacks?: string[];
+  activeLanguagePacks?: string[];
+}
+
+export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
+  tabSize: 2,
+  autoCloseBrackets: true,
+  autoCloseQuotes: true,
+  autoIndentOnEnter: true,
+  formatOnSave: false,
+  enableCompletions: true,
+};
+
+
 export interface AppConfig {
   apiKey: string;
   apiKeys?: string[];
@@ -91,6 +112,8 @@ export interface AppConfig {
   astraEnabled: boolean;
   hasCompletedStartup?: boolean;
   defaultEditorUi?: EditorUiType;
+  keyboardMouseMode?: boolean;
+  editorSettings: EditorSettings;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -106,6 +129,8 @@ const DEFAULT_CONFIG: AppConfig = {
   astraEnabled: true,
   hasCompletedStartup: false,
   defaultEditorUi: "native",
+  keyboardMouseMode: false,
+  editorSettings: { ...DEFAULT_EDITOR_SETTINGS },
 };
 
 export function normalizeApiKeys(keys?: string[], fallbackKey?: string): string[] {
@@ -155,6 +180,10 @@ export async function loadConfig(): Promise<AppConfig> {
         astraEnabled: parsed.astraEnabled ?? DEFAULT_CONFIG.astraEnabled,
         apiKeys: normalizedKeys,
         apiKey: normalizedKeys[0] || parsed.apiKey || "",
+        editorSettings: {
+          ...DEFAULT_EDITOR_SETTINGS,
+          ...(parsed.editorSettings || {}),
+        },
       };
     }
   } catch (e) {
@@ -318,5 +347,24 @@ export async function saveDefaultEditorUi(editor: EditorUiType): Promise<void> {
   const current = await loadConfig();
   const tabs = getEditorBottomTabsPreset(editor, current.bottomTabs);
   await saveConfig({ defaultEditorUi: editor, bottomTabs: tabs });
+}
+
+export async function loadKeyboardMouseMode(): Promise<boolean> {
+  const config = await loadConfig();
+  return !!config.keyboardMouseMode;
+}
+
+export async function saveKeyboardMouseMode(enabled: boolean): Promise<void> {
+  await saveConfig({ keyboardMouseMode: !!enabled });
+}
+
+export async function loadEditorSettings(): Promise<EditorSettings> {
+  const config = await loadConfig();
+  return { ...DEFAULT_EDITOR_SETTINGS, ...(config.editorSettings || {}) };
+}
+
+export async function saveEditorSettings(settings: Partial<EditorSettings>): Promise<void> {
+  const current = await loadEditorSettings();
+  await saveConfig({ editorSettings: { ...current, ...settings } });
 }
 

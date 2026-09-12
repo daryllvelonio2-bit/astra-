@@ -78,10 +78,9 @@ export function FileExplorer({
     isFolderExpanded: (folderId) => !!expandedFoldersRef.current[folderId],
   });
 
-  // Re-measure folder positions when tree structure changes
+  // Re-measure folder positions when tree structure changes (debounced)
   useEffect(() => {
-    measureAllFolders();
-    const t = setTimeout(measureAllFolders, 60);
+    const t = setTimeout(measureAllFolders, 100);
     return () => clearTimeout(t);
   }, [expandedFolders, files, measureAllFolders]);
 
@@ -120,7 +119,6 @@ export function FileExplorer({
           <View
             collapsable={false}
             ref={(el) => registerFolderHeaderRef(node.id, el, node)}
-            onLayout={() => measureAllFolders()}
             style={[styles.folderHeader, isHovered && { backgroundColor: `${theme.accent}25`, borderColor: theme.accent, borderWidth: 1 }]}
           >
             <TouchableOpacity
@@ -272,8 +270,7 @@ export function FileExplorer({
 
       <ScrollView
         style={styles.scroll}
-        scrollEventThrottle={16}
-        onScroll={measureAllFolders}
+        showsVerticalScrollIndicator={true}
         scrollEnabled={!draggingNode}
       >
         {isCreating && (

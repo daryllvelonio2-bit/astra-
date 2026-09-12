@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../theme/themeContext";
 import { BottomTabVisibility, DEFAULT_BOTTOM_TABS } from "../services/configService";
 
@@ -12,15 +13,37 @@ interface IDEBottomBarProps {
   runningTaskCount?: number;
   compact?: boolean;
   visibleTabs?: BottomTabVisibility;
+  bottomInset?: number;
 }
 
-export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, compact = false, visibleTabs = DEFAULT_BOTTOM_TABS }: IDEBottomBarProps) {
+export function IDEBottomBar({
+  bottomTab,
+  onChangeTab,
+  runningTaskCount = 0,
+  compact = false,
+  visibleTabs = DEFAULT_BOTTOM_TABS,
+  bottomInset,
+}: IDEBottomBarProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   // VS Code as chosen editor takes the native Editor's first slot; otherwise it stays last.
   const vscodeFirst = visibleTabs.vscode && !visibleTabs.editor;
+  const bottomPad = bottomInset !== undefined ? bottomInset : Math.max(insets.bottom, 0);
 
   return (
-    <View style={[styles.bottomBar, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }, compact && styles.bottomBarCompact]}>
+    <View
+      style={[
+        styles.bottomBarContainer,
+        {
+          backgroundColor: theme.bgSecondary,
+          borderTopColor: theme.border,
+          paddingBottom: bottomPad,
+          paddingLeft: insets.left || 0,
+          paddingRight: insets.right || 0,
+        },
+      ]}
+    >
+      <View style={[styles.bottomBarRow, compact && styles.bottomBarRowCompact]}>
       {vscodeFirst && (
       <VscodeTabButton active={bottomTab === "vscode"} compact={compact} onPress={() => onChangeTab("vscode")} />
       )}
@@ -144,6 +167,7 @@ export function IDEBottomBar({ bottomTab, onChangeTab, runningTaskCount = 0, com
       {visibleTabs.vscode && !vscodeFirst && (
       <VscodeTabButton active={bottomTab === "vscode"} compact={compact} onPress={() => onChangeTab("vscode")} />
       )}
+      </View>
     </View>
   );
 }
@@ -174,15 +198,21 @@ function VscodeTabButton({ active, compact, onPress }: { active: boolean; compac
 }
 
 const styles = StyleSheet.create({
-  bottomBar: {
+  bottomBarContainer: {
+    borderTopWidth: 1,
+    width: "100%",
+  },
+  bottomBarRow: {
     height: 42,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
-    borderTopWidth: 1,
   },
-  bottomBarCompact: {
+  bottomBarRowCompact: {
     height: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
   },
   bottomTabBtn: {
     flexDirection: "row",

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
+import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
 import { GitBranch } from "./types";
 
 interface GitBranchModalProps {
@@ -33,12 +34,13 @@ export function GitBranchModal({
   onCreateBranch,
 }: GitBranchModalProps) {
   const { theme } = useTheme();
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(12);
   const [search, setSearch] = useState("");
-  const [newBranchName, setNewBranchName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [newBranchName, setNewBranchName] = useState("");
 
   const filtered = branches.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase())
+    b.name.toLowerCase().includes(search.toLowerCase().trim())
   );
 
   const handleCreate = () => {
@@ -51,7 +53,7 @@ export function GitBranchModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
         <View style={[styles.modalCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: theme.border }]}>

@@ -75,3 +75,11 @@ chmod +x gradlew
 
 echo "=== Build Complete! ==="
 ls -lh app/build/outputs/apk/release/
+
+echo "=== Copying to Downloads Folder ==="
+mkdir -p /home/janelle/Downloads
+cp app/build/outputs/apk/release/app-release.apk /home/janelle/Downloads/astra-release.apk
+cp app/build/outputs/apk/release/app-release.apk /home/janelle/Downloads/astra.apk
+cp app/build/outputs/apk/release/app-release.apk /home/janelle/Downloads/app-release.apk
+echo "Release APK copied to:"
+ls -lh /home/janelle/Downloads/astra-release.apk /home/janelle/Downloads/astra.apk /home/janelle/Downloads/app-release.apk

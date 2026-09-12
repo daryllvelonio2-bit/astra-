@@ -20,6 +20,14 @@ object NativeFileSystemHelper {
         if (p.startsWith("file://")) {
             p = p.substring(7)
         }
+        try {
+            p = Uri.decode(p)
+        } catch (_: Exception) {}
+        if (p.startsWith("/sdcard/")) {
+            p = "/storage/emulated/0/" + p.substring(8)
+        } else if (p == "/sdcard") {
+            p = "/storage/emulated/0"
+        }
         return p
     }
 

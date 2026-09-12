@@ -1,11 +1,12 @@
 /**
  * Builds src/ide/components/terminal/xtermHtml.generated.ts by inlining the
- * xterm.js distribution (lib + fit addon + css) into a single offline HTML
- * page. The generated blob is JSON-escaped so xterm source can contain any
- * characters safely; runtime colors are token-replaced by buildXtermHtml().
+ * xterm.js distribution (lib + fit addon + web-links addon + css) into a
+ * single offline HTML page. The generated blob is JSON-escaped so xterm
+ * source can contain any characters safely; runtime colors are token-replaced
+ * by buildXtermHtml().
  *
  * Run: node scripts/build-xterm-html.js
- * Re-run after any `npm install xterm` / `@xterm/addon-fit` upgrade.
+ * Re-run after any `npm install xterm` / `@xterm/addon-*` upgrade.
  */
 const fs = require("fs");
 const path = require("path");
@@ -15,6 +16,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
 const xtermJs = read("node_modules/xterm/lib/xterm.js");
 const fitJs = read("node_modules/@xterm/addon-fit/lib/addon-fit.js");
+const linksJs = read("node_modules/@xterm/addon-web-links/lib/addon-web-links.js");
 const xtermCss = read("node_modules/xterm/css/xterm.css");
 
 const html = `<!DOCTYPE html>
@@ -32,6 +34,7 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
 <div id="terminal"></div>
 <script>__XTERM_JS__</script>
 <script>__FIT_JS__</script>
+<script>__WEBLINKS_JS__</script>
 <script>
 (function () {
   var term = new Terminal({
@@ -44,6 +47,15 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
   });
   var fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
+  // Tappable URLs (CLI login links, etc.): underline on hover/click, tap
+  // posts the URL to React Native which opens the system browser. Touch
+  // needs no modifier; desktop keeps the addon's default Ctrl+click.
+  try {
+    var links = new WebLinksAddon.WebLinksAddon(function (ev, uri) {
+      post({ type: 'link', url: uri });
+    });
+    term.loadAddon(links);
+  } catch (e) {}
   term.open(document.getElementById('terminal'));
   // Soft-keyboard input is owned by the React Native hidden catcher (it
   // ingests Gboard composition bursts reliably; xterm 5.3's textarea races
@@ -121,7 +133,8 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
 const withLibs = html
   .replaceAll("__XTERM_CSS__", () => xtermCss)
   .replaceAll("__XTERM_JS__", () => xtermJs)
-  .replaceAll("__FIT_JS__", () => fitJs);
+  .replaceAll("__FIT_JS__", () => fitJs)
+  .replaceAll("__WEBLINKS_JS__", () => linksJs);
 
 const out = `// GENERATED — do not hand-edit. Regenerate with: node scripts/build-xterm-html.js
 // Inlines xterm.js + fit addon + css into one offline page; colors/fonts are

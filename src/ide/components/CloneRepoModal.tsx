@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
+import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
 import { cloneRepoModalStyles as styles } from './CloneRepoModal.styles';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
 import { GitTokenTab } from './git/GitTokenTab';
@@ -62,38 +63,9 @@ export function CloneRepoModal({ visible, onClose, onCloned }: CloneRepoModalPro
   const [sshLoading, setSshLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
 
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const { keyboardOffset, isKeyboardVisible } = useAccurateKeyboard(8);
   const scrollRef = useRef<ScrollView>(null);
-  const lastKeyboardHeight = useRef(0);
   const cloneCancelled = useRef(false);
-
-  useEffect(() => {
-    if (!visible) {
-      setKeyboardHeight(0);
-      return;
-    }
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const setH = (e: any) => {
-      const h = e?.endCoordinates?.height ?? 0;
-      if (h > 0) lastKeyboardHeight.current = h;
-      setKeyboardHeight((prev) => (prev === h ? prev : h));
-    };
-    const showSub = Keyboard.addListener(showEvt, setH);
-    const frameSub = Keyboard.addListener('keyboardDidChangeFrame', setH);
-    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
-    return () => {
-      showSub.remove();
-      frameSub.remove();
-      hideSub.remove();
-    };
-  }, [visible]);
-
-  const preLift = () => {
-    if (keyboardHeight === 0) {
-      setKeyboardHeight(lastKeyboardHeight.current > 0 ? lastKeyboardHeight.current : 300);
-    }
-  };
 
   const resetAll = () => {
     setRepoUrl('');
@@ -264,12 +236,12 @@ export function CloneRepoModal({ visible, onClose, onCloned }: CloneRepoModalPro
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View style={[styles.modalOverlay, keyboardHeight > 0 && { paddingBottom: keyboardHeight }]}>
+      <View style={[styles.modalOverlay, isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
         <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={handleClose} />
         <View style={[
           styles.bottomSheet,
           { backgroundColor: theme.bgSecondary, borderColor: theme.border },
-          keyboardHeight > 0 && styles.bottomSheetKeyboardOpen,
+          isKeyboardVisible && styles.bottomSheetKeyboardOpen,
         ]}>
           <ScrollView
             ref={scrollRef}
@@ -289,7 +261,6 @@ export function CloneRepoModal({ visible, onClose, onCloned }: CloneRepoModalPro
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
-              onFocus={preLift}
             />
 
             <View style={styles.protoRow}>
@@ -341,7 +312,6 @@ export function CloneRepoModal({ visible, onClose, onCloned }: CloneRepoModalPro
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="done"
-              onFocus={preLift}
             />
 
             <TouchableOpacity

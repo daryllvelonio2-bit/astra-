@@ -14,14 +14,22 @@ import {
   NativeScrollEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { CodeSyntaxHighlighter } from "./CodeSyntaxHighlighter";
 import { EditorTabBar } from "./EditorTabBar";
 import { ProblemsPanel } from "./ProblemsPanel";
 import { useEditorAssists } from "./useEditorAssists";
 import { firstErrorLine } from "../services/codeDiagnosticsService";
 import { formatCode } from "../services/formatterService";
-import { tokenizeCode, getTokenColors, CodeToken } from "../services/syntaxTokenizer";
+import { tokenizeCode } from "../services/syntaxTokenizer";
+import { useMonacoHighlight } from "./useMonacoHighlight";
+import { EditorEditRow } from "./EditorEditRow";
+import { useEditorCursorScroll } from "./useEditorCursorScroll";
+import { getGutterWidth, computeTappedLine, computeCursorOffset, computeGutterColor } from "./editorCursorUtils";
+import { useEditorConfig } from "./editor/useEditorConfig";
+import { useEditorCompletions } from "./editor/useEditorCompletions";
+import { CompletionBar } from "./editor/CompletionBar";
+import { EditorEmptyState } from "./editor/EditorEmptyState";
 import { useTheme } from "../../theme/themeContext";
+import { useAccurateKeyboard } from "../../theme/useAccurateKeyboard";
 
 interface EditorViewProps {
   fileName?: string;
@@ -30,14 +38,16 @@ interface EditorViewProps {
   onExitProject?: () => void;
   onToggleSidebar?: () => void;
   onRunFile?: (content: string, fileName: string) => void;
+  onEditModeChange?: (isEditing: boolean) => void;
+  onOpenSettings?: () => void;
 }
 
 const LINE_HEIGHT = 20;
 const FONT_SIZE = 13;
 const GUTTER_FONT_SIZE = 11;
 const FONT_FAMILY = Platform.OS === "ios" ? "Menlo" : "monospace";
-const WINDOW_SIZE = 100;
-const SCROLL_THRESHOLD = 15;
+const WINDOW_SIZE = 60;
+const SCROLL_THRESHOLD = 10;
 
 export function EditorView({
   fileName,
@@ -46,20 +56,30 @@ export function EditorView({
   onExitProject,
   onToggleSidebar,
   onRunFile,
+  onEditModeChange,
+  onOpenSettings,
 }: EditorViewProps) {
   const { theme } = useTheme();
+  const { editorSettings, keyboardMouseMode, keyboardMouseModeRef } = useEditorConfig();
   const [isEditing, setIsEditing] = useState(false);
   const [startIndex, setStartIndex] = useState(0);
+
+  useEffect(() => {
+    onEditModeChange?.(isEditing);
+  }, [isEditing, onEditModeChange]);
   const [showProblems, setShowProblems] = useState(false);
   const textInputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const lastTapRef = useRef<number>(0);
   const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startIndexRef = useRef(0);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(0);
+  const effectiveKeyboardHeight = isKeyboardVisible ? keyboardOffset : 0;
   const scrollYRef = useRef(0);
   const scrollViewHeightRef = useRef(0);
   const keyboardHeightRef = useRef(0);
+  keyboardHeightRef.current = effectiveKeyboardHeight;
+  const lockSelectionUntilRef = useRef<number>(0);
 
   useEffect(() => {
     startIndexRef.current = startIndex;
@@ -73,21 +93,10 @@ export function EditorView({
   }, [fileName]);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
-      const h = e?.endCoordinates?.height ?? 0;
-      keyboardHeightRef.current = h;
-      setKeyboardHeight(h);
-    });
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
-      keyboardHeightRef.current = 0;
-      setKeyboardHeight(0);
-      setIsEditing(false);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+    if (isKeyboardVisible && keyboardMouseModeRef.current) {
+      Keyboard.dismiss();
+    }
+  }, [isKeyboardVisible, keyboardMouseModeRef]);
 
   const rawLines = useMemo(() => (content || "").split("\n"), [content]);
   const totalLines = Math.max(rawLines.length, 1);
@@ -105,6 +114,12 @@ export function EditorView({
     return tokenizeCode(visibleCodeChunk, fileName, startIndex + 1);
   }, [visibleCodeChunk, fileName, startIndex]);
 
+
+  // Phase 4: hidden Monaco correction overlays the regex first paint.
+  // Null while pending/failed -> regex output stays on screen.
+  const monacoLines = useMonacoHighlight(visibleCodeChunk, fileName, startIndex + 1);
+  const displayLines = monacoLines ?? tokenizedLines;
+
   // Char offset of the visible chunk within the full file (for cursor mapping).
   const chunkStartOffset = useMemo(() => {
     if (startIndex === 0) return 0;
@@ -115,7 +130,20 @@ export function EditorView({
     return off;
   }, [rawLines, startIndex]);
 
-  const assists = useEditorAssists(content, fileName, chunkStartOffset);
+  const assists = useEditorAssists(content, fileName, chunkStartOffset, editorSettings);
+
+  // Sync mirrors for the typing path: rapid onChangeText bursts arrive before
+  // re-render, so diff/rebuild against refs (updated synchronously on every
+  // own edit), never stale render state. Effects re-sync on external changes
+  // (scroll, file switch, parent updates).
+  const contentRef = useRef(content);
+  const chunkRef = useRef(visibleCodeChunk);
+  const selectionMirrorRef = useRef(assists.selection);
+  useEffect(() => {
+    contentRef.current = content;
+    chunkRef.current = visibleCodeChunk;
+    selectionMirrorRef.current = assists.selection;
+  }, [content, visibleCodeChunk, assists.selection]);
 
   useEffect(() => {
     assists.setSelection({ start: 0, end: 0 });
@@ -130,46 +158,19 @@ export function EditorView({
   const selectionLineIdxRef = useRef(0);
   selectionLineIdxRef.current = selectionLineIdx;
 
-  // Scroll so the given full-file line lands in the vertical center of the
-  // keyboard-visible area (overshoots upward rather than leaving it hidden).
-  const centerCursorLine = useCallback((fullLineIdx: number) => {
-    const cursorY = fullLineIdx * LINE_HEIGHT + 8;
-    const layoutH = scrollViewHeightRef.current || Dimensions.get("window").height;
-    const visibleH = Math.max(160, layoutH - keyboardHeightRef.current);
-    scrollRef.current?.scrollTo({ y: Math.max(0, cursorY - visibleH / 2), animated: true });
-  }, []);
+  useEditorCursorScroll({
+    scrollRef,
+    keyboardHeight: effectiveKeyboardHeight,
+    keyboardHeightRef,
+    scrollYRef,
+    scrollViewHeightRef,
+    isEditing,
+    selectionLineIdx,
+    selectionLineIdxRef,
+    lineHeight: LINE_HEIGHT,
+  });
 
-  // Scroll the cursor line to the center only if it's outside the
-  // keyboard-visible area; already-visible lines stay exactly where they are.
-  const ensureCursorVisible = useCallback(
-    (fullLineIdx: number) => {
-      const kbH = keyboardHeightRef.current;
-      if (kbH <= 0) return;
-      const cursorY = fullLineIdx * LINE_HEIGHT + 8;
-      const layoutH = scrollViewHeightRef.current || Dimensions.get("window").height;
-      const visibleH = Math.max(160, layoutH - kbH);
-      const top = scrollYRef.current;
-      if (cursorY < top + 48 || cursorY + LINE_HEIGHT > top + visibleH - 48) {
-        centerCursorLine(fullLineIdx);
-      }
-    },
-    [centerCursorLine]
-  );
-
-  // When the keyboard opens, lift the cursor line into view only if hidden.
-  useEffect(() => {
-    if (keyboardHeight <= 0 || !isEditing) return;
-    const t = setTimeout(() => ensureCursorVisible(selectionLineIdxRef.current), 120);
-    return () => clearTimeout(t);
-  }, [keyboardHeight, isEditing, ensureCursorVisible]);
-
-  // While editing (taps, Enter, typing near the edges), keep the cursor visible.
-  useEffect(() => {
-    if (!isEditing || keyboardHeight <= 0) return;
-    ensureCursorVisible(selectionLineIdx);
-  }, [selectionLineIdx, isEditing, keyboardHeight, ensureCursorVisible]);
-
-  const gutterWidth = totalLines >= 1000 ? 32 : totalLines >= 100 ? 26 : totalLines >= 10 ? 20 : 16;
+  const gutterWidth = getGutterWidth(totalLines);
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -201,36 +202,101 @@ export function EditorView({
 
     const now = Date.now();
     if (now - lastTapRef.current < 350) {
+      const fullLineIdx = computeTappedLine(
+        e.nativeEvent.locationY,
+        scrollYRef.current,
+        scrollViewHeightRef.current,
+        LINE_HEIGHT,
+        totalLines
+      );
+
+      const codeStartX = gutterWidth + 6;
+      const locX = e.nativeEvent.locationX;
+      const approxCol = locX > codeStartX ? Math.floor((locX - codeStartX) / 8.5) : 0;
+      const charOffset = computeCursorOffset(visibleCodeChunk, fullLineIdx, startIndexRef.current, approxCol);
+
+      const targetSel = { start: charOffset, end: charOffset };
+      lockSelectionUntilRef.current = Date.now() + 500;
+      selectionMirrorRef.current = targetSel;
+      assists.setSelectionSync(targetSel);
+
       setIsEditing(true);
-      setTimeout(() => textInputRef.current?.focus(), 40);
+      textInputRef.current?.focus();
     }
     lastTapRef.current = now;
   };
 
   const handleFormatCode = () => {
-    const formatted = formatCode(content, fileName);
+    const formatted = formatCode(content, fileName, editorSettings.tabSize);
     onChangeContent(formatted);
   };
 
-  const handleTextChangeInWindow = (newChunkText: string) => {
-    if (totalLines <= WINDOW_SIZE) {
-      onChangeContent(newChunkText);
-    } else {
-      const before = rawLines.slice(0, startIndex);
-      const after = rawLines.slice(endIndex);
-      const newChunkLines = newChunkText.split("\n");
-      const updated = [...before, ...newChunkLines, ...after].join("\n");
-      onChangeContent(updated);
+  const handleDoneEditing = () => {
+    if (editorSettings.formatOnSave) {
+      const formatted = formatCode(contentRef.current, fileName, editorSettings.tabSize);
+      if (formatted !== contentRef.current) {
+        contentRef.current = formatted;
+        onChangeContent(formatted);
+      }
     }
+    setIsEditing(false);
+    Keyboard.dismiss();
+  };
+
+  const handleTextChangeInWindow = (newChunkText: string) => {
+    // Rebuild from the ref mirror: a second keystroke landing before
+    // re-render must build on the first keystroke's result, not stale lines.
+    const fullLines = contentRef.current.split("\n");
+    const si = startIndexRef.current;
+    let updated: string;
+    if (fullLines.length <= WINDOW_SIZE) {
+      updated = newChunkText;
+    } else {
+      const ei = Math.min(si + WINDOW_SIZE, fullLines.length);
+      updated = [...fullLines.slice(0, si), ...newChunkText.split("\n"), ...fullLines.slice(ei)].join("\n");
+    }
+    contentRef.current = updated;
+    onChangeContent(updated);
   };
 
   // Typing pipeline: diff → auto-close / skip / smart-indent → content + cursor.
   // NOTE: TextInput stays children-driven (no `value` prop) so token colors keep
   // rendering while typing; the explicit `selection` prop steers only the cursor.
   const handleEditChange = (newChunkText: string) => {
-    const { chunk, cursor } = assists.assistEdit(visibleCodeChunk, newChunkText);
-    assists.setSelection({ start: cursor, end: cursor });
+    if (newChunkText === chunkRef.current) return; // native echo, no-op
+    const { chunk, cursor } = assists.assistEdit(chunkRef.current, newChunkText);
+    chunkRef.current = chunk;
+    const sel = { start: cursor, end: cursor };
+    selectionMirrorRef.current = sel;
+    assists.setSelectionSync(sel);
     handleTextChangeInWindow(chunk);
+  };
+
+  const handleApplyCompletionChunk = (newChunkText: string, newCursor: number) => {
+    chunkRef.current = newChunkText;
+    const sel = { start: newCursor, end: newCursor };
+    selectionMirrorRef.current = sel;
+    assists.setSelectionSync(sel);
+    handleTextChangeInWindow(newChunkText);
+  };
+
+  const completions = useEditorCompletions({
+    visibleChunk: visibleCodeChunk,
+    cursorOffset: assists.selection.start,
+    fileName,
+    enabled: isEditing && editorSettings.enableCompletions !== false,
+    onApplyChunk: handleApplyCompletionChunk,
+  });
+
+
+  // Native echoes programmatic cursor sets back as selection events; ignore
+  // echoes so each keystroke costs one render instead of a ping-pong loop.
+  const handleSelectionChange = (sel: { start: number; end: number }) => {
+    if (Date.now() < lockSelectionUntilRef.current) return;
+    const cur = selectionMirrorRef.current;
+    if (sel.start === cur.start && sel.end === cur.end) return;
+    selectionMirrorRef.current = sel;
+    assists.setSelection(sel);
   };
 
   const jumpToLine = useCallback(
@@ -259,30 +325,14 @@ export function EditorView({
     ? startIndex + visibleCodeChunk.slice(0, Math.min(assists.selection.start, visibleCodeChunk.length)).split("\n").length
     : undefined;
 
-  const editGutterColor = (lineNumber: number): string => {
-    if (assists.errorLines.has(lineNumber)) return theme.accentRed;
-    if (assists.match.kind === "unmatched" && assists.matchLines.has(lineNumber)) return theme.accentRed;
-    if (assists.matchLines.has(lineNumber)) return theme.accent;
-    if (cursorFullLine === lineNumber) return theme.textPrimary;
-    return theme.textMuted;
-  };
-
   if (!fileName) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
-        <EditorTabBar
-          isEditing={false}
-          onToggleEdit={() => {}}
-          onDoneEdit={() => {}}
-          onFormatCode={() => {}}
-          onExitProject={onExitProject}
-          onToggleSidebar={onToggleSidebar}
-        />
-        <View style={[styles.emptyContainer, { backgroundColor: theme.bgPrimary }]}>
-          <Ionicons name="code-working-outline" size={48} color={theme.textMuted} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Select a file from the explorer to begin editing</Text>
-        </View>
-      </View>
+      <EditorEmptyState
+        theme={theme}
+        onExitProject={onExitProject}
+        onToggleSidebar={onToggleSidebar}
+        onOpenSettings={onOpenSettings}
+      />
     );
   }
 
@@ -293,21 +343,41 @@ export function EditorView({
         isEditing={isEditing}
         onToggleEdit={() => {
           if (isEditing) {
-            setIsEditing(false);
-            Keyboard.dismiss();
+            handleDoneEditing();
           } else {
+            const approxLine = Math.max(
+              0,
+              Math.min(Math.floor(scrollYRef.current / LINE_HEIGHT), totalLines - 1)
+            );
+            const charOffset = computeCursorOffset(visibleCodeChunk, approxLine, startIndexRef.current);
+            const targetSel = { start: charOffset, end: charOffset };
+            lockSelectionUntilRef.current = Date.now() + 500;
+            selectionMirrorRef.current = targetSel;
+            assists.setSelectionSync(targetSel);
+
             setIsEditing(true);
-            setTimeout(() => textInputRef.current?.focus(), 40);
+            textInputRef.current?.focus();
           }
         }}
-        onDoneEdit={() => {
-          setIsEditing(false);
-          Keyboard.dismiss();
-        }}
+        onDoneEdit={handleDoneEditing}
         onFormatCode={handleFormatCode}
-        onRunFile={onRunFile ? () => onRunFile(content, fileName) : undefined}
+        onRunFile={
+          onRunFile
+            ? () => {
+                if (editorSettings.formatOnSave) {
+                  const formatted = formatCode(contentRef.current, fileName, editorSettings.tabSize);
+                  if (formatted !== contentRef.current) {
+                    contentRef.current = formatted;
+                    onChangeContent(formatted);
+                  }
+                }
+                onRunFile(contentRef.current, fileName || "");
+              }
+            : undefined
+        }
         onExitProject={onExitProject}
         onToggleSidebar={onToggleSidebar}
+        onOpenSettings={onOpenSettings}
         errorCount={assists.errorCount}
         warningCount={assists.warningCount}
         onShowProblems={handleShowProblems}
@@ -320,7 +390,7 @@ export function EditorView({
         contentContainerStyle={[
           styles.editorScrollContent,
           { backgroundColor: theme.bgPrimary },
-          keyboardHeight > 0 ? { paddingBottom: keyboardHeight } : null,
+          effectiveKeyboardHeight > 0 ? { paddingBottom: effectiveKeyboardHeight } : null,
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={true}
@@ -335,79 +405,32 @@ export function EditorView({
         {/* Top Spacer: Virtualizes unrendered lines above window */}
         {topSpacerHeight > 0 && <View style={{ height: topSpacerHeight }} />}
 
-        {!isEditing ? (
-          <CodeSyntaxHighlighter
-            tokenizedLines={tokenizedLines}
-            fontSize={FONT_SIZE}
-            lineHeight={LINE_HEIGHT}
-            gutterWidth={gutterWidth}
-            theme={theme}
-            errorLines={assists.errorLines}
-          />
-        ) : (
-          <View style={[styles.editorRow, { backgroundColor: theme.bgPrimary }]}>
-            {/* Pinned Gutter on the left */}
-            <View style={[styles.gutterContainer, { width: gutterWidth, backgroundColor: theme.bgSecondary, borderRightColor: theme.border }]}>
-              <Text style={[styles.gutterText, { color: theme.textMuted }]}>
-                {tokenizedLines.map((line, lIdx) => (
-                  <Text key={`g-${line.lineNumber}`} style={{ color: editGutterColor(line.lineNumber) }}>
-                    {line.lineNumber}{lIdx < tokenizedLines.length - 1 ? "\n" : ""}
-                  </Text>
-                ))}
-              </Text>
-            </View>
-
-            {/* Horizontally scrollable TextInput in Edit Mode */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={true}
-              style={styles.horizontalScroll}
-              contentContainerStyle={styles.editHorizontalContent}
-            >
-              <TextInput
-                ref={textInputRef}
-                style={[styles.editorInput, { color: theme.textPrimary }]}
-                multiline
-                scrollEnabled={false}
-                onChangeText={handleEditChange}
-                selection={assists.selection}
-                onSelectionChange={(e) => assists.setSelection(e.nativeEvent.selection)}
-                autoCapitalize="none"
-                autoCorrect={false}
-                textAlignVertical="top"
-                onBlur={() => setIsEditing(false)}
-              >
-                {tokenizedLines.map((line, lIdx) => (
-                  <Text key={`line-${line.lineNumber}`}>
-                    {line.tokens.map((token: CodeToken, tIdx: number) => {
-                      const tokenPalette = getTokenColors(theme.isDark);
-                      const tokenColor = token.type === "comment"
-                        ? theme.textMuted
-                        : (tokenPalette[token.type] || tokenPalette.plain);
-                      return (
-                        <Text
-                          key={`tok-${tIdx}`}
-                          style={[
-                            styles.tokenText,
-                            { color: tokenColor },
-                            token.type === "comment" && { fontStyle: "italic", color: theme.textMuted },
-                          ]}
-                        >
-                          {token.text}
-                        </Text>
-                      );
-                    })}
-                    {lIdx < tokenizedLines.length - 1 ? "\n" : ""}
-                  </Text>
-                ))}
-              </TextInput>
-            </ScrollView>
-          </View>
-        )}
+        <EditorEditRow
+          isEditing={isEditing}
+          keyboardMouseMode={keyboardMouseMode}
+          tokenizedLines={displayLines}
+          chunkText={visibleCodeChunk}
+          gutterWidth={gutterWidth}
+          editGutterColor={(ln) => computeGutterColor(ln, assists, cursorFullLine, theme)}
+          textInputRef={textInputRef}
+          theme={theme}
+          onEditChange={handleEditChange}
+          selection={assists.selection}
+          onSelectionChange={handleSelectionChange}
+        />
 
         {/* Bottom Spacer: Virtualizes unrendered lines below window */}
         {bottomSpacerHeight > 0 && <View style={{ height: bottomSpacerHeight }} />}
       </ScrollView>
+
+      {/* Autocomplete / IntelliSense Suggestion Bar */}
+      {isEditing && completions.items.length > 0 && (
+        <CompletionBar
+          items={completions.items}
+          onSelect={completions.applyCompletion}
+          theme={theme}
+        />
+      )}
 
       {/* Bracket partner status (edit mode, cursor on a bracket) */}
       {isEditing && assists.matchStatus && (
@@ -437,61 +460,11 @@ const styles = StyleSheet.create({
     flex: 1,
     position: "relative",
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-  },
   editorScroll: {
     flex: 1,
   },
   editorScrollContent: {
     flexGrow: 1,
-  },
-  editorRow: {
-    flexDirection: "row",
-    minHeight: "100%",
-  },
-  gutterContainer: {
-    borderRightWidth: 1,
-    paddingVertical: 8,
-    paddingRight: 2,
-    alignItems: "center",
-  },
-  gutterText: {
-    fontFamily: FONT_FAMILY,
-    fontSize: GUTTER_FONT_SIZE,
-    lineHeight: LINE_HEIGHT,
-    textAlign: "center",
-    includeFontPadding: false,
-  },
-  horizontalScroll: {
-    flex: 1,
-  },
-  editHorizontalContent: {
-    minWidth: "100%",
-  },
-  editorInput: {
-    fontFamily: FONT_FAMILY,
-    fontSize: FONT_SIZE,
-    lineHeight: LINE_HEIGHT,
-    paddingVertical: 8,
-    paddingLeft: 6,
-    paddingRight: 24,
-    minWidth: "100%",
-    textAlignVertical: "top",
-    includeFontPadding: false,
-  },
-  tokenText: {
-    fontFamily: FONT_FAMILY,
-    fontSize: FONT_SIZE,
-    lineHeight: LINE_HEIGHT,
-    includeFontPadding: false,
   },
   bracketBar: {
     flexDirection: "row",

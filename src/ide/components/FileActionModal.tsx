@@ -1,7 +1,8 @@
 import React from "react";
-import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { FileNode } from "../types";
 import { useTheme } from "../../theme/themeContext";
+import { useAccurateKeyboard } from "../../theme/useAccurateKeyboard";
 
 interface FileActionModalProps {
   modalMode: "none" | "options" | "rename" | "add";
@@ -33,75 +34,94 @@ export function FileActionModal({
   onBackToOptions,
 }: FileActionModalProps) {
   const { theme } = useTheme();
+  const { keyboardOffset } = useAccurateKeyboard(16);
   if (modalMode === "none") return null;
 
+  const isInputMode = modalMode === "rename" || modalMode === "add";
+
   return (
-    <View style={styles.modalOverlay}>
-      <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
-      <View style={[styles.modalCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border, top: menuPosition.y, left: menuPosition.x }]}>
-          {modalMode === "options" && (
-            <>
-              <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]} numberOfLines={1}>
-                {selectedNode?.name}
-              </Text>
-              <TouchableOpacity style={styles.modalOption} onPress={onSelectRename}>
-                <Text style={[styles.modalOptionText, { color: theme.accent }]}>Rename</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalOption} onPress={onSelectAdd}>
-                <Text style={[styles.modalOptionText, { color: theme.accent }]}>Add New File</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalOption, styles.deleteOption, { borderTopColor: theme.border }]} onPress={onDeleteConfirm}>
-                <Text style={[styles.modalOptionText, styles.deleteText, { color: theme.accentRed }]}>Delete</Text>
-              </TouchableOpacity>
-            </>
-          )}
+    <View
+      style={[
+        styles.modalOverlay,
+        isInputMode && [styles.inputOverlay, { paddingBottom: keyboardOffset }],
+      ]}
+    >
+      <TouchableOpacity
+        style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]}
+        activeOpacity={1}
+        onPress={onClose}
+      />
+      <View
+        style={[
+          styles.modalCard,
+          isInputMode
+            ? [styles.inputCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]
+            : { backgroundColor: theme.bgSecondary, borderColor: theme.border, top: menuPosition.y, left: menuPosition.x },
+        ]}
+      >
+        {modalMode === "options" && (
+          <>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]} numberOfLines={1}>
+              {selectedNode?.name}
+            </Text>
+            <TouchableOpacity style={styles.modalOption} onPress={onSelectRename}>
+              <Text style={[styles.modalOptionText, { color: theme.accent }]}>Rename</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={onSelectAdd}>
+              <Text style={[styles.modalOptionText, { color: theme.accent }]}>Add New File</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalOption, styles.deleteOption, { borderTopColor: theme.border }]} onPress={onDeleteConfirm}>
+              <Text style={[styles.modalOptionText, styles.deleteText, { color: theme.accentRed }]}>Delete</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
-          {modalMode === "rename" && (
-            <>
-              <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]}>Rename</Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
-                value={modalInput}
-                onChangeText={onChangeInput}
-                placeholder="New name..."
-                placeholderTextColor={theme.textMuted}
-                autoFocus
-                autoCapitalize="none"
-              />
-              <View style={styles.modalBtnRow}>
-                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onBackToOptions}>
-                  <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Back</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onRenameSubmit}>
-                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText, { color: theme.sendButtonIcon }]}>Save</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+        {modalMode === "rename" && (
+          <>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]}>Rename</Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
+              value={modalInput}
+              onChangeText={onChangeInput}
+              placeholder="New name..."
+              placeholderTextColor={theme.textMuted}
+              autoFocus
+              autoCapitalize="none"
+            />
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onBackToOptions}>
+                <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onRenameSubmit}>
+                <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText, { color: theme.sendButtonIcon }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
-          {modalMode === "add" && (
-            <>
-              <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]}>New File</Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
-                value={modalInput}
-                onChangeText={onChangeInput}
-                placeholder="Component.tsx"
-                placeholderTextColor={theme.textMuted}
-                autoFocus
-                autoCapitalize="none"
-              />
-              <View style={styles.modalBtnRow}>
-                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onClose}>
-                  <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onAddSubmit}>
-                  <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText, { color: theme.sendButtonIcon }]}>Create</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </View>
+        {modalMode === "add" && (
+          <>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary, borderBottomColor: theme.border }]}>New File</Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: theme.bgInput, borderColor: theme.border, color: theme.textPrimary }]}
+              value={modalInput}
+              onChangeText={onChangeInput}
+              placeholder="Component.tsx"
+              placeholderTextColor={theme.textMuted}
+              autoFocus
+              autoCapitalize="none"
+            />
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onClose}>
+                <Text style={[styles.modalBtnText, { color: theme.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.accent }]} onPress={onAddSubmit}>
+                <Text style={[styles.modalBtnText, styles.modalBtnPrimaryText, { color: theme.sendButtonIcon }]}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
     </View>
   );
 }
@@ -111,6 +131,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
     elevation: 999,
+  },
+  inputOverlay: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -126,6 +151,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+  },
+  inputCard: {
+    position: "relative",
+    width: "100%",
+    maxWidth: 300,
   },
   modalTitle: {
     fontSize: 12,

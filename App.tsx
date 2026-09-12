@@ -49,14 +49,16 @@ export default function App() {
     // Phase labels pace the 3s wave (1s each) so every stage gets screen
     // time; dismissal still waits for real readiness below.
     setBootPhase("Loading settings…");
-    const phaseTimers = [
-      setTimeout(() => setBootPhase("Preparing sandbox…"), 1000),
-      setTimeout(() => setBootPhase("Readying workspace…"), 2000),
-    ];
-    Promise.all([
-      loadHasCompletedStartup().then(setHasCompletedStartup),
-      PRootService.ensureReady().catch(() => {}),
-    ]).then(() => setBootDone(true));
+    loadHasCompletedStartup()
+      .then((completed) => {
+        setHasCompletedStartup(completed);
+        setBootPhase("Preparing sandbox…");
+        return PRootService.ensureReady().catch(() => {});
+      })
+      .then(() => {
+        setBootPhase("Readying workspace…");
+        setBootDone(true);
+      });
     // Safety: never trap the user on the splash if init hangs
     const bootFallback = setTimeout(() => setBootDone(true), 15000);
     loadAstraEnabled().then(setAstraEnabled);
@@ -71,7 +73,6 @@ export default function App() {
     });
 
     return () => {
-      phaseTimers.forEach(clearTimeout);
       clearTimeout(bootFallback);
       unsubSwitchWs();
       unsubConfig();

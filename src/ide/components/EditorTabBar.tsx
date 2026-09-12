@@ -15,6 +15,7 @@ interface EditorTabBarProps {
   errorCount?: number;
   warningCount?: number;
   onShowProblems?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function EditorTabBar({
@@ -29,6 +30,7 @@ export function EditorTabBar({
   errorCount = 0,
   warningCount = 0,
   onShowProblems,
+  onOpenSettings,
 }: EditorTabBarProps) {
   const { theme } = useTheme();
   const [showDropdown, setShowDropdown] = useState(false);
@@ -36,7 +38,7 @@ export function EditorTabBar({
 
   // Narrow editor (sidebar open / small screen): collapse secondary actions
   // into the overflow menu so buttons never squeeze or overlap.
-  const hasOverflowMenu = !!onExitProject;
+  const hasOverflowMenu = !!onExitProject || !!onOpenSettings;
   const narrow = barWidth > 0 && barWidth < 420;
   const collapseActions = narrow && hasOverflowMenu;
 
@@ -111,7 +113,7 @@ export function EditorTabBar({
             <Ionicons name="play" size={16} color={theme.accentGreen} />
           </TouchableOpacity>
         )}
-        {onExitProject && (
+        {(onExitProject || onOpenSettings) && (
           <TouchableOpacity onPress={() => setShowDropdown(true)} style={styles.actionIconBtn}>
             <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
           </TouchableOpacity>
@@ -128,27 +130,41 @@ export function EditorTabBar({
           />
           <View style={[styles.dropdownBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
             {fileName && (
-            <TouchableOpacity
-              style={styles.dropdownItem}
-              onPress={() => {
-                setShowDropdown(false);
-                onFormatCode();
-              }}
-            >
-              <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} style={{ marginRight: 8 }} />
-              <Text style={[styles.dropdownItemText, { color: theme.accentGold }]}>Format Code (Prettier)</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setShowDropdown(false);
+                  onFormatCode();
+                }}
+              >
+                <MaterialCommunityIcons name="auto-fix" size={16} color={theme.accentGold} style={{ marginRight: 8 }} />
+                <Text style={[styles.dropdownItemText, { color: theme.accentGold }]}>Format Code (Prettier)</Text>
+              </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.dropdownItem}
-              onPress={() => {
-                setShowDropdown(false);
-                if (onExitProject) onExitProject();
-              }}
-            >
-              <Ionicons name="exit-outline" size={16} color={theme.accentRed} style={{ marginRight: 8 }} />
-              <Text style={[styles.dropdownItemText, { color: theme.accentRed }]}>Exit Project</Text>
-            </TouchableOpacity>
+            {onOpenSettings && (
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setShowDropdown(false);
+                  onOpenSettings();
+                }}
+              >
+                <Ionicons name="settings-outline" size={16} color={theme.textPrimary} style={{ marginRight: 8 }} />
+                <Text style={[styles.dropdownItemText, { color: theme.textPrimary }]}>Settings</Text>
+              </TouchableOpacity>
+            )}
+            {onExitProject && (
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setShowDropdown(false);
+                  onExitProject();
+                }}
+              >
+                <Ionicons name="exit-outline" size={16} color={theme.accentRed} style={{ marginRight: 8 }} />
+                <Text style={[styles.dropdownItemText, { color: theme.accentRed }]}>Exit Project</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}

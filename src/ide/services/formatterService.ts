@@ -2,7 +2,7 @@
  * Lightweight client-side code formatter / beautifier for JavaScript, TypeScript, JSX, JSON, HTML, CSS.
  */
 
-export function formatCode(code: string, fileName?: string): string {
+export function formatCode(code: string, fileName?: string, tabSize: 2 | 4 = 2): string {
   if (!code || !code.trim()) return code;
 
   const ext = fileName ? fileName.split(".").pop()?.toLowerCase() : "js";
@@ -10,20 +10,20 @@ export function formatCode(code: string, fileName?: string): string {
   if (ext === "json") {
     try {
       const parsed = JSON.parse(code);
-      return JSON.stringify(parsed, null, 2);
+      return JSON.stringify(parsed, null, tabSize);
     } catch (_) {
-      return formatGenericCode(code);
+      return formatGenericCode(code, tabSize);
     }
   }
 
-  return formatGenericCode(code);
+  return formatGenericCode(code, tabSize);
 }
 
-function formatGenericCode(code: string): string {
+function formatGenericCode(code: string, tabSize: 2 | 4 = 2): string {
   const rawLines = code.split("\n");
   const formattedLines: string[] = [];
   let indentLevel = 0;
-  const indentStr = "  "; // 2 spaces standard
+  const indentStr = tabSize === 4 ? "    " : "  ";
 
   for (let i = 0; i < rawLines.length; i++) {
     let line = rawLines[i].trim();

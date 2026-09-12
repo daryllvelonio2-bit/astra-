@@ -5,6 +5,8 @@ import {
   CodeDiagnostic,
   BracketMatch,
 } from "../services/codeDiagnosticsService";
+import { runBackgroundDiagnostics } from "../services/lsp/nativeLspService";
+import { EditorSettings, DEFAULT_EDITOR_SETTINGS } from "../services/configService";
 
 export interface EditorSelection {
   start: number;
@@ -52,21 +54,47 @@ function isPythonFile(fileName?: string): boolean {
  * debounced diagnostics and cursor bracket matching for the manual editor.
  * Operates on the visible chunk; EditorView maps chunk offsets to full text.
  */
-export function useEditorAssists(content: string, fileName?: string, chunkStartOffset = 0) {
+export function useEditorAssists(
+  content: string,
+  fileName?: string,
+  chunkStartOffset = 0,
+  editorSettings: EditorSettings = DEFAULT_EDITOR_SETTINGS
+) {
   const [selection, setSelection] = useState<EditorSelection>({ start: 0, end: 0 });
   const [diagnostics, setDiagnostics] = useState<CodeDiagnostic[]>([]);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  const settingsRef = useRef(editorSettings);
+  settingsRef.current = editorSettings;
+
+  // Synchronous variant for the typing path: rapid onChangeText bursts must
+  // anchor diffs on the just-applied cursor, not lagging render state.
+  const setSelectionSync = (sel: EditorSelection) => {
+    selectionRef.current = sel;
+    setSelection(sel);
+  };
 
   useEffect(() => {
-    const t = setTimeout(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
       try {
-        setDiagnostics(analyzeCode(content, fileName));
+        const localDiags = analyzeCode(content, fileName);
+        if (!cancelled) setDiagnostics(localDiags);
+
+        if (fileName) {
+          const bgDiags = await runBackgroundDiagnostics(fileName, content);
+          if (!cancelled && bgDiags !== null) {
+            setDiagnostics(bgDiags.length > 0 ? bgDiags : localDiags);
+          }
+        }
       } catch (_) {
-        setDiagnostics([]);
+        if (!cancelled) setDiagnostics([]);
       }
     }, DIAGNOSTIC_DEBOUNCE_MS);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [content, fileName]);
 
   const match: BracketMatch = useMemo(() => {
@@ -135,13 +163,22 @@ export function useEditorAssists(content: string, fileName?: string, chunkStartO
     if (d.inserted.length === 1 && d.removed === "" && collapsed) {
       const typed = d.inserted;
       const cursor = at + 1;
+      const settings = settingsRef.current;
 
       if (typed === "\n") {
         return handleEnter(oldChunk, at);
       }
+      if (typed === "\t") {
+        const tabSpaces = settings.tabSize === 4 ? "    " : "  ";
+        const chunk = newChunk.slice(0, at) + tabSpaces + newChunk.slice(cursor);
+        return { chunk, cursor: at + tabSpaces.length };
+      }
       if (CLOSE_FOR[typed] && (typed === "(" || typed === "[" || typed === "{")) {
-        const chunk = newChunk.slice(0, cursor) + CLOSE_FOR[typed] + newChunk.slice(cursor);
-        return { chunk, cursor };
+        if (settings.autoCloseBrackets !== false) {
+          const chunk = newChunk.slice(0, cursor) + CLOSE_FOR[typed] + newChunk.slice(cursor);
+          return { chunk, cursor };
+        }
+        return { chunk: newChunk, cursor };
       }
       if (typed === '"' || typed === "'" || typed === "`") {
         // Skip over an identical closing quote instead of doubling it.
@@ -149,8 +186,11 @@ export function useEditorAssists(content: string, fileName?: string, chunkStartO
           const chunk = newChunk.slice(0, at) + newChunk.slice(cursor);
           return { chunk, cursor: at + 1 };
         }
-        const chunk = newChunk.slice(0, cursor) + typed + newChunk.slice(cursor);
-        return { chunk, cursor };
+        if (settings.autoCloseQuotes !== false) {
+          const chunk = newChunk.slice(0, cursor) + typed + newChunk.slice(cursor);
+          return { chunk, cursor };
+        }
+        return { chunk: newChunk, cursor };
       }
       if (typed === ")" || typed === "]" || typed === "}") {
         if (newChunk[cursor] === typed) {
@@ -177,6 +217,7 @@ export function useEditorAssists(content: string, fileName?: string, chunkStartO
   };
 
   const handleEnter = (oldChunk: string, at: number): AssistEditResult => {
+    const settings = settingsRef.current;
     const lineStart = oldChunk.lastIndexOf("\n", at - 1) + 1;
     const lineSoFar = oldChunk.slice(lineStart, at);
     const base = indentOfLine(lineSoFar);
@@ -184,23 +225,26 @@ export function useEditorAssists(content: string, fileName?: string, chunkStartO
     const lastCh = trimmed.slice(-1);
     const opener = lastCh === "{" || lastCh === "(" || lastCh === "[";
     const pyColon = isPythonFile(fileName) && trimmed.endsWith(":");
-    const extra = opener || pyColon ? "  " : "";
+    const indentUnit = settings.tabSize === 4 ? "    " : "  ";
+    const extra = settings.autoIndentOnEnter && (opener || pyColon) ? indentUnit : "";
+    const effectiveBase = settings.autoIndentOnEnter ? base : "";
     const after = oldChunk.slice(at);
     const afterTrimmed = after.trimStart();
 
-    // VSCode-style: |}  →  {\n  |\n}
-    if (opener && (afterTrimmed.startsWith("}") || afterTrimmed.startsWith("]") || afterTrimmed.startsWith(")"))) {
+    // VSCode-style: {|}  →  {\n  |\n}
+    if (settings.autoIndentOnEnter && opener && (afterTrimmed.startsWith("}") || afterTrimmed.startsWith("]") || afterTrimmed.startsWith(")"))) {
       const chunk =
-        oldChunk.slice(0, at) + "\n" + base + extra + "\n" + base + oldChunk.slice(at).replace(/^[ \t]*/, "");
-      return { chunk, cursor: at + 1 + base.length + extra.length };
+        oldChunk.slice(0, at) + "\n" + effectiveBase + extra + "\n" + effectiveBase + oldChunk.slice(at).replace(/^[ \t]*/, "");
+      return { chunk, cursor: at + 1 + effectiveBase.length + extra.length };
     }
-    const chunk = oldChunk.slice(0, at) + "\n" + base + extra + oldChunk.slice(at);
-    return { chunk, cursor: at + 1 + base.length + extra.length };
+    const chunk = oldChunk.slice(0, at) + "\n" + effectiveBase + extra + oldChunk.slice(at);
+    return { chunk, cursor: at + 1 + effectiveBase.length + extra.length };
   };
 
   return {
     selection,
     setSelection,
+    setSelectionSync,
     diagnostics,
     errorLines,
     matchLines,

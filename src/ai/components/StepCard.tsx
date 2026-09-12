@@ -13,7 +13,7 @@ interface StepCardProps {
   isCurrent: boolean;
 }
 
-export function StepCard({ step, index, isCurrent }: StepCardProps) {
+export const StepCard = React.memo(function StepCard({ step, index, isCurrent }: StepCardProps) {
   const { theme, isMidnight } = useTheme();
   const [collapsed, setCollapsed] = useState(!isCurrent);
   const [outputExpanded, setOutputExpanded] = useState(false);
@@ -409,7 +409,7 @@ export function StepCard({ step, index, isCurrent }: StepCardProps) {
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   stepCard: { borderRadius: 5, borderWidth: 1, overflow: "hidden", marginBottom: 2 },

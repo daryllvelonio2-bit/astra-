@@ -15,7 +15,7 @@ interface MarkdownMessageViewProps {
   onApplyFile?: (filePath: string, code: string) => void;
 }
 
-export function MarkdownMessageView({
+export const MarkdownMessageView = React.memo(function MarkdownMessageView({
   content,
   isUser = false,
   onRunCodeSnippet,
@@ -367,7 +367,7 @@ export function MarkdownMessageView({
       })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { width: "100%", gap: 4 },

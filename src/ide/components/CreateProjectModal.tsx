@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
+import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
 import {
   formatDisplayPath,
@@ -33,46 +34,12 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
   const [useCustomDirectory, setUseCustomDirectory] = useState(false);
   const [customDirectoryPath, setCustomDirectoryPath] = useState('');
   const [isDirectoryPickerVisible, setDirectoryPickerVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const { keyboardOffset, isKeyboardVisible } = useAccurateKeyboard(8);
   const scrollRef = useRef<ScrollView>(null);
   const customDirInputRef = useRef<TextInput>(null);
   const fieldTops = useRef<{ name: number; custom: number }>({ name: 0, custom: 0 });
-  const lastKeyboardHeight = useRef(0);
-
-  // Edge-to-edge (Expo 52+) disables window resize, so the keyboard would
-  // cover the sheet — lift it by the live keyboard height instead (same
-  // proven pattern as GitChangesList). Pre-lift instantly on focus using
-  // the last measured height; keyboardDidShow fires after the animation.
-  useEffect(() => {
-    if (!visible) {
-      setKeyboardHeight(0);
-      return;
-    }
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const setH = (e: any) => {
-      const h = e?.endCoordinates?.height ?? 0;
-      if (h > 0) lastKeyboardHeight.current = h;
-      setKeyboardHeight((prev) => (prev === h ? prev : h));
-    };
-    const showSub = Keyboard.addListener(showEvt, setH);
-    const frameSub = Keyboard.addListener('keyboardDidChangeFrame', setH);
-    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
-    return () => {
-      showSub.remove();
-      frameSub.remove();
-      hideSub.remove();
-    };
-  }, [visible]);
-
-  const preLiftKeyboard = () => {
-    if (keyboardHeight === 0) {
-      setKeyboardHeight(lastKeyboardHeight.current > 0 ? lastKeyboardHeight.current : 300);
-    }
-  };
 
   const scrollToField = (field: 'name' | 'custom') => {
-    preLiftKeyboard();
     const y = field === 'name' ? fieldTops.current.name : fieldTops.current.custom;
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
@@ -113,12 +80,12 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={[styles.modalOverlay, keyboardHeight > 0 && { paddingBottom: keyboardHeight }]}>
+      <View style={[styles.modalOverlay, isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
         <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
         <View style={[
           styles.bottomSheet,
           { backgroundColor: theme.bgSecondary, borderColor: theme.border },
-          keyboardHeight > 0 && styles.bottomSheetKeyboardOpen,
+          isKeyboardVisible && styles.bottomSheetKeyboardOpen,
         ]}>
           <ScrollView
             ref={scrollRef}
@@ -287,7 +254,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   bottomSheetKeyboardOpen: {
-    maxHeight: '62%',
+    maxHeight: '90%',
     paddingBottom: 12,
   },
   scrollContent: {

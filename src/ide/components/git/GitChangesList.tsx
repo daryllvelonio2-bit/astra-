@@ -13,6 +13,7 @@ import {
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
+import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
 import { GitFileStatus } from "./types";
 import { GitFileItem } from "./GitFileItem";
 import { gitChangesListStyles as styles } from "./GitChangesList.styles";
@@ -51,44 +52,15 @@ export function GitChangesList({
 }: GitChangesListProps) {
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(8);
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [showDescriptionInLandscape, setShowDescriptionInLandscape] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [descHeight, setDescHeight] = useState(48);
   const descriptionRef = useRef<TextInput>(null);
   const fileListRef = useRef<FlatList>(null);
-
-  // Edge-to-edge (Expo 52+) disables window resize, so flex alone can't lift
-  // the commit box — pad it by the live keyboard height instead (same proven
-  // pattern as AstraChatScreen). DidChangeFrame keeps SwiftKey's growing
-  // suggestion/strip rows accurate; the file list stays flex:1 so the box is
-  // pinned to the bottom of the padded container, exactly above the keyboard.
-  // To avoid waiting for keyboardDidShow (fires after the slide-up animation),
-  // pre-lift instantly on focus using the last measured height.
-  const lastKeyboardHeight = useRef(0);
-  useEffect(() => {
-    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const setH = (e: any) => {
-      const h = e?.endCoordinates?.height ?? 0;
-      if (h > 0) lastKeyboardHeight.current = h;
-      setKeyboardHeight((prev) => (prev === h ? prev : h));
-    };
-    const showSub = Keyboard.addListener(showEvt, setH);
-    const frameSub = Keyboard.addListener("keyboardDidChangeFrame", setH);
-    const hideSub = Keyboard.addListener(hideEvt, () => {
-      setKeyboardHeight(0);
-      setInputFocused(false);
-    });
-    return () => {
-      showSub.remove();
-      frameSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   const handleGenerateSummary = async () => {
     if (generating || files.length === 0) return;
@@ -106,9 +78,6 @@ export function GitChangesList({
 
   const handleInputFocus = () => {
     setInputFocused(true);
-    if (!isLandscape && keyboardHeight === 0) {
-      setKeyboardHeight(lastKeyboardHeight.current > 0 ? lastKeyboardHeight.current : 300);
-    }
   };
 
   // Stable row rendering: with 179+ files, any parent re-render (e.g. every
@@ -164,7 +133,7 @@ export function GitChangesList({
   };
 
   return (
-    <View style={[styles.container, !isLandscape && keyboardHeight > 0 && { paddingBottom: keyboardHeight }]}>
+    <View style={[styles.container, !isLandscape && isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
       {/* Changes Header & Select All */}
       <View
         style={[

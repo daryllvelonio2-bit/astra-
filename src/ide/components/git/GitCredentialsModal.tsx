@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
+import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
 import {
   configureGitCredentials,
   getSshPublicKey,
@@ -26,6 +27,7 @@ interface GitCredentialsModalProps {
 
 export function GitCredentialsModal({ visible, onClose }: GitCredentialsModalProps) {
   const { theme } = useTheme();
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(12);
   const [activeTab, setActiveTab] = useState<"token" | "ssh">("token");
 
   // Token state
@@ -107,7 +109,7 @@ export function GitCredentialsModal({ visible, onClose }: GitCredentialsModalPro
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
         <View
           style={[
             styles.modalCard,

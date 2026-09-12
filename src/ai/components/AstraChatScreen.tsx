@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useAccurateKeyboard } from "../../theme/useAccurateKeyboard";
 import { AgentMessageItem } from "./AgentMessageItem";
 import { LiveAgentStatusBar } from "./LiveAgentStatusBar";
 import { ChatHeader } from "./ChatHeader";
@@ -43,7 +44,7 @@ export function AstraChatScreen({
   onNavigateToEditor,
 }: AstraChatScreenProps) {
   const insets = useSafeAreaInsets();
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const { keyboardOffset, isKeyboardVisible } = useAccurateKeyboard(4);
   const { theme, isMidnight } = useTheme();
   const navigateToEditorRef = useRef(onNavigateToEditor);
   navigateToEditorRef.current = onNavigateToEditor;
@@ -124,22 +125,10 @@ export function AstraChatScreen({
   };
 
   useEffect(() => {
-    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-
-    const showSub = Keyboard.addListener(showEvt, (e) => {
-      setKeyboardOffset(e.endCoordinates.height);
+    if (isKeyboardVisible) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
-    });
-    const hideSub = Keyboard.addListener(hideEvt, () => {
-      setKeyboardOffset(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [scrollRef]);
+    }
+  }, [isKeyboardVisible, scrollRef]);
 
   const visibleMessages = messages.slice(-renderLimit);
   const hiddenCount = Math.max(0, messages.length - renderLimit);

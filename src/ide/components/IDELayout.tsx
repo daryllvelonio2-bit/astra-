@@ -1,22 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  StyleSheet,
-  Text,
-  StatusBar,
-  TouchableOpacity,
-  Alert,
-  Animated,
-  PanResponder,
-  Keyboard,
-  Platform,
-} from "react-native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { View, StyleSheet, StatusBar, Alert, Animated, Keyboard, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { FileExplorer } from "./FileExplorer";
 import { EditorView } from "./EditorView";
 import { FileActionModal } from "./FileActionModal";
 import { TerminalView } from "./TerminalView";
+import { MonacoEngineHost } from "./editor/MonacoEngineHost";
 import { WebBrowserPreview } from "./WebBrowserPreview";
 import { DesktopView } from "./DesktopView";
 import { VSCodeView } from "./VSCodeView";
@@ -24,7 +13,6 @@ import { GitHubDesktopView } from "./git/GitHubDesktopView";
 import { IDEBottomBar } from "./IDEBottomBar";
 import { WorkspaceLoadingScreen } from "./WorkspaceLoadingScreen";
 import { AiAssistantMenu } from "./AiAssistantMenu";
-import { AstraLogo } from "../../ai/components/AstraLogo";
 import { OverlayPermissionModal } from "../../ai/components/OverlayPermissionModal";
 import { useFloatingOverlayControl } from "./useFloatingOverlayControl";
 import { runningTasksService, RunningTask } from "../../ai/services/runningTasksService";
@@ -35,13 +23,14 @@ import {
   readFileContent,
   loadOrCreateDefaultWorkspace,
   loadWorkspace,
-  saveFileContent,
   Workspace,
 } from "../services/workspaceService";
+import { useDebouncedFileSave } from "./useDebouncedFileSave";
 import { useWorkspaceAutoRefresh } from "./useWorkspaceAutoRefresh";
 import { useTheme } from "../../theme/themeContext";
 import { useOrientation } from "../../theme/useOrientation";
-import { ideActionService } from "../services/ideActionService";
+import { useIdeActionBridge } from "./useIdeActionBridge";
+import { SettingsModal } from "./SettingsModal";
 import { resolveChatPathToRelative } from "../services/chatFileLinkService";
 import {
   BottomTabVisibility,
@@ -71,19 +60,28 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [bottomTab, setBottomTab] = useState<"editor" | "terminal" | "browser" | "git" | "desktop" | "vscode">("editor");
+  const [bottomTab, setBottomTab] = useState<ToggleableBottomTab>("editor");
+  const [visitedTabs, setVisitedTabs] = useState<Set<ToggleableBottomTab>>(() => new Set([bottomTab]));
   const [visibleTabs, setVisibleTabs] = useState<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
   const [astraEnabled, setAstraEnabled] = useState(true);
   const visibleTabsRef = useRef<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
 
+  useEffect(() => {
+    setVisitedTabs((prev) => (prev.has(bottomTab) ? prev : new Set(prev).add(bottomTab)));
+  }, [bottomTab]);
+
+  useEffect(() => {
+    setVisitedTabs(new Set([bottomTab]));
+  }, [workspaceId]);
+
   // Never land on a hidden tab: redirect to the first visible one.
-  const safeSetBottomTab = (tab: ToggleableBottomTab) => {
+  const safeSetBottomTab = useCallback((tab: ToggleableBottomTab) => {
     if (!visibleTabsRef.current[tab]) {
       setBottomTab(firstVisibleTab(visibleTabsRef.current));
       return;
     }
     setBottomTab(tab);
-  };
+  }, []);
 
   useEffect(() => {
     loadBottomTabs().then((tabs) => {
@@ -116,6 +114,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [desktopFullscreen, setDesktopFullscreen] = useState(false);
   const [browserUrl, setBrowserUrl] = useState<string>("");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isSettingsModalVisible, setSettingsModalVisible] = useState(false);
   const {
     showPermissionModal,
     setShowPermissionModal,
@@ -131,6 +130,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadSeq, setLoadSeq] = useState(0);
   const lastLoadStatusRef = useRef(0);
+  const prevLoadedWsIdRef = useRef<string | null>(null);
 
   // Landscape leaves little horizontal room: park the file sidebar on rotate
   // (user can still reopen it manually; only fires on orientation change).
@@ -142,11 +142,11 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     const unsubTasks = runningTasksService.subscribe(setRunningTasks);
     const unsubTrigger = runningTasksService.subscribeTrigger(() => safeSetBottomTab("terminal"));
     return () => { unsubTasks(); unsubTrigger(); };
-  }, []);
+  }, [safeSetBottomTab]);
 
   // Open a raw agent/chat file path inside the given workspace, normalizing
   // PRoot (/workspace, /workspaces/<id>) and file:// prefixes to relative paths.
-  const applyOpenFile = async (targetWs: Workspace, rawPath: string) => {
+  const applyOpenFile = useCallback(async (targetWs: Workspace, rawPath: string) => {
     const relative = resolveChatPathToRelative(rawPath, targetWs.id);
     if (!relative) return;
     try {
@@ -166,28 +166,21 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     } catch (e: any) {
       Alert.alert("Could not open file", e?.message || relative);
     }
-  };
+  }, [safeSetBottomTab]);
 
-  // Subscribe to Astra CLI App UI Control Bridge actions
-  useEffect(() => {
-    const unsubOpenFile = ideActionService.subscribe("OPEN_FILE", async ({ filePath, workspaceId: targetWsId }) => {
-      if (targetWsId && workspace && targetWsId !== workspace.id) return;
-      if (!workspace || !filePath) return;
-      await applyOpenFile(workspace, filePath);
-    });
-
-    const unsubOpenBrowser = ideActionService.subscribe("OPEN_BROWSER", ({ url }) => {
-      if (url) { setBrowserUrl(url); safeSetBottomTab("browser"); }
-    });
-    const unsubOpenTerminal = ideActionService.subscribe("OPEN_TERMINAL", () => safeSetBottomTab("terminal"));
-    const unsubSwitchTab = ideActionService.subscribe("SWITCH_TAB", ({ tab }) => { if (tab) safeSetBottomTab(tab); });
-    return () => { unsubOpenFile(); unsubOpenBrowser(); unsubOpenTerminal(); unsubSwitchTab(); };
-  }, [workspace]);
-
-  const handleOpenInBrowser = (targetUrl: string) => {
+  const handleOpenInBrowser = useCallback((targetUrl: string) => {
     setBrowserUrl(targetUrl);
     safeSetBottomTab("browser");
-  };
+  }, [safeSetBottomTab]);
+
+  const { consumePendingActions } = useIdeActionBridge({
+    workspace,
+    applyOpenFile,
+    setBrowserUrl,
+    safeSetBottomTab,
+  });
+  const consumePendingActionsRef = useRef(consumePendingActions);
+  consumePendingActionsRef.current = consumePendingActions;
 
   useEffect(() => {
     const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -221,44 +214,30 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
           ? await loadWorkspace(workspaceId, onProgress)
           : await loadOrCreateDefaultWorkspace();
       } catch (e: any) {
-        // Surface instead of silently opening the wrong workspace.
         if (!cancelled) setLoadError(e?.message || "Failed to load workspace");
         return;
       }
       if (cancelled) return;
       setWorkspace(ws);
-      // No auto-open: editor starts with no file open (empty state).
-      // User picks a file from the explorer, or a pending OPEN_FILE action applies below.
-      if (!cancelled) setActiveFile(null);
-
-      // Consume sticky actions emitted while the editor was unmounted
-      // (e.g. file taps in fullscreen chat that navigated here).
-      // Explicit user taps win over stale auto-emitted actions from scaffolding.
-      try {
-        const pendingFile = ideActionService.consumePendingAction("OPEN_FILE");
-        const pendingBrowser = ideActionService.consumePendingAction("OPEN_BROWSER");
-        const pendingTerminal = ideActionService.consumePendingAction("OPEN_TERMINAL");
-        const pendingTab = ideActionService.consumePendingAction("SWITCH_TAB");
-        if (pendingBrowser?.payload?.userInitiated && pendingBrowser.payload.url) {
-          setBrowserUrl(pendingBrowser.payload.url);
-          safeSetBottomTab("browser");
-        } else if (pendingTerminal?.payload?.userInitiated) {
-          safeSetBottomTab("terminal");
-        } else if (pendingTab?.payload?.userInitiated) {
-          safeSetBottomTab(pendingTab.payload.tab);
-        } else if (pendingBrowser?.payload?.url) {
-          setBrowserUrl(pendingBrowser.payload.url);
-          safeSetBottomTab("browser");
-        } else if (pendingFile?.payload?.filePath && (!pendingFile.payload.workspaceId || pendingFile.payload.workspaceId === ws.id)) {
-          await applyOpenFile(ws, pendingFile.payload.filePath);
-        }
-      } catch (_) {}
+      // Reset active file only when changing to a different workspace
+      if (prevLoadedWsIdRef.current !== ws.id) {
+        prevLoadedWsIdRef.current = ws.id;
+        if (!cancelled) setActiveFile(null);
+      }
+      await consumePendingActionsRef.current(ws);
     };
     loadWs();
     return () => { cancelled = true; };
   }, [workspaceId, loadSeq]);
 
   useWorkspaceAutoRefresh(workspace?.id, setWorkspace);
+
+  const { scheduleSave, flush: flushPendingSave } = useDebouncedFileSave(workspace?.id);
+
+  const handleBackToPicker = () => {
+    flushPendingSave();
+    onBackToPicker?.();
+  };
 
   const refreshWorkspace = async () => {
     if (!workspace) return;
@@ -268,33 +247,39 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
     } catch (e) {}
   };
 
-  const handleSelectFile = async (file: any) => {
-    if (file.type !== "file" || !workspace) return;
-    const targetPath = file.path || file.name;
-    const content = await readFileContent(workspace.id, targetPath);
-    setActiveFile({ ...file, content: content ?? "" });
-  };
-
-  const handleContentChange = async (newContent: string) => {
-    if (!activeFile || !workspace) return;
-    setActiveFile({ ...activeFile, content: newContent });
-
-    const updateTree = (nodes: any[]): any[] =>
-      nodes.map((node) =>
-        node.id === activeFile.id || (node.path && node.path === activeFile.path)
-          ? { ...node, content: newContent }
-          : node.children ? { ...node, children: updateTree(node.children) } : node
-      );
-
-    setWorkspace({
-      ...workspace,
-      root: { ...workspace.root, children: workspace.root.children ? updateTree(workspace.root.children) : [] },
-    });
-
+  const handleSelectFile = useCallback(async (file: any) => {
+    if (!file || file.type === "folder" || !workspace) return;
+    const fileName = file.name || (file.path ? file.path.split("/").pop() : "") || "file";
+    const targetPath = file.path || file.name || fileName;
+    const selected: FileNode = {
+      ...file,
+      id: file.id || `${workspace.id}::${targetPath}`,
+      name: fileName,
+      path: targetPath,
+      type: "file",
+      content: file.content || "",
+    };
+    setActiveFile(selected);
+    safeSetBottomTab("editor");
+    if (!isLandscape) {
+      setIsSidebarOpen(false);
+    }
     try {
-      await saveFileContent(workspace.id, activeFile.path || activeFile.name, newContent);
-    } catch (e) {}
+      await flushPendingSave();
+      const content = await readFileContent(workspace.id, targetPath);
+      setActiveFile((prev) => (prev && prev.id === selected.id ? { ...prev, content: content ?? "" } : prev));
+    } catch (_) {}
+  }, [workspace, isLandscape, safeSetBottomTab, flushPendingSave]);
+
+  const handleContentChange = (newContent: string) => {
+    if (!activeFile) return;
+    setActiveFile((prev) => (prev ? { ...prev, content: newContent } : null));
+    scheduleSave(activeFile.path || activeFile.name, newContent);
   };
+
+  const handleEditModeChange = useCallback((editing: boolean) => {
+    setIsSidebarOpen(!editing);
+  }, []);
 
   const {
     selectedNode,
@@ -325,14 +310,14 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
         key={loadSeq}
         statusText={loadError ? `Couldn't open workspace: ${loadError}` : loadStatus}
         isError={!!loadError}
-        onBack={onBackToPicker}
+        onBack={handleBackToPicker}
         onRetry={() => { setLoadError(null); setLoadStatus("Retrying…"); setLoadSeq((s) => s + 1); }}
       />
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingTop: desktopFullscreen ? 0 : insets.top }]}>
+    <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingTop: desktopFullscreen ? 0 : insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
       <StatusBar
         barStyle={theme.isDark ? "light-content" : "dark-content"}
         backgroundColor={theme.bgSecondary}
@@ -364,36 +349,51 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
         )}
 
         <View style={styles.editorContainer}>
-          <View style={[styles.tabContent, bottomTab !== "editor" && styles.hiddenTab]}>
-            <EditorView
-              fileName={activeFile?.name}
-              content={activeFile?.content || ""}
-              onChangeContent={handleContentChange}
-              onExitProject={onBackToPicker}
-              onToggleSidebar={!isSidebarOpen ? () => setIsSidebarOpen(true) : undefined}
-              onRunFile={handleRunActiveFile}
-            />
-          </View>
+          {visitedTabs.has("editor") && (
+            <View style={[styles.tabContent, bottomTab !== "editor" && styles.hiddenTab]}>
+              <EditorView
+                fileName={activeFile?.name}
+                content={activeFile?.content || ""}
+                onChangeContent={handleContentChange}
+                onExitProject={handleBackToPicker}
+                onToggleSidebar={!isSidebarOpen ? () => setIsSidebarOpen(true) : undefined}
+                onRunFile={handleRunActiveFile}
+                onEditModeChange={handleEditModeChange}
+                onOpenSettings={() => setSettingsModalVisible(true)}
+              />
+              <MonacoEngineHost />
+            </View>
+          )}
 
-          <View style={[styles.tabContent, bottomTab !== "terminal" && styles.hiddenTab]}>
-            <TerminalView key={workspace?.id || "none"} workspaceId={workspace?.id} />
-          </View>
+          {visitedTabs.has("terminal") && (
+            <View style={[styles.tabContent, bottomTab !== "terminal" && styles.hiddenTab]}>
+              <TerminalView key={workspace?.id || "none"} workspaceId={workspace?.id} />
+            </View>
+          )}
 
-          <View style={[styles.tabContent, bottomTab !== "browser" && styles.hiddenTab]}>
-            <WebBrowserPreview initialUrl={browserUrl} workspaceId={workspace?.id} />
-          </View>
+          {visitedTabs.has("browser") && (
+            <View style={[styles.tabContent, bottomTab !== "browser" && styles.hiddenTab]}>
+              <WebBrowserPreview initialUrl={browserUrl} workspaceId={workspace?.id} />
+            </View>
+          )}
 
-          <View style={[styles.tabContent, bottomTab !== "git" && styles.hiddenTab]}>
-            <GitHubDesktopView workspaceId={workspace?.id} projectName={workspace?.name} visible={bottomTab === "git"} />
-          </View>
+          {visitedTabs.has("git") && (
+            <View style={[styles.tabContent, bottomTab !== "git" && styles.hiddenTab]}>
+              <GitHubDesktopView workspaceId={workspace?.id} projectName={workspace?.name} visible={bottomTab === "git"} />
+            </View>
+          )}
 
-          <View style={[styles.tabContent, bottomTab !== "desktop" && styles.hiddenTab]}>
-            <DesktopView visible={bottomTab === "desktop"} onFullscreenChange={setDesktopFullscreen} />
-          </View>
+          {visitedTabs.has("desktop") && (
+            <View style={[styles.tabContent, bottomTab !== "desktop" && styles.hiddenTab]}>
+              <DesktopView visible={bottomTab === "desktop"} onFullscreenChange={setDesktopFullscreen} />
+            </View>
+          )}
 
-          <View style={[styles.tabContent, bottomTab !== "vscode" && styles.hiddenTab]}>
-            <VSCodeView workspaceDir={workspace?.dirPath} visible={bottomTab === "vscode"} />
-          </View>
+          {visitedTabs.has("vscode") && (
+            <View style={[styles.tabContent, bottomTab !== "vscode" && styles.hiddenTab]}>
+              <VSCodeView workspaceDir={workspace?.dirPath} visible={bottomTab === "vscode"} />
+            </View>
+          )}
 
           {/* AI Assistant Floating Button & Menu */}
           {astraEnabled && !desktopFullscreen && bottomTab !== "git" && (
@@ -422,36 +422,38 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
       )}
 
       {/* Overlay Permission Guide Modal */}
-      <OverlayPermissionModal
-        visible={showPermissionModal}
-        onClose={() => setShowPermissionModal(false)}
-        onPermissionGranted={handlePermissionGranted}
-      />
+      {showPermissionModal && (
+        <OverlayPermissionModal
+          visible={showPermissionModal}
+          onClose={() => setShowPermissionModal(false)}
+          onPermissionGranted={handlePermissionGranted}
+        />
+      )}
 
       {/* File Action Modal */}
-      <FileActionModal
-        modalMode={modalMode}
-        selectedNode={selectedNode}
-        menuPosition={menuPosition}
-        modalInput={modalInput}
-        onChangeInput={setModalInput}
-        onClose={() => setModalMode("none")}
-        onSelectRename={() => {
-          setModalInput(selectedNode?.name || "");
-          setModalMode("rename");
-        }}
-        onSelectAdd={() => {
-          setModalInput("");
-          setModalMode("add");
-        }}
-        onDeleteConfirm={confirmAndDeleteNode}
-        onRenameSubmit={handleRenameSubmit}
-        onAddSubmit={() => {
-          setModalMode("none");
-          handleCreateNode(modalInput);
-          setModalInput("");
-        }}
-        onBackToOptions={() => setModalMode("options")}
+      {modalMode !== "none" && (
+        <FileActionModal
+          modalMode={modalMode}
+          selectedNode={selectedNode}
+          menuPosition={menuPosition}
+          modalInput={modalInput}
+          onChangeInput={setModalInput}
+          onClose={() => setModalMode("none")}
+          onSelectRename={() => { setModalInput(selectedNode?.name || ""); setModalMode("rename"); }}
+          onSelectAdd={() => { setModalInput(""); setModalMode("add"); }}
+          onDeleteConfirm={confirmAndDeleteNode}
+          onRenameSubmit={handleRenameSubmit}
+          onAddSubmit={() => { setModalMode("none"); handleCreateNode(modalInput); setModalInput(""); }}
+          onBackToOptions={() => setModalMode("options")}
+        />
+      )}
+
+      {/* Settings Modal */}
+      <SettingsModal
+        visible={isSettingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+        workspaceId={workspace?.id}
+        onSyncWorkspace={refreshWorkspace}
       />
     </View>
   );

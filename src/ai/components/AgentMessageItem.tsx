@@ -17,7 +17,11 @@ interface AgentMessageItemProps {
   onApplyFile?: (filePath: string, code: string) => void;
 }
 
-export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: AgentMessageItemProps) {
+export const AgentMessageItem = React.memo(function AgentMessageItem({
+  message,
+  onRunCodeSnippet,
+  onApplyFile,
+}: AgentMessageItemProps) {
   const { theme, isMidnight } = useTheme();
   const isUser = message.role === "user";
   const [showThoughts, setShowThoughts] = useState(true);
@@ -324,7 +328,7 @@ export function AgentMessageItem({ message, onRunCodeSnippet, onApplyFile }: Age
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   userContainer: {

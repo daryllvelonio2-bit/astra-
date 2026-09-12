@@ -19,7 +19,7 @@ interface ProjectCardProps {
   onMorePress?: (item: ProjectItem) => void;
 }
 
-export function ProjectCard({ item, onPress, onMorePress }: ProjectCardProps) {
+export const ProjectCard = React.memo(function ProjectCard({ item, onPress, onMorePress }: ProjectCardProps) {
   const { theme, isMidnight } = useTheme();
 
   return (
@@ -57,7 +57,7 @@ export function ProjectCard({ item, onPress, onMorePress }: ProjectCardProps) {
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   projectCard: {

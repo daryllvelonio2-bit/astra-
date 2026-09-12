@@ -53,9 +53,6 @@ const ANSI_COLORS_LIGHT: Record<number, string> = {
   97: "#24292f",
 };
 
-/** @deprecated Use theme-aware palette resolution instead. */
-const ANSI_COLORS: Record<number, string> = ANSI_COLORS_DARK;
-
 const ANSI_BG_COLORS_DARK: Record<number, string> = {
   40: "#0d1117",
   41: "#b62324",
@@ -94,9 +91,6 @@ const ANSI_BG_COLORS_LIGHT: Record<number, string> = {
   106: "#a9e8ee",
   107: "#24292f",
 };
-
-/** @deprecated Use theme-aware palette resolution instead. */
-const ANSI_BG_COLORS: Record<number, string> = ANSI_BG_COLORS_DARK;
 
 function isLightTerminalTheme(theme: TerminalTheme): boolean {
   return theme.id === "light";

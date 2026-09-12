@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
+import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
 import {
   getDefaultPickerBase,
   getPickerTitle,
@@ -108,12 +109,13 @@ export function DirectoryPickerModal({
   };
 
   const quickPaths = getQuickPaths();
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(8);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
         <TouchableOpacity style={[styles.backdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
-        <View style={[styles.container, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
+        <View style={[styles.container, { backgroundColor: theme.bgSecondary, borderColor: theme.border }, isKeyboardVisible && { maxHeight: '90%' }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: theme.border }]}>
             <View style={styles.headerLeft}>

@@ -19,11 +19,22 @@ chmod +x gradlew
 echo "=== Build Complete! ==="
 ls -lh app/build/outputs/apk/debug/app-debug.apk
 
-echo "=== Installing Debug APK to connected device ==="
-adb reverse tcp:8081 tcp:8081
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+echo "=== Copying to Downloads Folder ==="
+mkdir -p /home/janelle/Downloads
+cp app/build/outputs/apk/debug/app-debug.apk /home/janelle/Downloads/astra-debug.apk
+cp app/build/outputs/apk/debug/app-debug.apk /home/janelle/Downloads/app-debug.apk
+echo "Debug APK copied to:"
+ls -lh /home/janelle/Downloads/astra-debug.apk /home/janelle/Downloads/app-debug.apk
 
-echo "=== Launching Debug App ==="
-adb shell am start -n com.janelle.aicoder/.MainActivity
+if adb get-state >/dev/null 2>&1; then
+  echo "=== Installing Debug APK to connected device ==="
+  adb reverse tcp:8081 tcp:8081 || true
+  adb install -r app/build/outputs/apk/debug/app-debug.apk || true
+  echo "=== Launching Debug App ==="
+  adb shell am start -n com.janelle.aicoder/.MainActivity || true
+else
+  echo "=== No ADB device connected, APK ready in Downloads ==="
+fi
 
 echo "=== Done! ==="
+

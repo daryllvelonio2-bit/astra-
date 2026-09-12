@@ -11,6 +11,7 @@ import {
   requestAllFilesPermission,
   NativeDirEntry,
   NativeFileInfo,
+  LinuxRunnerModule,
 } from "../../../modules/linux-runner/src";
 
 export {
@@ -50,7 +51,7 @@ function isExternalPath(path: string): boolean {
 export async function readDir(dirPath: string): Promise<string[]> {
   const cleanPath = dirPath.endsWith("/") ? dirPath : `${dirPath}/`;
   const nativeFirst = readDirectoryNative(cleanPath);
-  if (nativeFirst.length > 0 || isExternalPath(cleanPath)) {
+  if (nativeFirst.length > 0 || isExternalPath(cleanPath) || LinuxRunnerModule?.readDirectory) {
     return nativeFirst.map((e) => e.name);
   }
 
@@ -64,7 +65,7 @@ export async function readDir(dirPath: string): Promise<string[]> {
 export async function readDirEntries(dirPath: string): Promise<NativeDirEntry[]> {
   const cleanPath = dirPath.endsWith("/") ? dirPath : `${dirPath}/`;
   const nativeList = readDirectoryNative(cleanPath);
-  if (nativeList && nativeList.length > 0) {
+  if (nativeList && (nativeList.length > 0 || isExternalPath(cleanPath) || LinuxRunnerModule?.readDirectory)) {
     return nativeList;
   }
 
@@ -98,31 +99,41 @@ export async function getFileInfo(filePath: string): Promise<NativeFileInfo> {
 }
 
 export async function readFileText(filePath: string): Promise<string> {
-  if (!isExternalPath(filePath)) {
-    const nativeText = readFileNative(filePath);
-    if (nativeText) return nativeText;
-  } else {
-    return readFileNative(filePath);
+  const clean = filePath.replace(/^file:\/\//, "");
+
+  const nativeText = readFileNative(clean);
+  if (nativeText) return nativeText;
+
+  const info = getFileInfoNative(clean);
+  if (info.exists && info.size === 0) {
+    return "";
+  }
+
+  if (isExternalPath(clean)) {
+    return nativeText || "";
   }
 
   try {
-    const text = await fsRace(FileSystem.readAsStringAsync(filePath));
+    const uri = filePath.startsWith("file://") ? filePath : `file://${clean}`;
+    const text = await fsRace(FileSystem.readAsStringAsync(uri));
     if (text !== null) return text;
   } catch (_) {}
-  return readFileNative(filePath);
+  return nativeText || "";
 }
 
 export async function writeFileText(filePath: string, content: string): Promise<boolean> {
-  if (!isExternalPath(filePath) && writeFileNative(filePath, content)) return true;
+  const clean = filePath.replace(/^file:\/\//, "");
+  if (!isExternalPath(clean) && writeFileNative(clean, content)) return true;
 
   try {
-    const parentDir = filePath.substring(0, filePath.lastIndexOf("/"));
+    const parentDir = clean.substring(0, clean.lastIndexOf("/"));
     if (parentDir) {
-      await fsRace(FileSystem.makeDirectoryAsync(parentDir, { intermediates: true }));
+      await fsRace(FileSystem.makeDirectoryAsync(`file://${parentDir}`, { intermediates: true }));
     }
-    if ((await fsRace(FileSystem.writeAsStringAsync(filePath, content))) !== null) return true;
+    const uri = filePath.startsWith("file://") ? filePath : `file://${clean}`;
+    if ((await fsRace(FileSystem.writeAsStringAsync(uri, content))) !== null) return true;
   } catch (_) {}
-  return isExternalPath(filePath) ? writeFileNative(filePath, content) : false;
+  return isExternalPath(clean) ? writeFileNative(clean, content) : false;
 }
 
 export async function makeDir(dirPath: string): Promise<boolean> {

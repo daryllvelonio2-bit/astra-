@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { AppTheme, loadTheme, saveTheme, subscribeConfigChanges } from "../ide/services/configService";
 
 export interface ThemeColors {
@@ -164,24 +164,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
-  const setTheme = (mode: AppTheme) => {
+  const setTheme = useCallback((mode: AppTheme) => {
     setThemeModeState(mode);
     saveTheme(mode);
-  };
+  }, []);
 
   const theme = THEMES[themeMode] || THEMES.dark;
 
+  const value = useMemo(
+    () => ({
+      theme,
+      themeMode,
+      setTheme,
+      isDark: theme.isDark,
+      isLight: themeMode === "light",
+      isMidnight: themeMode === "midnight",
+    }),
+    [theme, themeMode, setTheme]
+  );
+
   return (
-    <ThemeContext.Provider
-      value={{
-        theme,
-        themeMode,
-        setTheme,
-        isDark: theme.isDark,
-        isLight: themeMode === "light",
-        isMidnight: themeMode === "midnight",
-      }}
-    >
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

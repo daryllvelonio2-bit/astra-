@@ -34,22 +34,25 @@ object EnvironmentAstraHelper {
                 val arch = if (abi.contains("x86_64") || abi.contains("x86")) "x86_64" else "aarch64"
 
                 val candidatePaths = mutableListOf<String>()
-                val archList = context.assets.list("linux/$arch") ?: emptyArray()
-                for (item in archList) {
-                    if (item.startsWith("astra-cli")) {
-                        candidatePaths.add("linux/$arch/$item")
-                    }
-                }
+                // Primary shared asset location
                 val rootList = context.assets.list("linux") ?: emptyArray()
                 for (item in rootList) {
                     if (item.startsWith("astra-cli")) {
                         candidatePaths.add("linux/$item")
                     }
                 }
-                candidatePaths.add("linux/$arch/astra-cli.tar")
-                candidatePaths.add("linux/$arch/astra-cli.tar.gz")
                 candidatePaths.add("linux/astra-cli.tar")
                 candidatePaths.add("linux/astra-cli.tar.gz")
+
+                // Architecture-specific fallback if present
+                val archList = context.assets.list("linux/$arch") ?: emptyArray()
+                for (item in archList) {
+                    if (item.startsWith("astra-cli")) {
+                        candidatePaths.add("linux/$arch/$item")
+                    }
+                }
+                candidatePaths.add("linux/$arch/astra-cli.tar")
+                candidatePaths.add("linux/$arch/astra-cli.tar.gz")
 
                 var extracted = false
                 for (path in candidatePaths.distinct()) {

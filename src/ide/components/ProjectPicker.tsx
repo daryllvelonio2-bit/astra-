@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   FlatList,
   StatusBar,
   Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +28,7 @@ import { DirectoryPickerModal } from './DirectoryPickerModal';
 import { formatDisplayPath } from '../services/storagePaths';
 import { useTheme } from '../../theme/themeContext';
 import { useOrientation } from '../../theme/useOrientation';
+import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
 
 interface ProjectPickerProps {
   onOpenWorkspace: (workspaceId: string) => void;
@@ -38,6 +40,7 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat, onRerunStartu
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(24);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -115,6 +118,15 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat, onRerunStartu
     }
   };
 
+  const handleCardPress = useCallback((p: ProjectItem) => {
+    onOpenWorkspace(p.id);
+  }, [onOpenWorkspace]);
+
+  const handleCardMorePress = useCallback((p: ProjectItem) => {
+    setSelectedProject(p);
+    setInspectorVisible(true);
+  }, []);
+
   const filteredProjects = projects.filter((p) => {
     return p.name.toLowerCase().includes(searchQuery.toLowerCase());
   });
@@ -187,22 +199,24 @@ export function ProjectPicker({ onOpenWorkspace, onNavigateToChat, onRerunStartu
         numColumns={isLandscape ? 2 : 1}
         columnWrapperStyle={isLandscape ? styles.gridRow : undefined}
         data={filteredProjects}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
         renderItem={({ item }) => (
           <View style={isLandscape ? styles.gridItem : styles.listItem}>
             <ProjectCard
               item={item}
-              onPress={(p) => {
-                onOpenWorkspace(p.id);
-              }}
-              onMorePress={(p) => {
-                setSelectedProject(p);
-                setInspectorVisible(true);
-              }}
+              onPress={handleCardPress}
+              onMorePress={handleCardMorePress}
             />
           </View>
         )}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: isKeyboardVisible ? keyboardOffset : Math.max(insets.bottom, 24) },
+        ]}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: theme.textMuted }]}>No workspace projects found.</Text>

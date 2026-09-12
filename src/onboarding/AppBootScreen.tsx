@@ -50,10 +50,10 @@ export function AppBootScreen({ isReady, onAnimationEnd, phase }: AppBootScreenP
     );
     shimmer.start();
 
-    // Hold the splash for 3s so the logo wave fully plays before landing
+    // Hold the splash briefly so the logo renders smoothly before landing
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
-    }, 3000);
+    }, 350);
 
     return () => {
       shimmer.stop();
@@ -66,7 +66,7 @@ export function AppBootScreen({ isReady, onAnimationEnd, phase }: AppBootScreenP
     if (isReady && minTimeElapsed) {
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 350,
+        duration: 250,
         useNativeDriver: true,
       }).start(() => {
         onAnimationEnd();

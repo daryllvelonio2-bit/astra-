@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, Linking } from "react-native";
 import { WebView } from "react-native-webview";
 import {
   addTerminalDataListener,
@@ -38,11 +38,12 @@ interface XtermViewProps {
 }
 
 interface GlueMessage {
-  type: "ready" | "data" | "resize" | "selection" | "tap";
+  type: "ready" | "data" | "resize" | "selection" | "tap" | "link";
   data?: string;
   cols?: number;
   rows?: number;
   text?: string;
+  url?: string;
 }
 
 // Max base64 chars per injected write; keeps injectJavaScript calls small.
@@ -242,6 +243,14 @@ export const XtermView = memo(
       selResolveRef.current = null;
     } else if (msg.type === "tap") {
       keyboardRef.current?.();
+    } else if (msg.type === "link" && typeof msg.url === "string") {
+      // CLI login links (and any terminal URL): open the system browser so
+      // the real Google/ChatGPT session + passkeys are available. http(s)
+      // only; anything else is ignored.
+      const url = msg.url.trim();
+      if (/^https?:\/\//i.test(url)) {
+        Linking.openURL(url).catch(() => {});
+      }
     }
   };
 

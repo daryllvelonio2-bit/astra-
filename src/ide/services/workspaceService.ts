@@ -109,29 +109,40 @@ export async function listWorkspaceMetas(): Promise<WorkspaceMeta[]> {
 
 export function normalizeCleanPath(p: string): string {
   if (!p) return "";
-  return p.trim().replace(/^file:\/\//, "").replace(/\/+/g, "/");
+  let clean = p.trim().replace(/^file:\/\//, "").replace(/\/+/g, "/");
+  try {
+    clean = decodeURIComponent(clean);
+  } catch (_) {}
+  if (clean.startsWith("/sdcard/")) {
+    clean = "/storage/emulated/0/" + clean.slice(8);
+  } else if (clean === "/sdcard") {
+    clean = "/storage/emulated/0";
+  }
+  return clean;
+}
+
+export function resolveFullPath(baseDir: string, filePath: string): string {
+  let clean = normalizeCleanPath(filePath);
+  if (clean.startsWith("storage/") || clean.startsWith("sdcard/") || clean.startsWith("data/")) {
+    clean = "/" + clean;
+  }
+  if (
+    clean.startsWith("/") &&
+    (clean.startsWith(baseDir) ||
+      clean.startsWith("/sdcard") ||
+      clean.startsWith("/storage") ||
+      clean.startsWith("/data"))
+  ) {
+    return clean;
+  }
+  return `${baseDir}/${clean.replace(/^\/+/, "")}`;
 }
 
 export async function readFileContent(workspaceId: string, filePath: string): Promise<string> {
   try {
     const rawBaseDir = await getWorkspaceDirPath(workspaceId);
     const baseDir = normalizeCleanPath(rawBaseDir).replace(/\/+$/, "");
-    const cleanFilePath = normalizeCleanPath(filePath);
-
-    let targetFullPath: string;
-    if (
-      cleanFilePath.startsWith("/") &&
-      (cleanFilePath.startsWith(baseDir) ||
-        cleanFilePath.startsWith("/sdcard") ||
-        cleanFilePath.startsWith("/storage") ||
-        cleanFilePath.startsWith("/data"))
-    ) {
-      targetFullPath = cleanFilePath;
-    } else {
-      const rel = cleanFilePath.replace(/^\/+/, "");
-      targetFullPath = `${baseDir}/${rel}`;
-    }
-
+    const targetFullPath = resolveFullPath(baseDir, filePath);
     return await readFileText(targetFullPath);
   } catch (_) {}
   return "";
@@ -195,28 +206,29 @@ async function readDirectoryRecursive(
 
   try {
     const entries = await readDirEntries(cleanDirPath);
-    const children: FileNode[] = [];
+    const fileChildren: FileNode[] = [];
+    const dirPromises: Promise<FileNode>[] = [];
 
     for (const entry of entries) {
       if (IGNORED_FOLDERS.has(entry.name)) continue;
       if (entry.name.startsWith(".") && entry.name !== ".env" && entry.name !== ".gitignore" && entry.name !== ".env.example") continue;
 
       const cleanFullPath = normalizeCleanPath(entry.path);
-      let relativePath = cleanFullPath;
-      if (cleanFullPath.startsWith(cleanBaseDir)) {
-        relativePath = cleanFullPath.slice(cleanBaseDir.length).replace(/^\/+/, "");
-      } else {
-        relativePath = cleanFullPath.replace(/^\/+/, "");
-      }
+      const relativePath = cleanFullPath.startsWith(cleanBaseDir)
+        ? cleanFullPath.slice(cleanBaseDir.length).replace(/^\/+/, "")
+        : cleanFullPath.replace(/^\/+/, "");
 
       const id = `${workspaceId}::${relativePath}`;
 
       if (entry.isDirectory) {
-        const childFolder = await readDirectoryRecursive(`${cleanFullPath}/`, id, workspaceId, cleanBaseDir, depth + 1, shared, onProgress);
-        childFolder.path = relativePath;
-        children.push(childFolder);
+        dirPromises.push(
+          readDirectoryRecursive(`${cleanFullPath}/`, id, workspaceId, cleanBaseDir, depth + 1, shared, onProgress).then((cf) => {
+            cf.path = relativePath;
+            return cf;
+          })
+        );
       } else {
-        children.push({
+        fileChildren.push({
           id,
           name: entry.name,
           type: "file",
@@ -225,6 +237,9 @@ async function readDirectoryRecursive(
         });
       }
     }
+
+    const subFolders = await Promise.all(dirPromises);
+    const children: FileNode[] = [...subFolders, ...fileChildren];
 
     const folderName = cleanDirPath.split("/").filter(Boolean).pop() || workspaceId;
     let relFolder = cleanDirPath;
@@ -307,22 +322,7 @@ export async function saveFileContent(workspaceId: string, filePath: string, con
   try {
     const rawBaseDir = await getWorkspaceDirPath(workspaceId);
     const baseDir = normalizeCleanPath(rawBaseDir).replace(/\/+$/, "");
-    const cleanFilePath = normalizeCleanPath(filePath);
-
-    let targetFullPath: string;
-    if (
-      cleanFilePath.startsWith("/") &&
-      (cleanFilePath.startsWith(baseDir) ||
-        cleanFilePath.startsWith("/sdcard") ||
-        cleanFilePath.startsWith("/storage") ||
-        cleanFilePath.startsWith("/data"))
-    ) {
-      targetFullPath = cleanFilePath;
-    } else {
-      const rel = cleanFilePath.replace(/^\/+/, "");
-      targetFullPath = `${baseDir}/${rel}`;
-    }
-
+    const targetFullPath = resolveFullPath(baseDir, filePath);
     await writeFileText(targetFullPath, content);
     notifyWorkspaceChanged(workspaceId);
   } catch (_) {}
@@ -344,22 +344,7 @@ export async function deleteFileFromWorkspace(workspaceId: string, filePath: str
   try {
     const rawBaseDir = await getWorkspaceDirPath(workspaceId);
     const baseDir = normalizeCleanPath(rawBaseDir).replace(/\/+$/, "");
-    const cleanFilePath = normalizeCleanPath(filePath);
-
-    let targetFullPath: string;
-    if (
-      cleanFilePath.startsWith("/") &&
-      (cleanFilePath.startsWith(baseDir) ||
-        cleanFilePath.startsWith("/sdcard") ||
-        cleanFilePath.startsWith("/storage") ||
-        cleanFilePath.startsWith("/data"))
-    ) {
-      targetFullPath = cleanFilePath;
-    } else {
-      const rel = cleanFilePath.replace(/^\/+/, "");
-      targetFullPath = `${baseDir}/${rel}`;
-    }
-
+    const targetFullPath = resolveFullPath(baseDir, filePath);
     await deletePath(targetFullPath);
     notifyWorkspaceChanged(workspaceId);
   } catch (_) {}

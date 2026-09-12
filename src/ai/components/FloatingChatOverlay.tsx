@@ -31,6 +31,7 @@ import { useVoiceInput } from "./useVoiceInput";
 import { FloatingOverlayTopBar } from "./FloatingOverlayTopBar";
 import { getAstraModeInfo } from "../astra/astraModes";
 import { useTheme } from "../../theme/themeContext";
+import { useAccurateKeyboard } from "../../theme/useAccurateKeyboard";
 
 interface FloatingChatOverlayProps {
   workspaceId?: string;
@@ -128,18 +129,7 @@ export function FloatingChatOverlay({
     })
   ).current;
 
-  // Android edge-to-edge: KeyboardAvoidingView is iOS-only, so lift the card
-  // by the live keyboard height (same pattern as TerminalView).
-  const [kbHeight, setKbHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS === "ios") return;
-    const show = Keyboard.addListener("keyboardDidShow", (e) => setKbHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener("keyboardDidHide", () => setKbHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(24);
 
   const handleMinimize = () => FloatingOverlay.collapseToBubble();
   const handleOpenIDE = () => {
@@ -164,7 +154,7 @@ export function FloatingChatOverlay({
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={[styles.centerContainer, kbHeight > 0 && { paddingBottom: 24 + kbHeight }]}
+        style={[styles.centerContainer, isKeyboardVisible && { paddingBottom: keyboardOffset }]}
         pointerEvents="box-none"
       >
         <Animated.View

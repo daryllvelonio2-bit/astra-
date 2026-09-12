@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
+import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
 
 interface GitRemoteModalProps {
   visible: boolean;
@@ -26,6 +27,7 @@ export function GitRemoteModal({
   onSaveRemote,
 }: GitRemoteModalProps) {
   const { theme } = useTheme();
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(12);
   const [remoteInput, setRemoteInput] = useState("");
   const [protocol, setProtocol] = useState<"https" | "ssh">("https");
   const [saving, setSaving] = useState(false);
@@ -101,7 +103,7 @@ export function GitRemoteModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
         <View style={[styles.modalCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: theme.border }]}>

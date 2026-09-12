@@ -79,3 +79,14 @@ export function mergeNativeHistory(current: string, hist: string, seen: number):
   if (hist.length <= seen) return { text: current, seen };
   return { text: appendCapped(current, hist.slice(seen)), seen: hist.length };
 }
+
+/**
+ * Shared native-text differ: calculates removed and added text against the
+ * last observed native text without wiping the buffer mid-word.
+ */
+export function diffNativeText(prev: string, text: string): { removed: number; added: string } {
+  let i = 0;
+  while (i < prev.length && i < text.length && prev[i] === text[i]) i++;
+  return { removed: prev.length - i, added: text.slice(i) };
+}
+

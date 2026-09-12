@@ -81,6 +81,14 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
   const scrollRef = useRef<ScrollView>(null);
   const shouldScrollToEndRef = useRef(true);
   const isAgentWorkingRef = useRef(false);
+  const scrollThrottleTimerRef = useRef<any>(null);
+  const throttleScrollToEnd = () => {
+    if (scrollThrottleTimerRef.current) return;
+    scrollThrottleTimerRef.current = setTimeout(() => {
+      scrollThrottleTimerRef.current = null;
+      scrollRef.current?.scrollToEnd({ animated: false });
+    }, 100);
+  };
 
   useEffect(() => {
     isAgentWorkingRef.current = agentStatus !== "idle";
@@ -279,7 +287,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
           },
           onTextDelta: (delta) => {
             setMessages((prev) => prev.map((msg) => msg.id === assistantMsgId ? { ...msg, text: msg.text + delta } : msg));
-            scrollRef.current?.scrollToEnd({ animated: true });
+            throttleScrollToEnd();
           },
           onStep: (step) => {
             setMessages((prev) =>
@@ -290,7 +298,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
                 return { ...msg, steps: idx >= 0 ? existing.map((s, i) => (i === idx ? step : s)) : [...existing, step] };
               })
             );
-            scrollRef.current?.scrollToEnd({ animated: true });
+            throttleScrollToEnd();
           },
           onStatusChange: (status) => {
             setAgentStatus(status);
@@ -334,6 +342,10 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
           prev.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: `**Error:** ${err.message || "Unexpected error"}`, status: "error" } : msg))
         );
       } finally {
+        if (scrollThrottleTimerRef.current) {
+          clearTimeout(scrollThrottleTimerRef.current);
+          scrollThrottleTimerRef.current = null;
+        }
         stopTimer();
         setAgentStatus("idle");
         runningTasksService.verifyProcesses();

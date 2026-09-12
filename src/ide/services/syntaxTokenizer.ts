@@ -1,3 +1,125 @@
+export interface LanguageGrammar {
+  id: string;
+  name: string;
+  extensions: string[];
+  keywords: Set<string>;
+  types?: Set<string>;
+  specialTokens?: Set<string>;
+  lineComment: string;
+}
+
+const BUILTIN_GRAMMARS: LanguageGrammar[] = [
+  {
+    id: "rust",
+    name: "Rust",
+    extensions: ["rs"],
+    lineComment: "//",
+    keywords: new Set([
+      "as", "async", "await", "break", "const", "continue", "crate", "dyn",
+      "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in",
+      "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return",
+      "self", "Self", "static", "struct", "super", "trait", "true", "type",
+      "unsafe", "use", "where", "while",
+    ]),
+    types: new Set([
+      "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+      "f32", "f64", "bool", "char", "str", "String", "Vec", "Option", "Result", "Some", "None", "Ok", "Err",
+      "Box", "Rc", "Arc", "RefCell", "Mutex",
+    ]),
+  },
+  {
+    id: "go",
+    name: "Go",
+    extensions: ["go"],
+    lineComment: "//",
+    keywords: new Set([
+      "break", "case", "chan", "const", "continue", "default", "defer", "else",
+      "fallthrough", "for", "func", "go", "goto", "if", "import", "interface",
+      "map", "package", "range", "return", "select", "struct", "switch", "type", "var",
+    ]),
+    types: new Set([
+      "bool", "byte", "complex64", "complex128", "error", "float32", "float64",
+      "int", "int8", "int16", "int32", "int64", "rune", "string", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+    ]),
+  },
+  {
+    id: "cpp",
+    name: "C/C++",
+    extensions: ["c", "cpp", "cc", "cxx", "h", "hpp"],
+    lineComment: "//",
+    keywords: new Set([
+      "auto", "break", "case", "char", "const", "continue", "default", "do",
+      "double", "else", "enum", "extern", "float", "for", "goto", "if", "int",
+      "long", "register", "return", "short", "signed", "sizeof", "static",
+      "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while",
+      "class", "public", "private", "protected", "namespace", "using", "template",
+      "typename", "this", "new", "delete", "throw", "try", "catch", "virtual",
+      "constexpr", "nullptr", "override",
+    ]),
+  },
+  {
+    id: "java",
+    name: "Java & Kotlin",
+    extensions: ["java", "kt", "kts"],
+    lineComment: "//",
+    keywords: new Set([
+      "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
+      "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
+      "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
+      "interface", "long", "native", "new", "package", "private", "protected", "public",
+      "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this",
+      "throw", "throws", "transient", "try", "void", "volatile", "while",
+      "fun", "val", "var", "when", "is", "in", "object", "companion",
+    ]),
+  },
+  {
+    id: "sql",
+    name: "SQL",
+    extensions: ["sql"],
+    lineComment: "--",
+    keywords: new Set([
+      "select", "from", "where", "join", "left", "right", "inner", "outer",
+      "on", "group", "by", "order", "having", "limit", "offset", "insert",
+      "into", "values", "update", "set", "delete", "create", "table", "drop",
+      "alter", "index", "primary", "key", "foreign", "not", "null", "and",
+      "or", "in", "like", "as", "distinct", "union", "all", "case", "when", "then", "end",
+    ]),
+  },
+  {
+    id: "yaml",
+    name: "YAML",
+    extensions: ["yaml", "yml"],
+    lineComment: "#",
+    keywords: new Set(["true", "false", "yes", "no", "null", "on", "off"]),
+  },
+  {
+    id: "python",
+    name: "Python",
+    extensions: ["py", "pyw"],
+    lineComment: "#",
+    keywords: new Set([
+      "def", "return", "if", "elif", "else", "for", "while", "in",
+      "import", "from", "as", "class", "try", "except", "finally",
+      "raise", "with", "lambda", "yield", "pass", "break", "continue",
+      "global", "nonlocal", "async", "await", "assert", "del", "is", "not",
+    ]),
+    types: new Set(["int", "str", "float", "bool", "list", "dict", "set", "tuple", "bytes"]),
+  },
+];
+
+const EXT_TO_GRAMMAR = new Map<string, LanguageGrammar>();
+for (const g of BUILTIN_GRAMMARS) {
+  for (const ext of g.extensions) {
+    EXT_TO_GRAMMAR.set(ext.toLowerCase(), g);
+  }
+}
+
+export function getGrammarForExtension(extOrFileName?: string): LanguageGrammar | null {
+  if (!extOrFileName) return null;
+  const ext = (extOrFileName.includes(".") ? extOrFileName.split(".").pop()! : extOrFileName).toLowerCase().trim();
+  return EXT_TO_GRAMMAR.get(ext) || null;
+}
+
 export type TokenType =
   | "keyword"
   | "string"
@@ -20,6 +142,7 @@ export interface TokenizedLine {
   tokens: CodeToken[];
   indentWidth: number;
 }
+
 
 export const TOKEN_COLORS_DARK: Record<TokenType, string> = {
   keyword: "#c678dd",   // Vibrant Purple
@@ -49,9 +172,6 @@ export const TOKEN_COLORS_LIGHT: Record<TokenType, string> = {
   plain: "#0f172a",     // Near-black
 };
 
-/** @deprecated Use getTokenColors(isDark) for theme-aware highlighting. */
-export const TOKEN_COLORS: Record<TokenType, string> = TOKEN_COLORS_DARK;
-
 export function getTokenColors(isDark: boolean): Record<TokenType, string> {
   return isDark ? TOKEN_COLORS_DARK : TOKEN_COLORS_LIGHT;
 }
@@ -74,12 +194,28 @@ const MAX_TOKENIZE_LINES = 800;
 const MAX_TOKENIZE_LINE_CHARS = 1500;
 const MAX_TOKENS_PER_LINE = 250;
 
+// Pre-compiled regex patterns to eliminate re-instantiation on every line fragment
+const TOKENIZER_REGEX_SLASH = /(\/\/[^\n]*)|(`(?:\\`|[^`])*`|"(?:\\"|[^"])*"|'(?:\\'|[^'])*')|(<\/?[a-zA-Z0-9_\.\-]+>?)|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*:)|(\b\d+(?:\.\d+)?\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)|([=+\-*/%&|^!<>?:;,~]+)|(\s+|[^\s\w]+)/g;
+const TOKENIZER_REGEX_DASH = /(--[^\n]*)|(`(?:\\`|[^`])*`|"(?:\\"|[^"])*"|'(?:\\'|[^'])*')|(<\/?[a-zA-Z0-9_\.\-]+>?)|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*:)|(\b\d+(?:\.\d+)?\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)|([=+\-*/%&|^!<>?:;,~]+)|(\s+|[^\s\w]+)/g;
+const TOKENIZER_REGEX_HASH = /(#[^\n]*)|(`(?:\\`|[^`])*`|"(?:\\"|[^"])*"|'(?:\\'|[^'])*')|(<\/?[a-zA-Z0-9_\.\-]+>?)|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*:)|(\b\d+(?:\.\d+)?\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)|([=+\-*/%&|^!<>?:;,~]+)|(\s+|[^\s\w]+)/g;
+const PASCAL_CASE_WORD_REGEX = /^[A-Z][a-zA-Z0-9_$]*$/;
+
 export function tokenizeCode(
   code: string,
   fileName?: string,
-  startLineNumber = 1
+  startLineNumber = 1,
+  _activeLanguagePacks?: string[]
 ): TokenizedLine[] {
   if (!code) return [{ lineNumber: startLineNumber, tokens: [{ text: "", type: "plain" }], indentWidth: 0 }];
+
+  const grammar = fileName ? getGrammarForExtension(fileName) : null;
+
+  let activeRegex = TOKENIZER_REGEX_SLASH;
+  if (grammar?.lineComment === "--") {
+    activeRegex = TOKENIZER_REGEX_DASH;
+  } else if (grammar?.lineComment === "#") {
+    activeRegex = TOKENIZER_REGEX_HASH;
+  }
 
   const rawLines = code.split("\n");
   const totalLines = rawLines.length;
@@ -110,7 +246,7 @@ export function tokenizeCode(
           lineNumber,
           tokens: [
             { text: rawLine.slice(0, endIdx + 2), type: "comment" },
-            ...tokenizeLineFragment(rawLine.slice(endIdx + 2)),
+            ...tokenizeLineFragment(rawLine.slice(endIdx + 2), grammar, activeRegex),
           ],
           indentWidth,
         });
@@ -139,7 +275,7 @@ export function tokenizeCode(
 
     result.push({
       lineNumber,
-      tokens: tokenizeLineFragment(rawLine),
+      tokens: tokenizeLineFragment(rawLine, grammar, activeRegex),
       indentWidth,
     });
   }
@@ -158,12 +294,15 @@ export function tokenizeCode(
   return result;
 }
 
-function tokenizeLineFragment(line: string): CodeToken[] {
+function tokenizeLineFragment(
+  line: string,
+  grammar?: LanguageGrammar | null,
+  regex: RegExp = TOKENIZER_REGEX_SLASH
+): CodeToken[] {
   if (!line) return [{ text: "", type: "plain" }];
 
   const tokens: CodeToken[] = [];
-  // Tokenizer regex matching strings, comments, JSX tags, function calls, words, numbers, and symbols
-  const regex = /(\/\/[^\n]*)|(`(?:\\`|[^`])*`|"(?:\\"|[^"])*"|'(?:\\'|[^'])*')|(<\/?[a-zA-Z0-9_\.\-]+>?)|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*:)|(\b\d+(?:\.\d+)?\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)|([=+\-*/%&|^!<>?:;,~]+)|(\s+|[^\s\w]+)/g;
+  regex.lastIndex = 0;
 
   let match: RegExpExecArray | null;
   let lastIndex = 0;
@@ -199,8 +338,10 @@ function tokenizeLineFragment(line: string): CodeToken[] {
     } else if (jsxTag) {
       tokens.push({ text: jsxTag, type: "jsx_tag" });
     } else if (funcCall) {
-      if (JS_KEYWORDS.has(funcCall)) {
+      if (grammar ? grammar.keywords.has(funcCall) : JS_KEYWORDS.has(funcCall)) {
         tokens.push({ text: funcCall, type: "keyword" });
+      } else if (grammar?.types?.has(funcCall)) {
+        tokens.push({ text: funcCall, type: "jsx_tag" });
       } else {
         tokens.push({ text: funcCall, type: "function" });
       }
@@ -209,11 +350,19 @@ function tokenizeLineFragment(line: string): CodeToken[] {
     } else if (num) {
       tokens.push({ text: num, type: "number" });
     } else if (word) {
-      if (JS_KEYWORDS.has(word)) {
+      const isKeyword = grammar ? grammar.keywords.has(word) : JS_KEYWORDS.has(word);
+      const isType = grammar?.types?.has(word);
+      const isSpecial = grammar?.specialTokens?.has(word);
+
+      if (isKeyword) {
         tokens.push({ text: word, type: "keyword" });
+      } else if (isType) {
+        tokens.push({ text: word, type: "jsx_tag" }); // Types rendered in type/tag color
+      } else if (isSpecial) {
+        tokens.push({ text: word, type: "function" });
       } else if (BOOLEANS_AND_SPECIAL.has(word)) {
         tokens.push({ text: word, type: "boolean" });
-      } else if (/^[A-Z][a-zA-Z0-9_$]*$/.test(word)) {
+      } else if (PASCAL_CASE_WORD_REGEX.test(word)) {
         tokens.push({ text: word, type: "jsx_tag" }); // Component / Type name
       } else {
         tokens.push({ text: word, type: "plain" });

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ScrollView } from "react-native";
-import { Clipboard } from "../../services/clipboardService";
+import { useTerminalHistory, useTerminalClipboard } from "./terminalHistory";
 import {
   startTerminalSession,
   startPtySession,
@@ -68,8 +68,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
   const [themeId, setThemeId] = useState<string>(
     themeMode === "light" ? "light" : themeMode === "midnight" ? "midnight" : "alpine"
   );
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const { recordCommand, navigateHistory } = useTerminalHistory();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
@@ -276,12 +275,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       const trimmed = cmd.trim();
       if (!trimmed) return;
 
-      // Add to command history
-      setCommandHistory((prev) => {
-        const filtered = prev.filter((c) => c !== trimmed);
-        return [...filtered, trimmed];
-      });
-      setHistoryIndex(-1);
+      recordCommand(trimmed);
 
       // Append command with newline to session display buffer so it stays visible
       setSessionOutputs((prev) => {
@@ -296,70 +290,14 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       writeTerminalInput(activeSessionId, `${trimmed}\n`);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 30);
     },
-    [activeSessionId]
+    [activeSessionId, recordCommand]
   );
 
-  const navigateHistory = useCallback(
-    (direction: "up" | "down"): string | null => {
-      if (commandHistory.length === 0) return null;
-
-      let newIdx = historyIndex;
-      if (direction === "up") {
-        if (historyIndex === -1) {
-          newIdx = commandHistory.length - 1;
-        } else if (historyIndex > 0) {
-          newIdx = historyIndex - 1;
-        }
-      } else {
-        if (historyIndex !== -1) {
-          if (historyIndex < commandHistory.length - 1) {
-            newIdx = historyIndex + 1;
-          } else {
-            newIdx = -1;
-          }
-        }
-      }
-
-      setHistoryIndex(newIdx);
-      return newIdx === -1 ? "" : commandHistory[newIdx] || "";
-    },
-    [commandHistory, historyIndex]
+  const { copyActiveOutput, copyXtermSelection, pasteFromClipboard } = useTerminalClipboard(
+    activeSessionId,
+    sessionOutputs,
+    showToast
   );
-
-  const copyActiveOutput = useCallback(async () => {
-    const text = (sessionOutputs[activeSessionId] || "").replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
-    if (text) {
-      await Clipboard.setStringAsync(text);
-      showToast("Output copied to clipboard");
-    }
-  }, [sessionOutputs, activeSessionId, showToast]);
-
-  // xterm path: copy the WebView selection (plain text, no ANSI to strip).
-  const copyXtermSelection = useCallback(
-    async (getSelection: () => Promise<string>) => {
-      const text = await getSelection();
-      if (text) {
-        await Clipboard.setStringAsync(text);
-        showToast("Selection copied to clipboard");
-      } else {
-        showToast("Nothing selected");
-      }
-    },
-    [showToast]
-  );
-
-  const pasteFromClipboard = useCallback(async () => {
-    const raw = await Clipboard.getStringAsync();
-    // Normalize line endings and drop NULs so multi-line pastes execute
-    // predictably line-by-line (Termux-style) instead of choking the shell.
-    const text = raw.replace(/\r\n?/g, "\n").replace(/\0/g, "");
-    if (text) {
-      writeTerminalInput(activeSessionId, text);
-      showToast("Pasted from clipboard");
-    } else {
-      showToast("Clipboard is empty");
-    }
-  }, [activeSessionId, showToast]);
 
   const zoomIn = useCallback(() => {
     setFontSize((prev) => Math.min(22, prev + 1));

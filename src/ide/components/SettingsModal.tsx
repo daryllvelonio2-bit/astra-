@@ -15,13 +15,17 @@ import {
   BottomTabVisibility,
   DEFAULT_BOTTOM_TABS,
   normalizeBottomTabs,
+  EditorSettings,
+  DEFAULT_EDITOR_SETTINGS,
 } from "../services/configService";
 import { useTheme } from "../../theme/themeContext";
+import { useAccurateKeyboard } from "../../theme/useAccurateKeyboard";
 import { ApiKeyManager } from "./ApiKeyManager";
 import { SettingsTabBar, SettingsTabId } from "./settings/SettingsTabBar";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { EnvironmentSection } from "./settings/EnvironmentSection";
 import { NavigationSection } from "./settings/NavigationSection";
+import { EditorSection } from "./settings/EditorSection";
 
 interface SettingsModalProps {
   visible: boolean;
@@ -40,13 +44,15 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
   const [activeTheme, setActiveTheme] = useState<AppTheme>(themeMode);
   const [bottomTabs, setBottomTabs] = useState<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
   const [astraEnabled, setAstraEnabled] = useState(true);
+  const [keyboardMouseMode, setKeyboardMouseMode] = useState(false);
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
   const [savedTick, setSavedTick] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const dirtyRef = useRef(false);
   const skipFirstRef = useRef(true);
   const saveTimer = useRef<any>(null);
-  const draftRef = useRef({ apiKeys, activeTheme, bottomTabs, astraEnabled });
-  draftRef.current = { apiKeys, activeTheme, bottomTabs, astraEnabled };
+  const draftRef = useRef({ apiKeys, activeTheme, bottomTabs, astraEnabled, keyboardMouseMode, editorSettings });
+  draftRef.current = { apiKeys, activeTheme, bottomTabs, astraEnabled, keyboardMouseMode, editorSettings };
 
   const flushSave = async () => {
     const draft = draftRef.current;
@@ -57,6 +63,8 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
       bottomTabs: normalizeBottomTabs(draft.bottomTabs),
       astraEnabled: draft.astraEnabled ?? true,
       defaultEditorUi: draft.bottomTabs.vscode ? "vscode" : "native",
+      keyboardMouseMode: draft.keyboardMouseMode,
+      editorSettings: draft.editorSettings,
     });
     setTheme(draft.activeTheme);
     dirtyRef.current = false;
@@ -73,6 +81,10 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
         setActiveTheme(cfg.selectedTheme || themeMode);
         setBottomTabs(normalizeBottomTabs(cfg.bottomTabs));
         setAstraEnabled(cfg.astraEnabled ?? true);
+        setKeyboardMouseMode(!!cfg.keyboardMouseMode);
+        setEditorSettings(
+          cfg.editorSettings ? { ...DEFAULT_EDITOR_SETTINGS, ...cfg.editorSettings } : DEFAULT_EDITOR_SETTINGS
+        );
         setLoaded(true);
       });
     } else {
@@ -100,18 +112,20 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys, activeTheme, bottomTabs, astraEnabled, loaded]);
+  }, [apiKeys, activeTheme, bottomTabs, astraEnabled, keyboardMouseMode, editorSettings, loaded]);
 
   const handleSelectTheme = (mode: AppTheme) => {
     setActiveTheme(mode);
     setTheme(mode);
   };
 
+  const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(8);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <View style={[styles.modalOverlay, isKeyboardVisible && { paddingBottom: keyboardOffset }]}>
         <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose} />
-        <View style={[styles.bottomSheet, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}>
+        <View style={[styles.bottomSheet, { backgroundColor: theme.bgElevated, borderColor: theme.border }, isKeyboardVisible && { maxHeight: '92%' }]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Ionicons name="settings-sharp" size={20} color={theme.accent} />
@@ -144,6 +158,15 @@ export function SettingsModal({ visible, onClose, onSyncWorkspace, onRerunStartu
                 onSelectTheme={handleSelectTheme}
                 theme={theme}
                 onRerunStartup={onRerunStartup}
+              />
+            )}
+            {activeTab === "editor" && (
+              <EditorSection
+                keyboardMouseMode={keyboardMouseMode}
+                onChangeKeyboardMouseMode={setKeyboardMouseMode}
+                editorSettings={editorSettings}
+                onChangeEditorSettings={setEditorSettings}
+                theme={theme}
               />
             )}
             {activeTab === "keys" && (

@@ -20,9 +20,21 @@ export function useFloatingOverlayControl(
 
   useEffect(() => {
     checkOverlayStatus();
+  }, []);
+
+  // When AI menu is opened, ensure overlay status is immediately fresh
+  useEffect(() => {
+    if (showAiMenu) {
+      checkOverlayStatus();
+    }
+  }, [showAiMenu]);
+
+  // Only maintain recurring polling while the system overlay is actively running
+  useEffect(() => {
+    if (!isOverlayRunning) return;
     const interval = setInterval(checkOverlayStatus, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isOverlayRunning]);
 
   const handleLaunchSystemOverlay = async () => {
     setShowAiMenu(false);

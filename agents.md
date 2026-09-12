@@ -15,5 +15,6 @@
 9. **Debug Mode Release & Deployment:** Always build, release, and deploy the application in **Debug mode** (`assembleDebug` / `build-debug-apk.sh` / `app-debug.apk`) to enable live developer inspection, fast incremental compilation, and active ADB reverse connection.
 10. **Launch Debug Mode in Dedicated Terminal:** Always launch the Metro bundler development server in a separate, external terminal window (e.g. `foot`, `kitty`, or `xterm` via `start-debug.sh` / `metro.sh`) so live hot-reloading, bundling logs, and developer sessions run persistently in an independent window.
 11. **Strict Global Theme Adherence:** All UI components, editors, terminals, and modals must strictly consume the global theme (`useTheme()`) and dynamic theme tokens. Never use hardcoded static colors that violate the user's active theme selection.
+12. **Phase-by-Phase Execution, Never Rush:** Execute multi-phase work strictly one phase at a time. Think thoroughly before every phase, complete it fully, verify its exit gate (typecheck, line limits, behavior), report back, and wait for the user's go before starting the next phase. Never jump ahead, batch phases, or skip verification.
 
 
