@@ -17,7 +17,6 @@ import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
 import { searchMarketplace } from "../../services/extensions/extensionMarketplaceService";
 import {
   loadExtensionRegistry,
-  installExtension,
   uninstallExtension,
   toggleExtension,
   subscribeExtensionRegistry,
@@ -25,6 +24,11 @@ import {
 } from "../../services/extensions/extensionRegistry";
 import { ExtensionMarketplaceItem, InstalledExtension } from "../../services/extensions/types";
 import { ExtensionThemesTab } from "./ExtensionThemesTab";
+import {
+  startExtensionInstall,
+  getExtensionInstallJob,
+  subscribeExtensionInstall,
+} from "../../services/extensions/extensionInstallService";
 
 interface ExtensionMarketplaceModalProps {
   visible: boolean;
@@ -42,8 +46,7 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<ExtensionMarketplaceItem[]>([]);
   const [installedMap, setInstalledMap] = useState<Record<string, InstalledExtension>>({});
-  const [installingId, setInstallingId] = useState<string | null>(null);
-  const [installStatus, setInstallStatus] = useState<string>("");
+  const [, setInstallVersion] = useState(0);
   const [themesList, setThemesList] = useState<Array<{ id: string; label: string }>>([]);
 
   const searchTimer = useRef<any>(null);
@@ -64,8 +67,15 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
     if (visible) {
       refreshRegistry();
       executeSearch("");
-      const unsub = subscribeExtensionRegistry(refreshRegistry);
-      return () => { unsub(); };
+      const unsubReg = subscribeExtensionRegistry(refreshRegistry);
+      const unsubInstall = subscribeExtensionInstall(() => {
+        setInstallVersion((v) => v + 1);
+        refreshRegistry();
+      });
+      return () => {
+        unsubReg();
+        unsubInstall();
+      };
     }
   }, [visible, refreshRegistry, executeSearch]);
 
@@ -78,24 +88,10 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
     }, 450);
   };
 
-  const handleInstall = async (item: ExtensionMarketplaceItem) => {
-    setInstallingId(item.id);
-    setInstallStatus("Downloading package...");
-    try {
-      await installExtension(item, (_percent, status) => {
-        setInstallStatus(status);
-      });
-      await refreshRegistry();
-      Alert.alert(
-        "Extension Installed",
-        `${item.displayName} is installed! Its themes and snippets are now active in the editor.`
-      );
-    } catch (e: any) {
-      Alert.alert("Installation Failed", e?.message || "Could not install extension.");
-    } finally {
-      setInstallingId(null);
-      setInstallStatus("");
-    }
+  const handleInstall = (item: ExtensionMarketplaceItem) => {
+    startExtensionInstall(item, () => {
+      refreshRegistry();
+    });
   };
 
   const handleUninstall = (id: string, name: string) => {
@@ -177,18 +173,20 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
 
           {/* Search bar (Marketplace tab) */}
           {activeTab === "marketplace" && (
-            <View style={[styles.searchRow, { backgroundColor: theme.bgInput, borderColor: theme.border }]}>
-              <Ionicons name="search" size={16} color={theme.textMuted} />
-              <TextInput
-                style={[styles.searchInput, { color: theme.textPrimary }]}
-                placeholder="Search extensions (e.g. dracula, react snippets)..."
-                placeholderTextColor={theme.textMuted}
-                value={searchQuery}
-                onChangeText={handleSearchChange}
-                autoCapitalize="none"
-              />
-              {loading && <ActivityIndicator size="small" color={theme.accent} />}
-            </View>
+            <>
+              <View style={[styles.searchRow, { backgroundColor: theme.bgInput, borderColor: theme.border }]}>
+                <Ionicons name="search" size={16} color={theme.textMuted} />
+                <TextInput
+                  style={[styles.searchInput, { color: theme.textPrimary }]}
+                  placeholder="Search extensions (e.g. java, python, themes)..."
+                  placeholderTextColor={theme.textMuted}
+                  value={searchQuery}
+                  onChangeText={handleSearchChange}
+                  autoCapitalize="none"
+                />
+                {loading && <ActivityIndicator size="small" color={theme.accent} />}
+              </View>
+            </>
           )}
 
           {/* Content Lists */}
@@ -199,7 +197,9 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
               contentContainerStyle={styles.listContent}
               renderItem={({ item }) => {
                 const isInstalled = !!installedMap[item.id];
-                const isInstalling = installingId === item.id;
+                const installJob = getExtensionInstallJob(item.id);
+                const isInstalling = Boolean(installJob && !installJob.done);
+                const installStatus = installJob?.status || "Installing...";
 
                 return (
                   <View style={[styles.card, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>

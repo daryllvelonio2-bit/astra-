@@ -87,6 +87,7 @@ export interface EditorSettings {
   autoCloseQuotes: boolean;
   autoIndentOnEnter: boolean;
   enableCompletions: boolean;
+  formatOnSave: boolean;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -95,6 +96,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   autoCloseQuotes: true,
   autoIndentOnEnter: true,
   enableCompletions: true,
+  formatOnSave: true,
 };
 
 

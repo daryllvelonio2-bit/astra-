@@ -105,6 +105,99 @@ const BUILTIN_GRAMMARS: LanguageGrammar[] = [
     ]),
     types: new Set(["int", "str", "float", "bool", "list", "dict", "set", "tuple", "bytes"]),
   },
+  {
+    id: "html",
+    name: "HTML & XML",
+    extensions: ["html", "htm", "xml", "svg", "plist"],
+    lineComment: "<!--",
+    keywords: new Set([
+      "html", "head", "body", "div", "span", "p", "a", "img", "script", "style",
+      "meta", "link", "title", "button", "input", "form", "textarea", "select",
+      "option", "table", "tr", "td", "th", "ul", "ol", "li", "h1", "h2", "h3",
+      "h4", "h5", "h6", "section", "article", "nav", "header", "footer", "main",
+      "class", "id", "src", "href", "type", "rel", "name", "value", "target",
+    ]),
+  },
+  {
+    id: "css",
+    name: "CSS & SCSS",
+    extensions: ["css", "scss", "less"],
+    lineComment: "/*",
+    keywords: new Set([
+      "color", "background", "margin", "padding", "border", "font", "display",
+      "position", "width", "height", "top", "bottom", "left", "right", "flex",
+      "grid", "align", "justify", "transform", "transition", "animation", "opacity",
+      "important", "media", "keyframes", "hover", "active", "focus", "before", "after",
+    ]),
+  },
+  {
+    id: "json",
+    name: "JSON",
+    extensions: ["json", "jsonc"],
+    lineComment: "//",
+    keywords: new Set(["true", "false", "null"]),
+  },
+  {
+    id: "shell",
+    name: "Shell & Bash",
+    extensions: ["sh", "bash", "zsh"],
+    lineComment: "#",
+    keywords: new Set([
+      "if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until",
+      "do", "done", "in", "function", "select", "time", "export", "source", "alias",
+      "echo", "read", "exit", "return", "local", "set", "unset", "cd", "pwd",
+    ]),
+  },
+  {
+    id: "markdown",
+    name: "Markdown",
+    extensions: ["md", "markdown"],
+    lineComment: "<!--",
+    keywords: new Set(["http", "https", "link", "image"]),
+  },
+  {
+    id: "php",
+    name: "PHP",
+    extensions: ["php"],
+    lineComment: "//",
+    keywords: new Set([
+      "php", "echo", "print", "function", "class", "public", "private", "protected",
+      "static", "return", "if", "else", "elseif", "while", "for", "foreach", "as",
+      "switch", "case", "break", "continue", "try", "catch", "finally", "throw",
+      "new", "namespace", "use", "extends", "implements", "var", "const",
+    ]),
+  },
+  {
+    id: "dart",
+    name: "Dart",
+    extensions: ["dart"],
+    lineComment: "//",
+    keywords: new Set([
+      "class", "enum", "extends", "implements", "mixin", "with", "abstract",
+      "factory", "final", "const", "var", "void", "import", "export", "library",
+      "part", "async", "await", "yield", "if", "else", "for", "while", "do",
+      "switch", "case", "break", "continue", "return", "try", "catch", "finally",
+      "throw", "new", "this", "super", "is", "as", "get", "set", "late", "required",
+    ]),
+  },
+  {
+    id: "csharp",
+    name: "C#",
+    extensions: ["cs"],
+    lineComment: "//",
+    keywords: new Set([
+      "abstract", "as", "async", "await", "base", "bool", "break", "byte", "case",
+      "catch", "char", "checked", "class", "const", "continue", "decimal", "default",
+      "delegate", "do", "double", "else", "enum", "event", "explicit", "extern",
+      "false", "finally", "fixed", "float", "for", "foreach", "goto", "if",
+      "implicit", "in", "int", "interface", "internal", "is", "lock", "long",
+      "namespace", "new", "null", "object", "operator", "out", "override", "params",
+      "private", "protected", "public", "readonly", "ref", "return", "sbyte",
+      "sealed", "short", "sizeof", "stackalloc", "static", "string", "struct",
+      "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong",
+      "unchecked", "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+    ]),
+  },
 ];
 
 const EXT_TO_GRAMMAR = new Map<string, LanguageGrammar>();
@@ -112,6 +205,10 @@ for (const g of BUILTIN_GRAMMARS) {
   for (const ext of g.extensions) {
     EXT_TO_GRAMMAR.set(ext.toLowerCase(), g);
   }
+}
+
+export function registerExtensionGrammar(ext: string, grammar: LanguageGrammar) {
+  EXT_TO_GRAMMAR.set(ext.toLowerCase().replace(/^\./, ""), grammar);
 }
 
 export function getGrammarForExtension(extOrFileName?: string): LanguageGrammar | null {

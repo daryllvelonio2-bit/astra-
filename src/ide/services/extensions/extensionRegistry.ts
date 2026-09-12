@@ -11,6 +11,7 @@ import { deletePath, makeDir, writeFileText } from "../nativeFs";
 import { convertVsCodeThemeToThemeColors } from "./themeAdapter";
 import type { ThemeColors } from "../../../theme/themeContext";
 import { saveTheme } from "../configService";
+import { checkAndInstallMissingRuntimesForInstalledExtensions } from "./extensionRuntimeService";
 
 function getRegistryFilePath(): string {
   const base = FileSystem.documentDirectory || "/data/user/0/com.janelle.aicoder/files/";
@@ -37,11 +38,25 @@ function notifyListeners(state: ExtensionRegistryState) {
   });
 }
 
+let hasCheckedRuntimes = false;
+
+function triggerBackgroundRuntimeCheck(installed?: Record<string, InstalledExtension>) {
+  if (hasCheckedRuntimes || !installed) return;
+  hasCheckedRuntimes = true;
+  const exts = Object.values(installed);
+  setTimeout(() => {
+    checkAndInstallMissingRuntimesForInstalledExtensions(exts).catch(() => {});
+  }, 1200);
+}
+
 /**
  * Loads registry state from storage.
  */
 export async function loadExtensionRegistry(): Promise<ExtensionRegistryState> {
-  if (cachedState) return cachedState;
+  if (cachedState) {
+    triggerBackgroundRuntimeCheck(cachedState.installed);
+    return cachedState;
+  }
 
   const regPath = getRegistryFilePath();
   try {
@@ -53,6 +68,7 @@ export async function loadExtensionRegistry(): Promise<ExtensionRegistryState> {
         installed: parsed.installed || {},
         activeThemeId: parsed.activeThemeId,
       };
+      triggerBackgroundRuntimeCheck(cachedState.installed);
       return cachedState;
     }
   } catch {}
@@ -144,7 +160,7 @@ export async function getInstalledSnippets(fileExtension?: string): Promise<Exte
       for (const [key, val] of Object.entries(data)) {
         if (!val || !val.prefix) continue;
 
-        // Check if snippet matches file extension / language if specified
+        // Check if snippet matches file extension via language container
         if (snip.language) {
           const lang = snip.language.toLowerCase();
           if (extNorm && !isLanguageMatch(lang, extNorm)) {
@@ -152,12 +168,25 @@ export async function getInstalledSnippets(fileExtension?: string): Promise<Exte
           }
         }
 
-        allSnippets.push({
-          prefix: Array.isArray(val.prefix) ? val.prefix[0] : val.prefix,
-          body: val.body,
-          description: val.description || key,
-          scope: val.scope,
-        });
+        // Check if snippet matches file extension via scope definition
+        if (val.scope && typeof val.scope === "string" && extNorm) {
+          const scopes = val.scope.split(",").map((s: string) => s.trim().toLowerCase());
+          const matchesScope = scopes.some((s: string) => isLanguageMatch(s, extNorm));
+          if (!matchesScope) {
+            continue;
+          }
+        }
+
+        const prefixes: string[] = Array.isArray(val.prefix) ? val.prefix : [val.prefix];
+        for (const p of prefixes) {
+          if (!p) continue;
+          allSnippets.push({
+            prefix: p,
+            body: val.body,
+            description: val.description || key,
+            scope: val.scope,
+          });
+        }
       }
     }
   }
@@ -166,22 +195,41 @@ export async function getInstalledSnippets(fileExtension?: string): Promise<Exte
 }
 
 function isLanguageMatch(snippetLang: string, fileExt: string): boolean {
+  const cleanLang = snippetLang.replace(/^(source|text)\./, "").toLowerCase();
   const map: Record<string, string[]> = {
     javascript: ["js", "jsx", "mjs"],
     typescript: ["ts", "tsx"],
     javascriptreact: ["jsx", "tsx", "js"],
     typescriptreact: ["tsx", "ts"],
-    python: ["py"],
+    python: ["py", "pyw"],
     rust: ["rs"],
     go: ["go"],
     c: ["c", "h"],
     cpp: ["cpp", "hpp", "cc", "cxx"],
+    java: ["java"],
+    kotlin: ["kt", "kts"],
+    csharp: ["cs"],
+    php: ["php"],
+    ruby: ["rb"],
+    dart: ["dart"],
+    shellscript: ["sh", "bash", "zsh"],
+    shell: ["sh", "bash", "zsh"],
+    bash: ["sh", "bash", "zsh"],
+    markdown: ["md", "markdown"],
+    xml: ["xml", "svg", "plist"],
+    yaml: ["yaml", "yml"],
+    sql: ["sql"],
+    vue: ["vue"],
+    svelte: ["svelte"],
     html: ["html", "htm"],
     css: ["css", "scss", "less"],
-    json: ["json"],
+    scss: ["scss"],
+    less: ["less"],
+    json: ["json", "jsonc"],
+    jsonc: ["json", "jsonc"],
   };
 
-  const matches = map[snippetLang] || [snippetLang];
+  const matches = map[cleanLang] || [cleanLang];
   return matches.includes(fileExt);
 }
 

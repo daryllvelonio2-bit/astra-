@@ -215,6 +215,12 @@ export const XtermView = memo(
     if (msg.type === "ready") {
       handleReady();
     } else if (msg.type === "data" && typeof msg.data === "string") {
+      // Drop automated escape sequence responses (Cursor Position Report ^[[...R,
+      // Device Attributes ^[[?...c, Status reports ^[[...n) so they never leak into
+      // the shell's stdin or echo as raw control characters on screen.
+      if (/^\x1b\[\??[0-9;]*[Rrcnt]$/.test(msg.data)) {
+        return;
+      }
       writeTerminalInput(sessionRef.current, msg.data);
     } else if (
       msg.type === "resize" &&

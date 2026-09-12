@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { TextInput } from "react-native";
 import { diffNativeText } from "./terminalBuffer";
+import { ideActionService } from "../../services/ideActionService";
 
 interface UseTerminalInputOptions {
   isXterm: boolean;
@@ -37,8 +38,18 @@ export function useTerminalInput({
   }, []);
 
   const lastNativeRef = useRef<string>(" ");
+  const stalePrefixRef = useRef<string>("");
+
   const resetCatcher = useCallback(() => {
+    // Record current native text as stale prefix so Android IME composition
+    // ghost buffering from the launched command is recognized and stripped.
+    if (lastNativeRef.current && lastNativeRef.current.trim()) {
+      stalePrefixRef.current = lastNativeRef.current;
+    }
     lastNativeRef.current = " ";
+    try {
+      inputRef.current?.clear();
+    } catch (_) {}
     try {
       inputRef.current?.setNativeProps({ text: " " });
     } catch (_) {}
@@ -131,12 +142,6 @@ export function useTerminalInput({
 
       if (text === "") {
         resetCatcher();
-      } else if (text.length > 250) {
-        const tail = " " + text.slice(-100);
-        lastNativeRef.current = tail;
-        try {
-          inputRef.current?.setNativeProps({ text: tail });
-        } catch (_) {}
       } else {
         lastNativeRef.current = text;
       }
@@ -152,8 +157,14 @@ export function useTerminalInput({
         sendInput("\x7f".repeat(Math.min(removed, 256)));
       }
 
-      if (added === "\n" || added === "\r\n") {
-        sendEnter();
+      if (added.includes("\n") || added.includes("\r")) {
+        const parts = added.split(/[\r\n]+/);
+        const trailing = /[\r\n]$/.test(added) ? "" : parts.pop() || "";
+        for (const seg of parts) {
+          if (seg) sendInput(seg);
+          sendEnter();
+        }
+        if (trailing) sendInput(trailing);
         return;
       }
 
@@ -169,12 +180,6 @@ export function useTerminalInput({
 
       if (text === "") {
         resetCatcher();
-      } else if (text.length > 250) {
-        const tail = " " + text.slice(-100);
-        lastNativeRef.current = tail;
-        try {
-          inputRef.current?.setNativeProps({ text: tail });
-        } catch (_) {}
       } else {
         lastNativeRef.current = text;
       }
@@ -184,13 +189,79 @@ export function useTerminalInput({
 
   const handleDirectInput = useCallback(
     (text: string) => {
+      // Android IME ghost buffer defense:
+      // When a command was just submitted or launched, Android keyboards (Gboard, etc.)
+      // frequently retain the old command in their composition cache and fire onChangeText
+      // with "[stale_command][new_char]". Detect and strip that stale command prefix.
+      const stale = stalePrefixRef.current;
+      const staleTrimmed = stale.trim();
+
+      if (staleTrimmed && lastNativeRef.current === " ") {
+        if (
+          text.startsWith(stale) ||
+          text.startsWith(staleTrimmed) ||
+          text.trim().startsWith(staleTrimmed)
+        ) {
+          const idx = text.indexOf(staleTrimmed);
+          const newAdded = text.slice(idx + staleTrimmed.length);
+          lastNativeRef.current = text;
+          stalePrefixRef.current = text;
+          if (!newAdded) {
+            // Echo of identical old command with 0 new characters: ignore!
+            return;
+          }
+          if (isXterm) {
+            if (newAdded.includes("\n") || newAdded.includes("\r")) {
+              const parts = newAdded.split(/[\r\n]+/);
+              const trailing = /[\r\n]$/.test(newAdded) ? "" : parts.pop() || "";
+              for (const seg of parts) {
+                if (seg) sendInput(seg);
+                sendEnter();
+              }
+              if (trailing) sendInput(trailing);
+            } else {
+              sendInput(newAdded);
+            }
+          } else {
+            if (newAdded.includes("\n") || newAdded.includes("\r")) {
+              const parts = newAdded.split(/[\r\n]+/);
+              const trailing = /[\r\n]$/.test(newAdded) ? "" : parts.pop() || "";
+              for (const seg of parts) {
+                setEchoInput(seg);
+                submitCurrentInput();
+              }
+              setEchoInput(trailing);
+            } else {
+              setEchoInput(currentInputRef.current + newAdded);
+            }
+          }
+          return;
+        } else if (staleTrimmed.startsWith(text.trim()) && text.trim().length > 0) {
+          // User is backspacing into stale ghost buffer: absorb without sending junk
+          lastNativeRef.current = text;
+          stalePrefixRef.current = text;
+          return;
+        } else {
+          // Native clear succeeded or fresh text arrived
+          stalePrefixRef.current = "";
+        }
+      }
+
       if (isXterm) {
         handleXtermInput(text);
         return;
       }
       handlePipeInput(text);
     },
-    [isXterm, handleXtermInput, handlePipeInput]
+    [
+      isXterm,
+      handleXtermInput,
+      handlePipeInput,
+      sendInput,
+      sendEnter,
+      submitCurrentInput,
+      setEchoInput,
+    ]
   );
 
   const handleExtraPrintable = useCallback(
@@ -258,8 +329,18 @@ export function useTerminalInput({
   }, [resetCatcher, setEchoInput]);
 
   useEffect(() => {
-    resetCatcher();
-  }, [activeSessionId, resetCatcher]);
+    clearInput();
+  }, [activeSessionId, clearInput]);
+
+  useEffect(() => {
+    const unsub = ideActionService.subscribe("RUN_IN_TERMINAL", ({ command }) => {
+      if (command && command.trim()) {
+        stalePrefixRef.current = command.trim();
+      }
+      clearInput();
+    });
+    return unsub;
+  }, [clearInput]);
 
   return {
     currentInput,

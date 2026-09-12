@@ -15,6 +15,13 @@ import {
 } from "../../../modules/linux-runner/src";
 
 export {
+  readDirectoryNative,
+  getFileInfoNative,
+  readFileNative,
+  writeFileNative,
+  makeDirectoryNative,
+  deletePathNative,
+  movePathNative,
   hasAllFilesPermission,
   requestAllFilesPermission,
   NativeDirEntry,

@@ -15,6 +15,8 @@ interface EditorTabBarProps {
   warningCount?: number;
   onShowProblems?: () => void;
   onOpenSettings?: () => void;
+  onFormat?: () => void;
+  isFormatting?: boolean;
 }
 
 export function EditorTabBar({
@@ -29,6 +31,8 @@ export function EditorTabBar({
   warningCount = 0,
   onShowProblems,
   onOpenSettings,
+  onFormat,
+  isFormatting = false,
 }: EditorTabBarProps) {
   const { theme } = useTheme();
   const [showDropdown, setShowDropdown] = useState(false);
@@ -36,7 +40,7 @@ export function EditorTabBar({
 
   // Narrow editor (sidebar open / small screen): collapse secondary actions
   // into the overflow menu so buttons never squeeze or overlap.
-  const hasOverflowMenu = !!onExitProject || !!onOpenSettings;
+  const hasOverflowMenu = !!onExitProject || !!onOpenSettings || !!onFormat;
   const narrow = barWidth > 0 && barWidth < 420;
   const collapseActions = narrow && hasOverflowMenu;
 
@@ -105,7 +109,20 @@ export function EditorTabBar({
             <Ionicons name="play" size={16} color={theme.accentGreen} />
           </TouchableOpacity>
         )}
-        {(onExitProject || onOpenSettings) && (
+        {fileName && onFormat && !narrow && (
+          <TouchableOpacity
+            style={styles.actionIconBtn}
+            onPress={onFormat}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons
+              name={isFormatting ? "sparkles" : "sparkles-outline"}
+              size={16}
+              color={isFormatting ? theme.accentGreen : theme.accent}
+            />
+          </TouchableOpacity>
+        )}
+        {(onExitProject || onOpenSettings || onFormat) && (
           <TouchableOpacity onPress={() => setShowDropdown(true)} style={styles.actionIconBtn}>
             <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
           </TouchableOpacity>
@@ -121,6 +138,23 @@ export function EditorTabBar({
             onPress={() => setShowDropdown(false)}
           />
           <View style={[styles.dropdownBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
+            {onFormat && (
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setShowDropdown(false);
+                  onFormat();
+                }}
+              >
+                <Ionicons
+                  name={isFormatting ? "sparkles" : "sparkles-outline"}
+                  size={16}
+                  color={isFormatting ? theme.accentGreen : theme.accent}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={[styles.dropdownItemText, { color: theme.textPrimary }]}>Format Document</Text>
+              </TouchableOpacity>
+            )}
             {onOpenSettings && (
               <TouchableOpacity
                 style={styles.dropdownItem}

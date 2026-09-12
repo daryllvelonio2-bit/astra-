@@ -1,17 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
-  View,
-  TextInput,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-  Keyboard,
-  Dimensions,
-  GestureResponderEvent,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  View, TextInput, StyleSheet, Text, TouchableOpacity, ScrollView, Platform,
+  Keyboard, Dimensions, GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { EditorTabBar } from "./EditorTabBar";
@@ -28,6 +18,7 @@ import { useEditorCompletions } from "./editor/useEditorCompletions";
 import { CompletionBar } from "./editor/CompletionBar";
 import { EditorEmptyState } from "./editor/EditorEmptyState";
 import { useEditorKeyboardPad } from "./editor/useEditorKeyboardPad";
+import { useEditorFormatting } from "./editor/useEditorFormatting";
 import { useTheme } from "../../theme/themeContext";
 
 interface EditorViewProps {
@@ -219,9 +210,17 @@ export function EditorView({
     textInputRef.current?.focus();
   };
 
+  const { isFormatting, formatToast, format, onDoneEditing: onDoneWithFormat } = useEditorFormatting({
+    contentRef,
+    fileName,
+    tabSize: editorSettings.tabSize,
+    formatOnSave: editorSettings.formatOnSave,
+    onChangeContent,
+  });
+
   const handleDoneEditing = () => {
     setIsEditing(false);
-    Keyboard.dismiss();
+    onDoneWithFormat(() => Keyboard.dismiss());
   };
 
   const handleTextChangeInWindow = (newChunkText: string) => {
@@ -344,10 +343,20 @@ export function EditorView({
         onExitProject={onExitProject}
         onToggleSidebar={onToggleSidebar}
         onOpenSettings={onOpenSettings}
+        onFormat={format}
+        isFormatting={isFormatting}
         errorCount={assists.errorCount}
         warningCount={assists.warningCount}
         onShowProblems={handleShowProblems}
       />
+
+      {/* Floating Format Toast / Banner */}
+      {formatToast && (
+        <View style={[styles.formatToast, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}>
+          <Ionicons name="sparkles" size={11} color={theme.accentGreen} style={{ marginRight: 6 }} />
+          <Text style={[styles.formatToastText, { color: theme.textPrimary }]}>{formatToast}</Text>
+        </View>
+      )}
 
       {/* Editor Body with Strict Sliding Window Virtualization */}
       <ScrollView
@@ -451,43 +460,24 @@ export function EditorView({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    position: "relative",
-  },
-  editorScroll: {
-    flex: 1,
-  },
-  editorScrollContent: {
-    flexGrow: 1,
-  },
-  bracketBar: {
+  container: { flex: 1, position: "relative" },
+  editorScroll: { flex: 1 },
+  editorScrollContent: { flexGrow: 1 },
+  formatToast: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 3,
-    borderTopWidth: 1,
+    borderBottomWidth: 1,
   },
-  bracketBarText: {
-    fontFamily: FONT_FAMILY,
-    fontSize: 10.5,
-    fontWeight: "600",
-  },
-  errorBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderTopWidth: 1,
-  },
-  errorBarText: {
-    flex: 1,
+  formatToastText: {
     fontSize: 11,
     fontFamily: FONT_FAMILY,
     fontWeight: "600",
   },
-  errorBarHint: {
-    fontSize: 10,
-    marginLeft: 8,
-  },
+  bracketBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 3, borderTopWidth: 1 },
+  bracketBarText: { fontFamily: FONT_FAMILY, fontSize: 10.5, fontWeight: "600" },
+  errorBar: { flexDirection: "row", alignItems: "center", paddingVertical: 5, paddingHorizontal: 10, borderTopWidth: 1 },
+  errorBarText: { flex: 1, fontSize: 11, fontFamily: FONT_FAMILY, fontWeight: "600" },
+  errorBarHint: { fontSize: 10, marginLeft: 8 },
 });

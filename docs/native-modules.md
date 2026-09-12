@@ -20,7 +20,6 @@ permissions, clipboard, and system-overlay control. JS surface is split into
 | `ProcessTreeKiller.kt` | Host-side tree kill via `/proc` PPID snapshots, app-UID only, TERM-then-KILL |
 | `EnvironmentAstraHelper.kt` | Unpacks `astra-cli.tar[.gz]` from APK assets into the guest, purges legacy CLIs |
 | `NativeFileSystemHelper.kt` | Synchronous read/write/mkdir/move/delete + `MANAGE_EXTERNAL_STORAGE` handling |
-| `FloatingOverlayService.kt` | Chathead system overlay |
 
 ## `modules/voice-input` (Android, Expo)
 

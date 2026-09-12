@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, Switch, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemeColors } from "../../../theme/themeContext";
 import { EditorSettings } from "../../services/configService";
 import { ExtensionMarketplaceModal } from "../extensions/ExtensionMarketplaceModal";
+import { getActiveFormatters } from "../../services/formatService";
+import { InstalledExtension } from "../../services/extensions/types";
 
 interface EditorSectionProps {
   keyboardMouseMode: boolean;
@@ -21,14 +23,21 @@ export function EditorSection({
   theme,
 }: EditorSectionProps) {
   const [showExtensionsModal, setShowExtensionsModal] = useState(false);
+  const [formatters, setFormatters] = useState<InstalledExtension[]>([]);
 
+  useEffect(() => {
+    getActiveFormatters().then(setFormatters);
+  }, [showExtensionsModal]);
 
-
+  const hasFormatters = formatters.length > 0;
+  const formatterNames = hasFormatters
+    ? formatters.map((f) => f.displayName).join(", ")
+    : "Built-in intelligent formatter";
 
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>
-        EXTENSIONS & MARKETPLACE
+        EXTENSIONS & CODE FORMATTING
       </Text>
 
       {/* VS Code Extensions Marketplace */}
@@ -50,86 +59,201 @@ export function EditorSection({
           </View>
           <View style={styles.textCol}>
             <View style={styles.titleRow}>
-              <Text style={[styles.title, { color: theme.textPrimary }]}>VS Code Extensions</Text>
+              <Text style={[styles.title, { color: theme.textPrimary }]}>Extensions & Themes</Text>
               <View style={[styles.activeBadge, { backgroundColor: `${theme.accent}20` }]}>
                 <Text style={[styles.activeBadgeText, { color: theme.accent }]}>Marketplace</Text>
               </View>
             </View>
             <Text style={[styles.description, { color: theme.textMuted }]}>
-              Install real themes, snippets, and grammars directly from Open VSX without VS Code Web.
+              Install themes, formatters (Prettier, Black, Clang-Format), and snippets from Open VSX.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={theme.accent} />
         </View>
       </TouchableOpacity>
- 
-       <Text style={[styles.sectionHeading, { color: theme.textMuted, marginTop: 12 }]}>
-         HARDWARE INPUT & PERIPHERALS
-       </Text>
- 
-       <View
-         style={[
-           styles.card,
-           {
-             backgroundColor: theme.bgPrimary,
-             borderColor: keyboardMouseMode ? theme.accentGreen : theme.border,
-             borderWidth: keyboardMouseMode ? 1.5 : 1,
-           },
-         ]}
-       >
-         <View style={styles.row}>
-           <View
-             style={[
-               styles.iconBox,
-               {
-                 backgroundColor: keyboardMouseMode
-                   ? `${theme.accentGreen}20`
-                   : `${theme.accent}15`,
-               },
-             ]}
-           >
-             <Ionicons
-               name="hardware-chip-outline"
-               size={18}
-               color={keyboardMouseMode ? theme.accentGreen : theme.accent}
-             />
-           </View>
-           <View style={styles.textCol}>
-             <View style={styles.titleRow}>
-               <Text style={[styles.title, { color: theme.textPrimary }]}>
-                 Keyboard & Mouse Mode
-               </Text>
-               {keyboardMouseMode && (
-                 <View
-                   style={[
-                     styles.activeBadge,
-                     { backgroundColor: `${theme.accentGreen}20` },
-                   ]}
-                 >
-                   <Text style={[styles.activeBadgeText, { color: theme.accentGreen }]}>
-                     Active
-                   </Text>
-                 </View>
-               )}
-             </View>
-             <Text style={[styles.description, { color: theme.textMuted }]}>
-               Disables the virtual on-screen keyboard from ever popping up. Recommended when using an external USB or Bluetooth physical keyboard and mouse.
-             </Text>
-           </View>
-           <Switch
-             value={keyboardMouseMode}
-             onValueChange={onChangeKeyboardMouseMode}
-             trackColor={{ false: theme.border, true: `${theme.accentGreen}80` }}
-             thumbColor={keyboardMouseMode ? theme.accentGreen : theme.textMuted}
-           />
-         </View>
-       </View>
- 
-       <ExtensionMarketplaceModal
-         visible={showExtensionsModal}
-         onClose={() => setShowExtensionsModal(false)}
-       />
 
+      {/* Formatter Status Card */}
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.bgPrimary,
+            borderColor: hasFormatters ? theme.accentGreen : theme.border,
+            borderWidth: hasFormatters ? 1.5 : 1,
+          },
+        ]}
+      >
+        <View style={styles.row}>
+          <View
+            style={[
+              styles.iconBox,
+              { backgroundColor: hasFormatters ? `${theme.accentGreen}20` : `${theme.accent}15` },
+            ]}
+          >
+            <Ionicons
+              name="sparkles"
+              size={18}
+              color={hasFormatters ? theme.accentGreen : theme.accent}
+            />
+          </View>
+          <View style={styles.textCol}>
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, { color: theme.textPrimary }]}>Code Formatter</Text>
+              <View
+                style={[
+                  styles.activeBadge,
+                  { backgroundColor: hasFormatters ? `${theme.accentGreen}20` : `${theme.accent}20` },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.activeBadgeText,
+                    { color: hasFormatters ? theme.accentGreen : theme.accent },
+                  ]}
+                >
+                  {hasFormatters ? "Active" : "Default"}
+                </Text>
+              </View>
+            </View>
+            <Text style={[styles.description, { color: theme.textMuted }]}>
+              {formatterNames}
+            </Text>
+          </View>
+          {!hasFormatters && (
+            <TouchableOpacity
+              onPress={() => setShowExtensionsModal(true)}
+              style={[styles.smallBtn, { backgroundColor: `${theme.accent}20` }]}
+            >
+              <Text style={[styles.smallBtnText, { color: theme.accent }]}>Add</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Format on Save Toggle */}
+      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
+        <View style={styles.row}>
+          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
+            <Ionicons name="save-outline" size={18} color={theme.accent} />
+          </View>
+          <View style={styles.textCol}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>Format on Save</Text>
+            <Text style={[styles.description, { color: theme.textMuted }]}>
+              Automatically format code with active formatters when exiting edit mode.
+            </Text>
+          </View>
+          <Switch
+            value={editorSettings.formatOnSave !== false}
+            onValueChange={(val) => onChangeEditorSettings({ ...editorSettings, formatOnSave: val })}
+            trackColor={{ false: theme.border, true: `${theme.accentGreen}80` }}
+            thumbColor={editorSettings.formatOnSave !== false ? theme.accentGreen : theme.textMuted}
+          />
+        </View>
+      </View>
+
+      {/* Tab Indentation Size */}
+      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
+        <View style={styles.row}>
+          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
+            <Ionicons name="code-working-outline" size={18} color={theme.accent} />
+          </View>
+          <View style={styles.textCol}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>Tab Indent Size</Text>
+            <Text style={[styles.description, { color: theme.textMuted }]}>
+              Spaces used for tab indent and formatting: {editorSettings.tabSize || 2} spaces
+            </Text>
+          </View>
+          <View style={styles.tabToggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.tabToggleBtn,
+                { borderColor: theme.border },
+                (editorSettings.tabSize || 2) === 2 && { backgroundColor: theme.accent, borderColor: theme.accent },
+              ]}
+              onPress={() => onChangeEditorSettings({ ...editorSettings, tabSize: 2 })}
+            >
+              <Text style={[styles.tabToggleText, { color: (editorSettings.tabSize || 2) === 2 ? "#fff" : theme.textMuted }]}>2</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tabToggleBtn,
+                { borderColor: theme.border },
+                editorSettings.tabSize === 4 && { backgroundColor: theme.accent, borderColor: theme.accent },
+              ]}
+              onPress={() => onChangeEditorSettings({ ...editorSettings, tabSize: 4 })}
+            >
+              <Text style={[styles.tabToggleText, { color: editorSettings.tabSize === 4 ? "#fff" : theme.textMuted }]}>4</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      <Text style={[styles.sectionHeading, { color: theme.textMuted, marginTop: 12 }]}>
+        HARDWARE INPUT & PERIPHERALS
+      </Text>
+
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.bgPrimary,
+            borderColor: keyboardMouseMode ? theme.accentGreen : theme.border,
+            borderWidth: keyboardMouseMode ? 1.5 : 1,
+          },
+        ]}
+      >
+        <View style={styles.row}>
+          <View
+            style={[
+              styles.iconBox,
+              {
+                backgroundColor: keyboardMouseMode
+                  ? `${theme.accentGreen}20`
+                  : `${theme.accent}15`,
+              },
+            ]}
+          >
+            <Ionicons
+              name="hardware-chip-outline"
+              size={18}
+              color={keyboardMouseMode ? theme.accentGreen : theme.accent}
+            />
+          </View>
+          <View style={styles.textCol}>
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, { color: theme.textPrimary }]}>
+                Keyboard & Mouse Mode
+              </Text>
+              {keyboardMouseMode && (
+                <View
+                  style={[
+                    styles.activeBadge,
+                    { backgroundColor: `${theme.accentGreen}20` },
+                  ]}
+                >
+                  <Text style={[styles.activeBadgeText, { color: theme.accentGreen }]}>
+                    Active
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.description, { color: theme.textMuted }]}>
+              Disables the virtual on-screen keyboard from ever popping up. Recommended when using an external USB or Bluetooth physical keyboard and mouse.
+            </Text>
+          </View>
+          <Switch
+            value={keyboardMouseMode}
+            onValueChange={onChangeKeyboardMouseMode}
+            trackColor={{ false: theme.border, true: `${theme.accentGreen}80` }}
+            thumbColor={keyboardMouseMode ? theme.accentGreen : theme.textMuted}
+          />
+        </View>
+      </View>
+
+      <ExtensionMarketplaceModal
+        visible={showExtensionsModal}
+        onClose={() => setShowExtensionsModal(false)}
+      />
     </View>
   );
 }
@@ -189,5 +313,28 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: "700",
     letterSpacing: 0.3,
+  },
+  smallBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  smallBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  tabToggleRow: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  tabToggleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  tabToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

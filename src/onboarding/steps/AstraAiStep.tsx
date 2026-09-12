@@ -16,16 +16,16 @@ const OPTIONS = [
     title: "Astra AI On",
     subtitle: "Full AI coding assistant",
     badge: "Recommended",
-    description: "Floating assistant button, fullscreen chat workspace, and Messenger-style chathead over other apps.",
-    features: ["Floating AI button in editor", "Fullscreen Astra chat", "Float-over-apps chathead"],
+    description: "Integrated AI assistant tab in your workspace navbar for code generation, chatting, and debugging.",
+    features: ["Astra AI tab in bottom navbar", "Autonomous coding & debugging", "Pair programmer in workspace"],
   },
   {
     enabled: false,
     title: "Astra AI Off",
     subtitle: "Distraction-free coding",
     badge: "Minimal",
-    description: "Hides every AI surface. Pure editor, terminal, and tools — no AI buttons, chat, or overlays.",
-    features: ["No AI buttons or popups", "Zero background AI usage", "Re-enable anytime in Settings"],
+    description: "Hides the AI assistant tab. Pure editor, terminal, and workspace tools.",
+    features: ["Hides AI tab from navbar", "Zero background AI usage", "Re-enable anytime in Settings"],
   },
 ] as const;
 

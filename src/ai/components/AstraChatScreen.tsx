@@ -6,12 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  StatusBar,
   Platform,
   Keyboard,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAccurateKeyboard } from "../../theme/useAccurateKeyboard";
 import { AgentMessageItem } from "./AgentMessageItem";
@@ -27,12 +25,10 @@ import { AstraLogo } from "./AstraLogo";
 import { useChatSession } from "./useChatSession";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTheme } from "../../theme/themeContext";
-import { ideActionService } from "../../ide/services/ideActionService";
-
 export interface AstraChatScreenProps {
   workspaceId?: string;
-  onNavigateToWorkspaces: () => void;
-  onNavigateToEditor: () => void;
+  onNavigateToWorkspaces?: () => void;
+  onNavigateToEditor?: () => void;
   onNavigateToTerminal?: () => void;
 }
 
@@ -43,26 +39,8 @@ export function AstraChatScreen({
   onNavigateToWorkspaces,
   onNavigateToEditor,
 }: AstraChatScreenProps) {
-  const insets = useSafeAreaInsets();
   const { keyboardOffset, isKeyboardVisible } = useAccurateKeyboard(4);
   const { theme, isMidnight } = useTheme();
-  const navigateToEditorRef = useRef(onNavigateToEditor);
-  navigateToEditorRef.current = onNavigateToEditor;
-
-  // Fullscreen chat has no editor — user-initiated file/browser/terminal taps
-  // navigate to the editor; the pending action is consumed there (sticky store).
-  useEffect(() => {
-    const goEditorIfUserTap = (p?: { userInitiated?: boolean }) => {
-      if (p?.userInitiated) navigateToEditorRef.current();
-    };
-    const unsubs = [
-      ideActionService.subscribe("OPEN_FILE", (p) => goEditorIfUserTap(p)),
-      ideActionService.subscribe("OPEN_BROWSER", (p) => goEditorIfUserTap(p)),
-      ideActionService.subscribe("OPEN_TERMINAL", (p) => goEditorIfUserTap(p)),
-      ideActionService.subscribe("SWITCH_TAB", (p) => goEditorIfUserTap(p)),
-    ];
-    return () => unsubs.forEach((u) => u());
-  }, []);
 
   const {
     workspace,
@@ -134,19 +112,13 @@ export function AstraChatScreen({
   const hiddenCount = Math.max(0, messages.length - renderLimit);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingTop: insets.top, paddingBottom: keyboardOffset }]}>
-      <StatusBar barStyle={theme.isDark ? "light-content" : "dark-content"} backgroundColor={theme.bgSecondary} />
+    <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingBottom: keyboardOffset }]}>
       <ChatHeader
         currentSession={currentSession}
         workspace={workspace}
         selectedModel={selectedModel}
         selectedCognitiveMode={selectedCognitiveMode}
         onOpenSessions={() => setShowSessionsModal(true)}
-        onOpenModelPicker={() => setShowModelPicker(true)}
-        onOpenCognitiveModes={() => setShowCognitiveModeModal(true)}
-        onCreateNewChat={handleCreateNewChat}
-        onNavigateToWorkspaces={onNavigateToWorkspaces}
-        onNavigateToEditor={onNavigateToEditor}
       />
 
       <ScrollView

@@ -8,6 +8,7 @@ import {
 } from "./types";
 import { writeFileText, makeDir } from "../nativeFs";
 import { executeCommand } from "../../../../modules/linux-runner/src";
+import { PRootService } from "../prootService";
 
 
 function getBaseExtensionDir(): string {
@@ -16,59 +17,127 @@ function getBaseExtensionDir(): string {
 }
 
 /**
+ * Robust JSONC parser that strips comments and trailing commas without breaking string contents.
+ */
+export function parseJsonc<T = any>(text: string): T {
+  const noComments = text.replace(/("(?:\\.|[^"\\])*")|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g, (match, str) => {
+    return str || "";
+  });
+  const noTrailingCommas = noComments.replace(/,(\s*[\]}])/g, "$1");
+  return JSON.parse(noTrailingCommas);
+}
+
+/**
  * Downloads a .vsix binary file and extracts its declarative assets (themes, snippets, grammars).
+ * Streams directly to disk to prevent React Native Hermes heap Out-Of-Memory (OOM) errors.
  */
 export async function downloadAndExtractVsix(
   item: ExtensionMarketplaceItem,
   onProgress?: (percent: number, status: string) => void
 ): Promise<InstalledExtension> {
+  // 1. Verify device storage before starting download
+  try {
+    const freeBytes = await FileSystem.getFreeDiskStorageAsync();
+    if (typeof freeBytes === "number" && freeBytes < 40 * 1024 * 1024) {
+      throw new Error(
+        `Insufficient device storage (${Math.round(freeBytes / 1024 / 1024)}MB free). Please free up disk space to install ${item.displayName}.`
+      );
+    }
+  } catch (err: any) {
+    if (err?.message?.includes("Insufficient device storage")) throw err;
+  }
+
   onProgress?.(10, "Downloading extension package...");
 
-  const response = await fetch(item.downloadUrl, {
+  const cleanId = item.id.replace(/[^A-Za-z0-9_.-]/g, "_");
+  const tmpDir = `${FileSystem.documentDirectory}tmp`;
+  await makeDir(tmpDir);
+  const tmpVsix = `${tmpDir}/${cleanId}.vsix`;
+
+  // Download directly to disk via native streaming (0 JS heap memory)
+  const downloadRes = await FileSystem.downloadAsync(item.downloadUrl, tmpVsix, {
     headers: { "User-Agent": "Astra-Mobile-IDE/1.0" },
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to download ${item.displayName}: HTTP ${response.status}`);
+  if (downloadRes.status < 200 || downloadRes.status >= 300) {
+    await FileSystem.deleteAsync(tmpVsix, { idempotent: true });
+    throw new Error(`Failed to download ${item.displayName}: HTTP ${downloadRes.status}`);
   }
 
-  onProgress?.(40, "Reading package binary...");
-  const arrayBuffer = await response.arrayBuffer();
-
-  onProgress?.(60, "Unpacking VSIX archive...");
-  const zip = await JSZip.loadAsync(arrayBuffer);
-
-  // Look for extension/package.json
-  const pkgFile = zip.file("extension/package.json") || zip.file("package.json");
-  if (!pkgFile) {
-    throw new Error("Invalid VSIX: package.json not found in archive");
-  }
-
-  const pkgJsonStr = await pkgFile.async("string");
-  const pkg = JSON.parse(pkgJsonStr);
+  onProgress?.(45, "Unpacking extension on disk...");
 
   const baseDir = getBaseExtensionDir();
   const installDir = `${baseDir}/${item.id}`;
   await makeDir(installDir);
 
-  const contributes = pkg.contributes || {};
+  let pkg: any = null;
+  let pkgJsonStr = "";
+  let usedNativeUnzip = false;
+  const binaries: string[] = [];
 
-  // 1. Process Themes
-  const rawThemes: any[] = Array.isArray(contributes.themes) ? contributes.themes : [];
+  // Ensure PRoot runtime is ready for zero-memory disk-based extraction
+  try {
+    await PRootService.ensureReady();
+  } catch (_) {}
+
+  // 2. Try extracting directly on disk via PRoot (unzip, python3 zipfile, or code-server CLI)
+  try {
+    const stageDir = `/tmp/ext_${cleanId}`;
+    await executeCommand(
+      `rm -rf "${stageDir}"; mkdir -p "${stageDir}" && (` +
+      `unzip -q -o "/tmp/${cleanId}.vsix" -d "${stageDir}" 2>/dev/null || ` +
+      `python3 -m zipfile -e "/tmp/${cleanId}.vsix" "${stageDir}" 2>/dev/null || ` +
+      `code-server --user-data-dir /root/.local/share/code-server --extensions-dir /root/.local/share/code-server/extensions --install-extension "/tmp/${cleanId}.vsix" --force 2>/dev/null || true)`
+    );
+
+    const stagePkg1 = `${tmpDir}/ext_${cleanId}/extension/package.json`;
+    const stagePkg2 = `${tmpDir}/ext_${cleanId}/package.json`;
+    const info1 = await FileSystem.getInfoAsync(stagePkg1);
+    const info2 = await FileSystem.getInfoAsync(stagePkg2);
+    const targetPkg = info1.exists ? stagePkg1 : info2.exists ? stagePkg2 : null;
+
+    if (targetPkg) {
+      pkgJsonStr = await FileSystem.readAsStringAsync(targetPkg);
+      pkg = parseJsonc(pkgJsonStr);
+      usedNativeUnzip = true;
+
+      onProgress?.(70, "Syncing assets to native IDE & VS Code...");
+
+      await executeCommand(
+        `mkdir -p "/extensions/${item.id}" "/root/.local/share/code-server/extensions/${item.id}"; ` +
+        `if [ -d "${stageDir}/extension" ]; then ` +
+        `  cp -rf "${stageDir}/extension/"* "/extensions/${item.id}/" 2>/dev/null || true; ` +
+        `  cp -rf "${stageDir}/extension/"* "/root/.local/share/code-server/extensions/${item.id}/" 2>/dev/null || true; ` +
+        `else ` +
+        `  cp -rf "${stageDir}/"* "/extensions/${item.id}/" 2>/dev/null || true; ` +
+        `  cp -rf "${stageDir}/"* "/root/.local/share/code-server/extensions/${item.id}/" 2>/dev/null || true; ` +
+        `fi; ` +
+        `if [ -d "${stageDir}/extension/bin" ]; then ` +
+        `  mkdir -p /root/.local/bin /usr/local/bin; ` +
+        `  for b in "${stageDir}/extension/bin/"*; do ` +
+        `    if [ -f "$b" ]; then ` +
+        `      bn=$(basename "$b"); ` +
+        `      chmod +x "$b"; ` +
+        `      cp -f "$b" "/usr/local/bin/$bn" 2>/dev/null || true; ` +
+        `      cp -f "$b" "/root/.local/bin/$bn" 2>/dev/null || true; ` +
+        `    fi; ` +
+        `  done; ` +
+        `fi; ` +
+        `rm -rf "${stageDir}" "/tmp/${cleanId}.vsix" 2>/dev/null || true`
+      );
+    }
+  } catch {}
+
   const themes: ExtensionTheme[] = [];
-  for (const t of rawThemes) {
-    const themePath = (t.path || "").replace(/^\.\//, "");
-    const zipPath = zip.file(`extension/${themePath}`)
-      ? `extension/${themePath}`
-      : zip.file(themePath)
-      ? themePath
-      : null;
+  const snippets: Array<{ language?: string; path: string }> = [];
 
-    if (zipPath) {
-      const content = await zip.file(zipPath)!.async("string");
-      const targetFile = `${installDir}/${themePath}`;
-      await writeFileText(targetFile, content);
+  if (usedNativeUnzip && pkg) {
+    const contributes = pkg.contributes || {};
+    const rawThemes: any[] = Array.isArray(contributes.themes) ? contributes.themes : [];
+    const rawSnippets: any[] = Array.isArray(contributes.snippets) ? contributes.snippets : [];
 
+    for (const t of rawThemes) {
+      const themePath = (t.path || "").replace(/^\.\//, "");
       themes.push({
         id: `${item.id}.${t.label || t.id || "theme"}`,
         label: t.label || t.id || "Custom Theme",
@@ -76,33 +145,73 @@ export async function downloadAndExtractVsix(
         path: themePath,
       });
     }
-  }
 
-  // 2. Process Snippets
-  const rawSnippets: any[] = Array.isArray(contributes.snippets) ? contributes.snippets : [];
-  const snippets: Array<{ language?: string; path: string }> = [];
-  for (const s of rawSnippets) {
-    const snipPath = (s.path || "").replace(/^\.\//, "");
-    const zipPath = zip.file(`extension/${snipPath}`)
-      ? `extension/${snipPath}`
-      : zip.file(snipPath)
-      ? snipPath
-      : null;
+    for (const s of rawSnippets) {
+      const snipPath = (s.path || "").replace(/^\.\//, "");
+      snippets.push({ language: s.language, path: snipPath });
+    }
+  } else {
+    // Fallback: JSZip for smaller packages if native extraction was unable to complete
+    const info = await FileSystem.getInfoAsync(tmpVsix);
+    const fileSize = info.exists ? (info.size || 0) : 0;
+    if (fileSize > 25 * 1024 * 1024) {
+      await FileSystem.deleteAsync(tmpVsix, { idempotent: true });
+      throw new Error(
+        `Unable to extract ${item.displayName}. Please verify device storage and ensure Linux environment is initialized.`
+      );
+    }
 
-    if (zipPath) {
-      const content = await zip.file(zipPath)!.async("string");
-      const targetFile = `${installDir}/${snipPath}`;
-      await writeFileText(targetFile, content);
+    const b64 = await FileSystem.readAsStringAsync(tmpVsix, { encoding: FileSystem.EncodingType.Base64 });
+    await FileSystem.deleteAsync(tmpVsix, { idempotent: true });
+    const zip = await JSZip.loadAsync(b64, { base64: true });
 
-      snippets.push({
-        language: s.language,
-        path: snipPath,
-      });
+    const pkgFile = zip.file("extension/package.json") || zip.file("package.json");
+    if (!pkgFile) {
+      throw new Error("Invalid VSIX: package.json not found in archive");
+    }
+
+    pkgJsonStr = await pkgFile.async("string");
+    pkg = JSON.parse(pkgJsonStr);
+    const contributes = pkg.contributes || {};
+    const rawThemes: any[] = Array.isArray(contributes.themes) ? contributes.themes : [];
+    for (const t of rawThemes) {
+      const themePath = (t.path || "").replace(/^\.\//, "");
+      const zipPath = zip.file(`extension/${themePath}`) ? `extension/${themePath}` : zip.file(themePath) ? themePath : null;
+      if (zipPath) {
+        const content = await zip.file(zipPath)!.async("string");
+        const targetFile = `${installDir}/${themePath}`;
+        const parentDir = targetFile.substring(0, targetFile.lastIndexOf("/"));
+        await makeDir(parentDir);
+        await writeFileText(targetFile, content);
+        themes.push({
+          id: `${item.id}.${t.label || t.id || "theme"}`,
+          label: t.label || t.id || "Custom Theme",
+          uiTheme: t.uiTheme || "vs-dark",
+          path: themePath,
+        });
+      }
+    }
+
+    const rawSnippets: any[] = Array.isArray(contributes.snippets) ? contributes.snippets : [];
+    for (const s of rawSnippets) {
+      const snipPath = (s.path || "").replace(/^\.\//, "");
+      const zipPath = zip.file(`extension/${snipPath}`) ? `extension/${snipPath}` : zip.file(snipPath) ? snipPath : null;
+      if (zipPath) {
+        const content = await zip.file(zipPath)!.async("string");
+        const targetFile = `${installDir}/${snipPath}`;
+        const parentDir = targetFile.substring(0, targetFile.lastIndexOf("/"));
+        await makeDir(parentDir);
+        await writeFileText(targetFile, content);
+        snippets.push({ language: s.language, path: snipPath });
+      }
     }
   }
 
-  // 3. Process Languages
-  const rawLanguages: any[] = Array.isArray(contributes.languages) ? contributes.languages : [];
+  // Save extension manifest to disk
+  await writeFileText(`${installDir}/package.json`, pkgJsonStr);
+  onProgress?.(100, "Installation complete!");
+
+  const rawLanguages: any[] = Array.isArray(pkg?.contributes?.languages) ? pkg.contributes.languages : [];
   const languages: ExtensionLanguageConfig[] = rawLanguages.map((l: any) => ({
     id: l.id,
     extensions: l.extensions,
@@ -111,115 +220,14 @@ export async function downloadAndExtractVsix(
     configuration: l.configuration,
   }));
 
-  // 4. Process Binaries & Executable Tools dynamically (e.g. extension/bin/*, pkg.bin)
-  const binaries: string[] = [];
-  const binDir = `${installDir}/bin`;
-  let hasBinDir = false;
-
-  const fileKeys = Object.keys(zip.files);
-  const candidateBinaryKeys = new Set<string>();
-
-  for (const k of fileKeys) {
-    if (zip.files[k].dir) continue;
-    if (
-      k.startsWith("extension/bin/") ||
-      k.startsWith("extension/binaries/") ||
-      k.startsWith("extension/tools/") ||
-      k.startsWith("extension/server/bin/")
-    ) {
-      candidateBinaryKeys.add(k);
-    }
-  }
-
-  // Also check package.json "bin" declaration if present
-  if (pkg.bin) {
-    if (typeof pkg.bin === "string") {
-      const rel = pkg.bin.replace(/^\.\//, "");
-      const key = `extension/${rel}`;
-      if (zip.files[key] && !zip.files[key].dir) candidateBinaryKeys.add(key);
-    } else if (typeof pkg.bin === "object") {
-      for (const val of Object.values(pkg.bin)) {
-        if (typeof val === "string") {
-          const rel = val.replace(/^\.\//, "");
-          const key = `extension/${rel}`;
-          if (zip.files[key] && !zip.files[key].dir) candidateBinaryKeys.add(key);
-        }
-      }
-    }
-  }
-
-  for (const k of candidateBinaryKeys) {
-    const fileName = k.split("/").pop();
-    if (!fileName) continue;
-
-    if (!hasBinDir) {
-      await makeDir(binDir);
-      hasBinDir = true;
-    }
-    const b64 = await zip.files[k].async("base64");
-    const targetBin = `${binDir}/${fileName}`;
-    await FileSystem.writeAsStringAsync(targetBin, b64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    binaries.push(fileName);
-
-    // Deploy binary directly to Linux PRoot environment
-    try {
-      // 1. Place in tmp/ so PRoot's /tmp mount can access it directly
-      const tmpBin = `${FileSystem.documentDirectory}tmp/${fileName}`;
-      await FileSystem.writeAsStringAsync(tmpBin, b64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // 2. Also write directly to alpine rootfs usr/local/bin if accessible
-      const alpineBin = `${FileSystem.documentDirectory}alpine/usr/local/bin/${fileName}`;
-      try {
-        await FileSystem.writeAsStringAsync(alpineBin, b64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-      } catch {}
-
-      // 3. Ensure permissions and paths in PRoot + glibc compatibility
-      await executeCommand(
-        `cp -f "/tmp/${fileName}" "/usr/local/bin/${fileName}" 2>/dev/null || true; ` +
-        `chmod +x "/usr/local/bin/${fileName}" 2>/dev/null || true; ` +
-        `mkdir -p "/root/.local/bin" 2>/dev/null || true; ` +
-        `cp -f "/tmp/${fileName}" "/root/.local/bin/${fileName}" 2>/dev/null || true; ` +
-        `chmod +x "/root/.local/bin/${fileName}" 2>/dev/null || true; ` +
-        `rm -f "/tmp/${fileName}" 2>/dev/null || true; ` +
-        `if ! apk info -e gcompat >/dev/null 2>&1; then apk add --no-cache gcompat 2>/dev/null || true; fi`
-      );
-    } catch {}
-  }
-
-  // Mirror into code-server extensions dir so VS Code Web also recognizes it
-  try {
-    const codeServerExtDir = `/root/.local/share/code-server/extensions/${item.id}`;
-    await executeCommand(
-      `mkdir -p "${codeServerExtDir}" && if [ -d "/extensions/${item.id}" ]; then cp -rf "/extensions/${item.id}/"* "${codeServerExtDir}/" 2>/dev/null || true; fi`
-    );
-  } catch {}
-
-  // Save extension manifest to disk
-  await writeFileText(`${installDir}/package.json`, pkgJsonStr);
-
-  onProgress?.(100, "Installation complete!");
-
-  // Extract categories and detect if extension is an AI coding agent
-  const categories: string[] = Array.isArray(pkg.categories) ? pkg.categories : [];
-  const keywords: string[] = Array.isArray(pkg.keywords) ? pkg.keywords : [];
-  const contributesChat = Boolean(pkg.contributes?.chatParticipants || pkg.contributes?.interactiveEditor);
-  const isAgentCategory = categories.some((c: string) => /ai|chat|machine learning/i.test(c));
-  const isAgentKeyword = keywords.some((k: string) => /agent|chat-participant|copilot|ai-assistant/i.test(k));
-  const isKnownAgent = /(cody|continue|cline|codeium|tabnine|copilot|chatgpt|claude|roo-code|aider)/i.test(item.id);
-  const isLinterOrTool = /linter|formatter|lsp|language server|pyrefly|typechecker/i.test(pkg.name || item.id);
-  const isAgent = Boolean((contributesChat || isAgentCategory || isAgentKeyword || isKnownAgent) && !isLinterOrTool);
+  const categories: string[] = Array.isArray(pkg?.categories) ? pkg.categories : [];
+  const keywords: string[] = Array.isArray(pkg?.keywords) ? pkg.keywords : [];
 
   return {
     id: item.id,
-    displayName: item.displayName || pkg.displayName || item.name,
-    description: item.description || pkg.description || "",
-    version: item.version || pkg.version || "1.0.0",
+    displayName: item.displayName || pkg?.displayName || item.name,
+    description: item.description || pkg?.description || "",
+    version: item.version || pkg?.version || "1.0.0",
     publisher: item.publisher || item.namespace,
     iconUrl: item.iconUrl,
     enabled: true,
@@ -231,22 +239,46 @@ export async function downloadAndExtractVsix(
     binaries,
     categories,
     keywords,
-    isAgent,
+    isAgent: false,
   };
 }
 
 
 /**
- * Reads a JSON file from an installed extension directory.
+ * Reads and parses a JSON/JSONC file from an installed extension directory.
+ * Safely resolves nested base themes ("include" or "$include").
  */
 export async function readExtensionJson<T = any>(filePath: string): Promise<T | null> {
   try {
     const exists = await FileSystem.getInfoAsync(filePath);
     if (!exists.exists) return null;
     const content = await FileSystem.readAsStringAsync(filePath);
-    // Strip possible comments from jsonc
-    const cleaned = content.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-    return JSON.parse(cleaned);
+    const data = parseJsonc<T>(content);
+
+    // Resolve base theme inheritance if specified
+    if (data && typeof data === "object") {
+      const anyData = data as any;
+      const incPath = anyData.include || anyData["$include"];
+      if (typeof incPath === "string") {
+        const cleanInc = incPath.replace(/^\.\//, "");
+        const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+        const resolvedInc = incPath.startsWith("/") ? incPath : `${dir}/${cleanInc}`;
+        const baseData = await readExtensionJson<any>(resolvedInc);
+        if (baseData && typeof baseData === "object") {
+          return {
+            ...baseData,
+            ...anyData,
+            colors: { ...(baseData.colors || {}), ...(anyData.colors || {}) },
+            tokenColors: [
+              ...(Array.isArray(baseData.tokenColors) ? baseData.tokenColors : []),
+              ...(Array.isArray(anyData.tokenColors) ? anyData.tokenColors : []),
+            ],
+          } as T;
+        }
+      }
+    }
+
+    return data;
   } catch {
     return null;
   }

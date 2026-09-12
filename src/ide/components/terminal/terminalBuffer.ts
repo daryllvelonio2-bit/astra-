@@ -87,6 +87,11 @@ export function mergeNativeHistory(current: string, hist: string, seen: number):
 export function diffNativeText(prev: string, text: string): { removed: number; added: string } {
   let i = 0;
   while (i < prev.length && i < text.length && prev[i] === text[i]) i++;
-  return { removed: prev.length - i, added: text.slice(i) };
+  let removed = prev.length - i;
+  const added = text.slice(i);
+  if (prev.startsWith(" ") && !text.startsWith(" ") && i === 0) {
+    removed = Math.max(0, removed - 1);
+  }
+  return { removed, added };
 }
 

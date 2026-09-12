@@ -12,9 +12,8 @@ import { VSCodeView } from "./VSCodeView";
 import { GitHubDesktopView } from "./git/GitHubDesktopView";
 import { IDEBottomBar } from "./IDEBottomBar";
 import { WorkspaceLoadingScreen } from "./WorkspaceLoadingScreen";
-import { AiAssistantMenu } from "./AiAssistantMenu";
-import { OverlayPermissionModal } from "../../ai/components/OverlayPermissionModal";
-import { useFloatingOverlayControl } from "./useFloatingOverlayControl";
+import { AgentsContainerView } from "./agents/AgentsContainerView";
+import { ExtensionMarketplaceModal } from "./extensions/ExtensionMarketplaceModal";
 import { runningTasksService, RunningTask } from "../../ai/services/runningTasksService";
 import { FileNode } from "../types";
 import { useSidebarResizer } from "./useSidebarResizer";
@@ -47,13 +46,12 @@ import {
 interface IDELayoutProps {
   workspaceId?: string;
   onBackToPicker?: () => void;
-  onOpenFullChat?: () => void;
 }
 
 const shortLoadPath = (p: string) =>
   (p || "").replace(/^file:\/\//, "").split("/").filter(Boolean).slice(-2).join("/");
 
-export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELayoutProps) {
+export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   const insets = useSafeAreaInsets();
   const { isLandscape } = useOrientation();
   const { theme } = useTheme();
@@ -115,16 +113,7 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
   const [browserUrl, setBrowserUrl] = useState<string>("");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [isSettingsModalVisible, setSettingsModalVisible] = useState(false);
-  const {
-    showPermissionModal,
-    setShowPermissionModal,
-    showAiMenu,
-    setShowAiMenu,
-    isOverlayRunning,
-    handleLaunchSystemOverlay,
-    handleStopSystemOverlay,
-    handlePermissionGranted,
-  } = useFloatingOverlayControl(workspace, activeFile);
+  const [isMarketplaceVisible, setMarketplaceVisible] = useState(false);
   const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
   const [loadStatus, setLoadStatus] = useState("Starting…");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -395,17 +384,18 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
             </View>
           )}
 
-          {/* AI Assistant Floating Button & Menu */}
-          {astraEnabled && !desktopFullscreen && bottomTab !== "git" && (
-            <AiAssistantMenu
-              showAiMenu={showAiMenu}
-              isOverlayRunning={isOverlayRunning}
-              runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
-              onToggleAiMenu={() => setShowAiMenu((prev) => !prev)}
-              onLaunchSystemOverlay={handleLaunchSystemOverlay}
-              onStopSystemOverlay={handleStopSystemOverlay}
-              onOpenFullChat={onOpenFullChat ? () => { setShowAiMenu(false); onOpenFullChat(); } : undefined}
-            />
+          {visitedTabs.has("agents") && (
+            <View style={[styles.tabContent, bottomTab !== "agents" && styles.hiddenTab]}>
+              <AgentsContainerView
+                workspace={workspace}
+                astraEnabled={astraEnabled}
+                onNavigateToWorkspaces={handleBackToPicker}
+                onNavigateToEditor={() => safeSetBottomTab("editor")}
+                onOpenSettings={() => setSettingsModalVisible(true)}
+                onOpenMarketplace={() => setMarketplaceVisible(true)}
+                visible={bottomTab === "agents"}
+              />
+            </View>
           )}
         </View>
       </View>
@@ -418,15 +408,6 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
           runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
           compact={isLandscape}
           visibleTabs={visibleTabs}
-        />
-      )}
-
-      {/* Overlay Permission Guide Modal */}
-      {showPermissionModal && (
-        <OverlayPermissionModal
-          visible={showPermissionModal}
-          onClose={() => setShowPermissionModal(false)}
-          onPermissionGranted={handlePermissionGranted}
         />
       )}
 
@@ -454,6 +435,12 @@ export function IDELayout({ workspaceId, onBackToPicker, onOpenFullChat }: IDELa
         onClose={() => setSettingsModalVisible(false)}
         workspaceId={workspace?.id}
         onSyncWorkspace={refreshWorkspace}
+      />
+
+      {/* Extensions & Agents Marketplace Modal */}
+      <ExtensionMarketplaceModal
+        visible={isMarketplaceVisible}
+        onClose={() => setMarketplaceVisible(false)}
       />
     </View>
   );

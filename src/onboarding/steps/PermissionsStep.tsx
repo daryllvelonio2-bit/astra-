@@ -16,8 +16,6 @@ import {
   openAppDetailsSettings,
   hasAllFilesPermission,
   requestAllFilesPermission,
-  checkOverlayPermission,
-  requestOverlayPermission,
 } from "../../../modules/linux-runner/src";
 
 interface PermissionsStepProps {
@@ -28,7 +26,6 @@ interface PermissionsStepProps {
 export function PermissionsStep({ theme, isLandscape = false }: PermissionsStepProps) {
   const [batteryIgnored, setBatteryIgnored] = useState<boolean>(true);
   const [storageGranted, setStorageGranted] = useState<boolean>(true);
-  const [overlayGranted, setOverlayGranted] = useState<boolean>(false);
 
   const checkAllPermissions = async () => {
     try {
@@ -39,11 +36,6 @@ export function PermissionsStep({ theme, isLandscape = false }: PermissionsStepP
     try {
       const stor = hasAllFilesPermission();
       setStorageGranted(stor);
-    } catch (_) {}
-
-    try {
-      const ov = await checkOverlayPermission();
-      setOverlayGranted(ov);
     } catch (_) {}
   };
 
@@ -82,11 +74,6 @@ export function PermissionsStep({ theme, isLandscape = false }: PermissionsStepP
     setTimeout(checkAllPermissions, 600);
     setTimeout(checkAllPermissions, 1500);
     setTimeout(checkAllPermissions, 3000);
-  };
-
-  const handleToggleOverlay = async () => {
-    await requestOverlayPermission();
-    setTimeout(checkAllPermissions, 800);
   };
 
   const handleOpenAppDetails = async () => {
@@ -265,79 +252,7 @@ export function PermissionsStep({ theme, isLandscape = false }: PermissionsStepP
         </TouchableOpacity>
       </View>
 
-      {/* 3. Floating Overlay */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.bgSecondary,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <View style={styles.cardHeader}>
-          <View
-            style={[
-              styles.iconWrap,
-              { backgroundColor: overlayGranted ? `${theme.accentGreen}1A` : `${theme.accent}1A` },
-            ]}
-          >
-            <Ionicons
-              name="layers-outline"
-              size={20}
-              color={overlayGranted ? theme.accentGreen : theme.accent}
-            />
-          </View>
-          <View style={styles.cardHeaderText}>
-            <View style={styles.titleRow}>
-              <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-                Floating AI Overlay
-              </Text>
-              <View
-                style={[
-                  styles.badge,
-                  { backgroundColor: overlayGranted ? `${theme.accentGreen}18` : `${theme.textSecondary}18` },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.badgeText,
-                    { color: overlayGranted ? theme.accentGreen : theme.textSecondary },
-                  ]}
-                >
-                  {overlayGranted ? "Enabled" : "Optional"}
-                </Text>
-              </View>
-            </View>
-            <Text style={[styles.cardDescription, { color: theme.textSecondary }]}>
-              Overlay Astra AI bubble over Chrome, Termux, Godot, or any app.
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.actionButton,
-            {
-              backgroundColor: theme.bgTertiary,
-              borderColor: theme.border,
-            },
-          ]}
-          onPress={handleToggleOverlay}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={overlayGranted ? "checkmark-circle" : "open-outline"}
-            size={16}
-            color={theme.accent}
-          />
-          <Text style={[styles.actionButtonText, { color: theme.textPrimary }]}>
-            {overlayGranted ? "Overlay Permission Enabled" : "Enable Floating Chathead"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 4. App Details & Notifications Quick Link */}
+      {/* 3. App Details & Notifications Quick Link */}
       <TouchableOpacity
         style={[
           styles.appInfoRow,

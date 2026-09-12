@@ -9,6 +9,7 @@ import {
   writeTerminalInput,
   isEnvironmentReady,
   getFileInfoNative,
+  readDirectoryNative,
 } from "../../../modules/linux-runner/src";
 
 export const VSCODE_PORT = 8082;
@@ -369,7 +370,7 @@ export function buildVSCodeUrl(workspaceDir?: string): string {
   return `http://127.0.0.1:${VSCODE_PORT}/?folder=${encodedPath}`;
 }
 
-/** Installs an extension by ID (`publisher.name`) from Open VSX. */
+/** Installs an extension by ID (`publisher.name`) from Open VSX into code-server. */
 export async function installVSCodeExtension(
   extensionId: string,
   onLog: (line: string) => void
@@ -387,7 +388,9 @@ export async function installVSCodeExtension(
     }
   });
   try {
-    const res = await executeCommandStream(commandId, `${ENV_PREFIX}code-server --install-extension ${id}`);
+    const cleanCmd = `if [ -d "/root/.local/share/code-server/extensions/${id}" ] && [ ! -f "/root/.local/share/code-server/extensions/${id}/package.json" ]; then rm -rf "/root/.local/share/code-server/extensions/${id}"; fi`;
+    const installCmd = `${ENV_PREFIX}${cleanCmd}; code-server --user-data-dir /root/.local/share/code-server --extensions-dir /root/.local/share/code-server/extensions --install-extension ${id} --force`;
+    const res = await executeCommandStream(commandId, installCmd);
     const out = res.stdout || "";
     const ok = /successfully installed/i.test(out) || /already installed/i.test(out);
     onLog(ok ? `Extension installed: ${id}` : `Install finished — check log above for: ${id}`);
@@ -397,6 +400,28 @@ export async function installVSCodeExtension(
     return false;
   } finally {
     listener?.remove();
+  }
+}
+
+/** Checks whether an extension has a valid package.json installed in code-server. */
+export async function isExtensionInstalledInVSCode(extensionId: string): Promise<boolean> {
+  try {
+    const docDir = FileSystem.documentDirectory || "";
+    if (!docDir) return false;
+    const cleanDoc = docDir.replace(/^file:\/\//, "").replace(/\/+$/, "");
+    const extDir = `${cleanDoc}/alpine/root/.local/share/code-server/extensions`;
+    const entries = readDirectoryNative(extDir);
+    const target = extensionId.toLowerCase();
+    for (const entry of entries) {
+      const entryLower = entry.name.toLowerCase();
+      if (entryLower === target || entryLower.startsWith(`${target}-`)) {
+        const pkgInfo = getFileInfoNative(`${extDir}/${entry.name}/package.json`);
+        if (pkgInfo.exists) return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
   }
 }
 

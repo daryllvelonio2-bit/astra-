@@ -32,11 +32,10 @@ import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
 
 interface ProjectPickerProps {
   onOpenWorkspace: (workspaceId: string) => void;
-  onNavigateToChat?: () => void;
   onRerunStartup?: () => void;
 }
 
-export function ProjectPicker({ onOpenWorkspace, onNavigateToChat, onRerunStartup }: ProjectPickerProps) {
+export function ProjectPicker({ onOpenWorkspace, onRerunStartup }: ProjectPickerProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { isLandscape } = useOrientation();

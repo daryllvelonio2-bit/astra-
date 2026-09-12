@@ -116,11 +116,9 @@ persistent supervisor PTY session with pidfile-verified readiness and full
 diagnostics on failure. Landscape auto-engages fullscreen (status bar,
 insets, bottom bar, and AI button all hide).
 
-## Bottom navigation + floating button
+## Bottom navigation
 
-`IDEBottomBar.tsx` — Editor / Terminal / Browser / Git / Desktop.
-`AiAssistantMenu.tsx` — floating Astra button opening fullscreen chat or the
-system-overlay chathead (long-press), with a stop item while running.
+`IDEBottomBar.tsx` — Editor / Agents / Terminal / Browser / Git / Desktop / VS Code.
 Visibility is user-configurable, see [configuration](configuration.md).
 
 ## Settings

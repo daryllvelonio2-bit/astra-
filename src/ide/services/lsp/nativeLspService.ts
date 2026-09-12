@@ -55,6 +55,18 @@ export async function runBackgroundDiagnostics(
       }
     }
 
+    const defaultLanguageTools: Record<string, string[]> = {
+      py: ["python3", "flake8", "ruff"],
+      php: ["php"],
+      sh: ["bash"],
+      c: ["gcc", "clang"],
+      cpp: ["g++", "clang++"],
+      rs: ["rustc"],
+    };
+    for (const t of defaultLanguageTools[ext] || []) {
+      if (!candidateTools.includes(t)) candidateTools.push(t);
+    }
+
     if (candidateTools.length === 0) {
       return null;
     }
@@ -70,7 +82,19 @@ export async function runBackgroundDiagnostics(
     for (const tool of candidateTools) {
       if (!(await isToolAvailable(tool, workspaceId))) continue;
 
-      const checkCmd = `"${tool}" check "${linuxPath}" 2>&1 || "${tool}" "${linuxPath}" 2>&1`;
+      let checkCmd = `"${tool}" check "${linuxPath}" 2>&1 || "${tool}" "${linuxPath}" 2>&1`;
+      if (tool === "python3") {
+        checkCmd = `python3 -m py_compile "${linuxPath}" 2>&1`;
+      } else if (tool === "php") {
+        checkCmd = `php -l "${linuxPath}" 2>&1`;
+      } else if (tool === "bash") {
+        checkCmd = `bash -n "${linuxPath}" 2>&1`;
+      } else if (tool === "gcc" || tool === "clang" || tool === "g++" || tool === "clang++") {
+        checkCmd = `${tool} -fsyntax-only "${linuxPath}" 2>&1`;
+      } else if (tool === "rustc") {
+        checkCmd = `rustc --emit=metadata "${linuxPath}" 2>&1`;
+      }
+
       const res = await Promise.race([
         executeCommand(checkCmd, workspaceId),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), DIAG_TIMEOUT_MS)),

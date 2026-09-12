@@ -13,8 +13,7 @@ and are accessed through `src/ide/services/configService.ts`, which notifies
 | `selectedCognitiveMode` / `selectedEffort` | `default` | Agent reasoning mode and effort (`astraModes.ts`) |
 | `interactiveApproval` | `false` | Always auto-approve (YOLO); no UI surface |
 | `selectedTheme` | `dark` | `dark` / `light` / `midnight` |
-| `bottomTabs` | all `true` | `{ editor, terminal, browser, git, desktop, vscode }` bottom-tab visibility (last visible tab cannot be turned off; hidden active tab falls back to first visible) |
-| `astraEnabled` | `true` | Master Astra AI switch: chat screen, floating button/menu, chathead entry |
+| `astraEnabled` | `true` | Master Astra AI switch: controls visibility of the Agents bottom navbar tab |
 
 Helpers: `loadConfig` / `saveConfig` (nested-merge `bottomTabs`),
 `loadApiKeys`, `rollNextApiKey`, `loadSelectedModel`,

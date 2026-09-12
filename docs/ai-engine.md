@@ -49,17 +49,13 @@ The bundled Gemini-CLI fork in `astra-cli/` is provisioned into the guest at
 
 ## Chat UI (`components/`)
 
-- `AstraChatScreen.tsx` — fullscreen chat (also aliased as Gemini chat).
+- `AstraChatScreen.tsx` — integrated Astra AI assistant tab in workspace navbar.
 - `useChatSession.ts` — shared state machine: ref-mirrored input (no stale
   sends), abortable turns, optimistic messages, text deltas, steps, live
   status, approvals, sessions, snippet run/apply (client tier), clipboard.
-- `FloatingChatOverlay.tsx` — same session hook in a system-overlay
-  mini-chat (bubble, bring-to-front, stop); registered as its own root in
-  `App.tsx`. `OverlayPermissionModal.tsx` explains the permission.
-- `ChatHeader.tsx` / `FloatingOverlayTopBar.tsx` — session, model, and mode
-  pickers plus navigation. `CognitiveModeBar.tsx` + `CognitiveModeModal.tsx`
-  — quick and full mode/effort pickers. `ModelPickerModal.tsx`,
-  `ChatSessionsModal.tsx` — models and saved sessions.
+- `ChatHeader.tsx` — session, model, and mode pickers plus navigation.
+  `CognitiveModeBar.tsx` + `CognitiveModeModal.tsx` — quick and full mode/effort
+  pickers. `ModelPickerModal.tsx`, `ChatSessionsModal.tsx` — models and saved sessions.
 - `AgentMessageItem.tsx`, `StepCard.tsx`, `MarkdownMessageView.tsx` —
   message bubbles with thoughts, collapsible tool steps, and code blocks
   with Run/Apply/Copy. `DirectoryListRenderer.tsx` — pretty 📁/📄 listings.
@@ -88,5 +84,3 @@ service it records audio and transcribes via `voiceTranscribe.ts` using the
   guest fallback), port-PID lookup, server liveness checks.
 - `conversationService.ts` — per-workspace JSON sessions with change
   subscriptions and legacy `.ai/` migration.
-- `floatingOverlayService.ts` — overlay start/stop/collapse/expand and
-  permission wrappers.

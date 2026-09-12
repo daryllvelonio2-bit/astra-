@@ -7,6 +7,11 @@ import {
   writeTerminalInput,
 } from "../../../modules/linux-runner/src";
 import { ideActionService } from "./ideActionService";
+import {
+  resolveRuntimeForBinary,
+  buildAutoInstallRunScript,
+} from "./extensions/extensionRuntimeService";
+import { prepareRunScript } from "./runFormatter";
 
 /**
  * Universal Run service: executes the active file (or a detected project
@@ -128,7 +133,13 @@ const DIRECT_RUNNERS: Record<string, DirectRunner> = {
   cxx: { runtime: "g++", build: (f) => `g++ ${q(f)} -o /tmp/astrun && /tmp/astrun` },
   go: { runtime: "go", build: (f) => `go run ${q(f)}` },
   rs: { runtime: "rustc", build: (f) => `rustc ${q(f)} -o /tmp/astrun && /tmp/astrun` },
-  java: { runtime: "java", build: (f) => `java ${q(f)}` },
+  java: {
+    runtime: "java",
+    build: (f) => {
+      const cls = basename(f).replace(/\.java$/i, "");
+      return `javac ${q(f)} && java ${q(cls)} || java ${q(f)}`;
+    },
+  },
   rb: { runtime: "ruby", build: (f) => `ruby ${q(f)}` },
   lua: { runtime: "lua5.4", build: (f) => `lua5.4 ${q(f)}` },
   sh: { runtime: "sh", build: (f) => `sh ${q(f)}` },
@@ -304,8 +315,7 @@ export async function executeRunPlan(
 ): Promise<void> {
   if (plan.kind === "unsupported") {
     ideActionService.emit("RUN_IN_TERMINAL", {
-      header: `⚡ Run: ${plan.displayName}`,
-      command: `echo ${q(plan.message || "Nothing to run.")}`,
+      command: `printf "\\033[1;31m✖ %s\\033[0m\\n" ${q(plan.message || "Nothing to run.")}`,
       workspaceId,
       userInitiated: true,
     });
@@ -316,8 +326,7 @@ export async function executeRunPlan(
   try {
     if (!(await isEnvironmentReady())) {
       ideActionService.emit("RUN_IN_TERMINAL", {
-        header: `⚡ Run: ${plan.displayName}`,
-        command: `echo 'Linux environment is not ready yet — the toolchain is still provisioning (watch Settings → Linux).'`,
+        command: `printf "\\033[1;33m⚡ Linux environment is still provisioning (watch Settings → Linux).\\033[0m\\n"`,
         workspaceId,
         userInitiated: true,
       });
@@ -327,9 +336,20 @@ export async function executeRunPlan(
   } catch (_) {}
 
   if (plan.runtime && !(await hasRuntime(plan.runtime))) {
+    const known = resolveRuntimeForBinary(plan.runtime);
+    if (known) {
+      const autoCmd = buildAutoInstallRunScript(plan.command, known, plan.displayName);
+      ideActionService.emit("RUN_IN_TERMINAL", {
+        command: autoCmd,
+        workspaceId,
+        userInitiated: true,
+      });
+      cb.onOpenTerminal();
+      return;
+    }
+
     ideActionService.emit("RUN_IN_TERMINAL", {
-      header: `⚡ Run: ${plan.displayName}`,
-      command: `echo ${q(`error: '${plan.runtime}' not found in the Linux environment.`)}\necho ${q(EXTRAS_HINT)}`,
+      command: `printf "\\033[1;31m✖ Error: '${plan.runtime}' not found in Linux environment.\\033[0m\\n\\033[2m${EXTRAS_HINT}\\033[0m\\n"`,
       workspaceId,
       userInitiated: true,
     });
@@ -338,24 +358,42 @@ export async function executeRunPlan(
   }
 
   if (plan.kind === "browser" && plan.url) {
-    // Server output stays visible in the Run session; the page opens in Browser.
-    // A missing python3/php aborts here with the real error + Extras hint
-    // instead of opening a dead preview URL.
     if (plan.runtime && !(await hasRuntime(plan.runtime))) {
+      const known = resolveRuntimeForBinary(plan.runtime);
+      if (known) {
+        const autoCmd = buildAutoInstallRunScript(plan.command, known, plan.displayName);
+        ideActionService.emit("RUN_IN_TERMINAL", {
+          command: autoCmd,
+          workspaceId,
+          userInitiated: true,
+        });
+        cb.onOpenTerminal();
+        return;
+      }
       ideActionService.emit("RUN_IN_TERMINAL", {
-        header: `⚡ Run: ${plan.displayName}`,
-        command: `echo ${q(`error: '${plan.runtime}' not found in the Linux environment.`)}\necho ${q(EXTRAS_HINT)}`,
+        command: `printf "\\033[1;31m✖ Error: '${plan.runtime}' not found in Linux environment.\\033[0m\\n\\033[2m${EXTRAS_HINT}\\033[0m\\n"`,
         workspaceId,
         userInitiated: true,
       });
       cb.onOpenTerminal();
       return;
     }
+
+    const runCmd = await prepareRunScript({
+      fileName: plan.displayName,
+      displayName: plan.displayName,
+      runtime: plan.runtime,
+      command: plan.command,
+      isServer: true,
+      url: plan.url,
+      port: plan.port,
+    });
+
     try {
       await startTerminalSession(RUN_SESSION_ID, workspaceId);
     } catch (_) {}
     try {
-      writeTerminalInput(RUN_SESSION_ID, `echo '⚡ Run: ${plan.displayName}'\n${plan.command}\n`);
+      writeTerminalInput(RUN_SESSION_ID, `${runCmd}\n`);
     } catch (_) {}
     try {
       runningTasksService.addTask({
@@ -369,9 +407,16 @@ export async function executeRunPlan(
     return;
   }
 
-  ideActionService.emit("RUN_IN_TERMINAL", {
-    header: `⚡ Run: ${plan.displayName}`,
+  const runCmd = await prepareRunScript({
+    fileName: plan.displayName,
+    displayName: plan.displayName,
+    runtime: plan.runtime,
     command: plan.command,
+    isServer: false,
+  });
+
+  ideActionService.emit("RUN_IN_TERMINAL", {
+    command: runCmd,
     workspaceId,
     userInitiated: true,
   });
