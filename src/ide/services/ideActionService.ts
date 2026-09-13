@@ -118,7 +118,13 @@ class IDEActionServiceImpl {
       timestamp: Date.now(),
     };
 
-    if (type === "OPEN_FILE" || type === "OPEN_BROWSER" || type === "OPEN_TERMINAL" || type === "SWITCH_TAB") {
+    if (
+      type === "OPEN_FILE" ||
+      type === "OPEN_BROWSER" ||
+      type === "OPEN_TERMINAL" ||
+      type === "RUN_IN_TERMINAL" ||
+      type === "SWITCH_TAB"
+    ) {
       this.pending.set(type, event as IDEActionEvent<any>);
     }
 

@@ -30,10 +30,13 @@ const CLOSE_FOR: Record<string, string> = {
 
 function diffStrings(oldS: string, newS: string): { at: number; removed: string; inserted: string } {
   let at = 0;
-  while (at < oldS.length && at < newS.length && oldS[at] === newS[at]) at++;
-  let endOld = oldS.length;
-  let endNew = newS.length;
-  while (endOld > at && endNew > at && oldS[endOld - 1] === newS[endNew - 1]) {
+  const oldLen = oldS.length;
+  const newLen = newS.length;
+  const maxScan = Math.min(oldLen, newLen);
+  while (at < maxScan && oldS.charCodeAt(at) === newS.charCodeAt(at)) at++;
+  let endOld = oldLen;
+  let endNew = newLen;
+  while (endOld > at && endNew > at && oldS.charCodeAt(endOld - 1) === newS.charCodeAt(endNew - 1)) {
     endOld--;
     endNew--;
   }
@@ -97,15 +100,30 @@ export function useEditorAssists(
     };
   }, [content, fileName]);
 
-  const match: BracketMatch = useMemo(() => {
-    try {
-      const cursorFull = chunkStartOffset + selection.start;
-      if (selection.start !== selection.end) return { kind: "none" };
-      return findMatchingBracket(content, cursorFull, fileName);
-    } catch (_) {
-      return { kind: "none" };
-    }
-  }, [content, fileName, selection, chunkStartOffset]);
+  const [match, setMatch] = useState<BracketMatch>({ kind: "none" });
+
+  useEffect(() => {
+    let cancelled = false;
+    // For large documents (>3000 chars), debounce bracket scan so rapid typing/pasting is never blocked
+    const delayMs = content.length > 3000 ? 100 : 25;
+    const t = setTimeout(() => {
+      try {
+        const cursorFull = chunkStartOffset + selection.start;
+        if (selection.start !== selection.end) {
+          if (!cancelled) setMatch({ kind: "none" });
+          return;
+        }
+        const res = findMatchingBracket(content, cursorFull, fileName);
+        if (!cancelled) setMatch(res);
+      } catch (_) {
+        if (!cancelled) setMatch({ kind: "none" });
+      }
+    }, delayMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [content, fileName, selection.start, selection.end, chunkStartOffset]);
 
   const matchStatus: string | null = useMemo(() => {
     if (match.kind === "pair") {

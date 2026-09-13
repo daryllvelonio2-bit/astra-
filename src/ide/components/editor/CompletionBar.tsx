@@ -7,6 +7,7 @@ interface CompletionBarProps {
   items: CompletionItem[];
   onSelect: (item: CompletionItem) => void;
   theme: ThemeColors;
+  bottomOffset?: number;
 }
 
 type AccentColorKey = "accent" | "accentGreen" | "accentGold" | "accentRed";
@@ -33,15 +34,16 @@ function getBadgeSymbol(kind: CompletionItem["kind"]): { letter: string; colorKe
   }
 }
 
-export function CompletionBar({ items, onSelect, theme }: CompletionBarProps) {
+export function CompletionBar({ items, onSelect, theme, bottomOffset = 28 }: CompletionBarProps) {
   if (!items || items.length === 0) return null;
 
   return (
     <View
       style={[
         styles.container,
-        { backgroundColor: theme.bgSecondary, borderTopColor: theme.border },
+        { bottom: bottomOffset },
       ]}
+      pointerEvents="box-none"
     >
       <ScrollView
         horizontal
@@ -58,12 +60,15 @@ export function CompletionBar({ items, onSelect, theme }: CompletionBarProps) {
               key={`${item.label}-${idx}`}
               style={[
                 styles.itemBtn,
-                { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+                {
+                  backgroundColor: `${theme.bgSecondary}F2`,
+                  borderColor: theme.border,
+                },
               ]}
               onPress={() => onSelect(item)}
               activeOpacity={0.6}
             >
-              <View style={[styles.badge, { backgroundColor: `${badgeColor}20` }]}>
+              <View style={[styles.badge, { backgroundColor: `${badgeColor}25` }]}>
                 <Text style={[styles.badgeLetter, { color: badgeColor }]}>{badge.letter}</Text>
               </View>
               <Text style={[styles.itemLabel, { color: theme.textPrimary }]}>{item.label}</Text>
@@ -72,7 +77,7 @@ export function CompletionBar({ items, onSelect, theme }: CompletionBarProps) {
                   style={[styles.itemDetail, { color: theme.textMuted }]}
                   numberOfLines={1}
                 >
-                  {item.detail.length > 20 ? `${item.detail.slice(0, 20)}…` : item.detail}
+                  {item.detail.length > 16 ? `${item.detail.slice(0, 16)}…` : item.detail}
                 </Text>
               )}
             </TouchableOpacity>
@@ -85,43 +90,52 @@ export function CompletionBar({ items, onSelect, theme }: CompletionBarProps) {
 
 const styles = StyleSheet.create({
   container: {
-    height: 38,
-    borderTopWidth: 1,
-    justifyContent: "center",
+    position: "absolute",
+    left: 8,
+    maxWidth: "88%",
+    zIndex: 90,
+    backgroundColor: "transparent",
   },
   scrollContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    gap: 6,
+    gap: 5,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
   },
   itemBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
     borderWidth: 1,
-    gap: 6,
+    gap: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 3,
   },
   badge: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 3,
     alignItems: "center",
     justifyContent: "center",
   },
   badgeLetter: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     fontFamily: "monospace",
   },
   itemLabel: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
   },
   itemDetail: {
-    fontSize: 10.5,
+    fontSize: 9.5,
     fontFamily: "monospace",
+    opacity: 0.75,
   },
 });

@@ -1,8 +1,271 @@
 # Project Progress Tracker
 
 ## Status
-- **Current Phase:** Pixel-Perfect Collision-Free Indent Guides & User Toggle
+- **Current Phase:** Landscape Split Screen Dual-Pane Editing
 - **Last Updated:** September 13, 2026
+
+### [2026-09-13] - Landscape Split Screen Full Dual-Pane Editing & Gesture Activation
+- **User Directive:** "in landscape mode, split screen, the split screen isnt editable, it should be"
+- **Root Cause Analysis:**
+  1. **Hardcoded Read-Only Right Pane:** In `ContinuationSplitView.tsx`, the right column was hardcoded to `isEditing={false}`. Even when edit mode was enabled, the right column only rendered read-only `<Text>` spans instead of a `<TextInput>`, making it 100% uneditable.
+  2. **Touch Interception by Child ScrollView:** Double-tapping to enter edit mode in split screen failed because the outer container's touch handlers were consumed by the inner `<ScrollView>` components without reaching the line calculation logic.
+  3. **Shared Incompatible Ref:** `textInputRef` was passed to both panes simultaneously without tracking active pane focus, preventing cursor positioning in the right pane.
+- **Fixes Implemented:**
+  1. **`ContinuationSplitView.tsx` (259 lines):**
+     - Made both Left and Right columns 100% editable with their own independent `TextInput` instances (`leftInputRef` and `rightInputRef`).
+     - Added `activePane: "left" | "right"` focus tracking to sync cursor selection (`selection`) only to the actively focused pane.
+     - Added double-tap detection on both columns in view mode (`handlePaneTap`), calculating the exact line and column offset relative to each pane's vertical scroll position and triggering `onEnterEditMode(offset)`.
+     - Preserved synchronized continuation scrolling: Right column automatically scrolls to `y + linesPerPage * lineHeight` when Left scrolls in view mode.
+     - Reused precomputed `tokenizedLines`, `maxLineLength`, and `isPasting` from `EditorView`, eliminating duplicate tokenization overhead.
+  2. **`EditorEditRow.tsx` (379 lines):**
+     - Made `selection` prop optional (`selection?: { start: number; end: number }`) so unfocused panes do not contend for cursor control.
+     - Added `onFocus` prop to `TextInput` to automatically switch active pane state when tapped.
+  3. **`EditorView.tsx` (484 lines):**
+     - Connected `onEnterEditMode={enterEditModeAtOffset}` to `ContinuationSplitView`.
+     - Passed `tokenizedLines`, `maxLineLength`, and `isPasting` directly to avoid redundant work.
+- **Verification:**
+  - TypeScript type check (`npx tsc --noEmit`) passed with **exit code 0** (zero errors).
+  - Unit test (`scratch/test_split_screen_editing.js`) passed, validating continuation offsets, cursor mapping across both panes, and unified document editing.
+  - Rule 5 strict compliance maintained (< 500 lines per file):
+    - `ContinuationSplitView.tsx`: 259 lines
+    - `EditorEditRow.tsx`: 379 lines
+    - `EditorView.tsx`: 484 lines
+
+### [2026-09-13] - IDE Responsiveness & Large Code Paste Lag Elimination
+- **User Directive:** "improve ide responsiveness and remove lags when pasting huge blocks of codes"
+- **Root Cause Analysis:**
+  1. **Synchronous Tokenization on Every Keystroke:** In edit mode, `tokenizeCode` ran synchronously in `useMemo` over the entire document on every single character change, executing thousands of regex operations and freezing the JS thread for 50-100ms.
+  2. **Repeated O(N) String Splitting:** `content.slice(0, offset).split("\n")` was executed repeatedly on every cursor movement and selection change across `selectionLineIdx` and `cursorFullLine`. Splitting large strings on every render pass created thousands of short-lived string allocations.
+  3. **Synchronous Bracket Matching:** `findMatchingBracket` scanned the entire document on every selection and cursor change, running synchronous regex scans across up to 150K characters.
+  4. **Unmemoized Props Defeating React.memo:** In `EditorView.tsx`, `editGutterColor` was an inline arrow function re-instantiated on every render, defeating `React.memo` on `EditorEditRow` and causing full sub-tree re-renders on every frame.
+  5. **Hundreds of Native View Allocations for Indent Guides:** In edit mode, indent guides rendered hundreds of absolute-positioned `<View>` elements across every line, burdening the native Android/iOS layout engine.
+  6. **Redundant Content Width String Splits:** `EditorEditRow` performed an extra `chunkText.split("\n")` to compute `contentWidth` even though `rawLines` had already been parsed upstream.
+  7. **Diff Comparison Overheads on Large Pastes:** `diffStrings` ran character-by-character string comparisons on multi-kilobyte pastes, delaying text insertion.
+- **Fixes Implemented:**
+  1. **`useDebouncedTokens.ts` (85 lines):** Created a dedicated hook that decouples syntax tokenization from the TextInput rendering cycle. In edit mode, normal typing uses 150ms debounce; large pastes (delta > 20 chars) use 300ms debounce. The `<TextInput>` receives raw text immediately with zero UI thread block. All React hooks are strictly invoked unconditionally to obey the Rules of Hooks and prevent hook order mismatch errors when toggling edit mode.
+  2. **`editorCursorUtils.ts` (125 lines):** Added `buildLineStartOffsets` (precomputed byte offset index built once in O(N)), `offsetToLine` (O(log N) binary search replacing O(N) slice+split, tested at **145.1x faster**), and `maxLineLengthFromOffsets` (zero string allocation max line length finder).
+  3. **`EditorView.tsx` (483 lines):** Replaced slice+split in `selectionLineIdx` and `cursorFullLine` with O(log N) binary search; passed precomputed `maxLineLength` and `isPasting` to `EditorEditRow`; memoized `editGutterColor` with `useCallback` on stable primitive dependencies.
+  4. **`EditorEditRow.tsx` (376 lines):** Omitted indent guide computation and rendering during active editing (`isEditing === true`); used precomputed `maxLineLength` to skip redundant string splits; enabled raw plain-text fast path during `isPasting` or files > 500 lines to avoid creating nested `<Text>` components.
+  5. **`useEditorAssists.ts` (275 lines):** Debounced `findMatchingBracket` via `useEffect` (100ms for large files) so cursor movement never blocks the typing thread; optimized `diffStrings` using `charCodeAt` to avoid character substring allocations.
+  6. **`useEditorTextPipeline.ts` (145 lines):** Added `countNewlinesFast` to avoid `split("\n").length` string allocations on every keystroke; added fast path for large paste (delta > 200 chars) to bypass complex bracket auto-closing diffs.
+  7. **`ContinuationSplitView.tsx` (221 lines):** Integrated `useDebouncedTokens` and `isPasting` flag into the left active edit pane.
+- **Verification:**
+  - TypeScript compilation (`npx tsc --noEmit`) completed with exit code 0 (zero errors).
+  - Benchmark test (`scratch/test_paste_responsiveness.ts`) executed via Node.js verified:
+    - 1,500 lines offset indexing in 3.2ms
+    - 5,000 cursor line lookups: 4.52ms via O(log N) binary search vs 656.09ms naive slice+split (**145.1x speedup**)
+    - `tokenizeCode` completed in 49ms for 1,500 lines
+  - Rule 5 strict compliance verified on all modified files (< 500 lines each):
+    - `editorCursorUtils.ts`: 125 lines
+    - `useDebouncedTokens.ts`: 85 lines
+    - `EditorView.tsx`: 483 lines
+    - `EditorEditRow.tsx`: 376 lines
+    - `useEditorAssists.ts`: 275 lines
+    - `useEditorTextPipeline.ts`: 145 lines
+    - `ContinuationSplitView.tsx`: 221 lines
+
+### [2026-09-13] - Run Button Reliability & Terminal UI Deduplication Fix
+- **User Directive:** "fix when clicking run button, sometimes it doesn't trigger the terminal properly, it just opens it and nothing happens, worst is it doubles the terminal ui"
+- **Root Cause Analysis:**
+  1. **Dropped RUN_IN_TERMINAL Events:** `ideActionService.emit("RUN_IN_TERMINAL", ...)` fired synchronously before `<TerminalView>` was mounted (because `visitedTabs` didn't include `"terminal"` yet). The event bus had zero listeners and `RUN_IN_TERMINAL` was NOT in the sticky pending map, so the event was permanently lost. Then `cb.onOpenTerminal()` mounted the terminal view — but too late.
+  2. **PTY Stdin Race:** `writeTerminalInput` was called immediately after `startRunShell` without waiting for the PTY slave process to attach to `/dev/pts/X`, causing input bytes to be dropped.
+  3. **Double-Tap Concurrent Pipelines:** No debouncing or running guard existed on the Run button. The async pipeline (save → resolveRunPlan → executeRunPlan) took 600–1500ms, causing users to double-tap and spawn duplicate pipelines.
+  4. **Double-Prefix Task Tab IDs:** `runningTasksService` generated IDs like `task-port-8080`, then `useTerminalSession.ts` prepended another `task-` creating `task-task-port-8080`, causing orphaned/duplicate terminal tabs.
+- **Fixes Implemented:**
+  1. **`ideActionService.ts` (214 lines):** Added `RUN_IN_TERMINAL` to the sticky pending action map so events emitted before `<TerminalView>` mounts are preserved for consumption on mount.
+  2. **`runService.ts` (424 lines):** Reordered ALL `executeRunPlan` paths to call `cb.onOpenTerminal()` BEFORE `ideActionService.emit("RUN_IN_TERMINAL", ...)`, ensuring the terminal tab starts mounting before the event fires.
+  3. **`useRunSession.ts` (131 lines):** Complete rewrite — on mount, calls `ideActionService.consumePendingAction("RUN_IN_TERMINAL")` to replay any stored event. Added 150ms PTY readiness delay before `writeTerminalInput`. Added `runningRef` guard to prevent concurrent duplicate executions.
+  4. **`useWorkspaceFileActions.ts` (172 lines):** Added `isRunning` state flag wrapping the entire save → resolve → execute pipeline with `try/finally` to prevent double-tap concurrent runs.
+  5. **`useTerminalSession.ts` (439 lines):** Fixed triple occurrence of `task-${task.id}` → `task.id` to eliminate double-prefix `task-task-port-8080` tab IDs.
+- **Verification:**
+  - TypeScript compilation (`npx tsc --noEmit`) completed with exit code 0 (zero errors).
+  - All files strictly adhere to Rule 5 (< 500 lines): `ideActionService.ts` (214), `runService.ts` (424), `useRunSession.ts` (131), `useWorkspaceFileActions.ts` (172), `useTerminalSession.ts` (439).
+
+### [2026-09-13] - Large Code Paste Performance & Rendering Optimization (Zero Lag, Zero Blank Blocks)
+- **User Directive:** "when i pasted a block of code, it got lag and freezing and some block stays white and not rendered optimize this so it wont lag even if big blocks of code are pasted"
+- **Root Cause Analysis:**
+  1. **White Unrendered Spacer Block:** In `EditorView.tsx`, `WINDOW_SIZE` was hardcoded to 60 lines. When pasting code past 60 lines, lines 60..N were truncated and replaced with an empty `bottomSpacerHeight` view, slicing off user code into an unrendered blank block. In `ContinuationSplitView.tsx`, the left editor pane was sliced to only 15 lines (`linesPerPage`), causing similar truncation.
+  2. **UI Freezing & Thread Lag:** In `EditorEditRow.tsx`, every token inside `<TextInput>` was rendered as a nested `<Text>` node with inline styles. On a multi-hundred line paste, React Native mounted 5,000+ native `Spannable` spans in `ReactEditText`, completely locking the Android UI thread during layout and measurement.
+- **Architecture & Optimizations Implemented:**
+  1. **Zero Blank Spacers in Edit Mode (`EditorView.tsx` - 451 lines):**
+     - When `isEditing === true` (or file line count <= 300), disabled windowing completely (`isWindowed = false`, `effectiveWindowSize = totalLines`, `effectiveStartIndex = 0`).
+     - Set `topSpacerHeight = 0` and `bottomSpacerHeight = 0`. 100% of pasted code is visible and rendered immediately without blank white blocks.
+     - Splicing pipeline in `useEditorTextPipeline.ts` (123 lines) updates `contentRef.current` directly when at start index 0 without running $O(N)$ string splits.
+  2. **Continuation Split Full Document Access (`ContinuationSplitView.tsx` - 217 lines):**
+     - Left editing pane now has full document access (`leftStart = 0`, `leftEnd = totalLines`, `bottomSpacerHeight = 0`) in edit mode, preventing any truncation when pasting code in split-screen.
+  3. **Ultra-Flat Token Spans in `<TextInput>` (`EditorEditRow.tsx` - 369 lines):**
+     - Replaced line `<Text>` wrappers with `<React.Fragment>` containers (zero native view / span overhead).
+     - Plain text tokens (`tok.type === "plain"`) and single-token plain lines output raw string text rather than nested `<Text>` components, cutting native `Spannable` spans by 80-85%.
+     - For large pastes (> 500 lines), fast-paths raw text directly into `<TextInput>`, preventing UI thread lock.
+     - Optimized gutter rendering: renders line numbers directly as `<Text>` without wrapper `<View>` containers, saving hundreds of layout allocations.
+  4. **Token Merging & Linear Indent Guides:**
+     - In `syntaxTokenizer.ts` (479 lines), `pushTok` merges adjacent tokens of the same type.
+     - In `indentGuideUtils.ts` (89 lines), replaced $O(N^2)$ backward/forward loop scanning with an $O(N)$ two-pass linear propagation algorithm (760 lines calculated in 4ms).
+- **Verification:**
+  - TypeScript compilation (`npx tsc --noEmit`) completed with exit code 0 (zero errors).
+  - All files strictly adhere to Rule 5 (< 500 lines): `syntaxTokenizer.ts` (479), `indentGuideUtils.ts` (89), `EditorEditRow.tsx` (369), `EditorView.tsx` (451), `ContinuationSplitView.tsx` (217), `useEditorTextPipeline.ts` (123), `editorCursorUtils.ts` (75).
+  - Automated benchmark test (`scratch/test_large_paste_performance.ts`) tokenized 760 lines in 46ms, computed indent guides in 4ms, verified 0 adjacent duplicates, and confirmed topSpacer=0, bottomSpacer=0, and zero white blocks.
+
+### [2026-09-13] - Split Screen Clean View & Recent Files Header Navigation
+- **User Directive:** "remove the x button when in split screen mode, also, at the header, we have a generous space, i want to put the recently edited files in it, so users can move through files easily"
+- **Architecture & Design:**
+  1. **Split Screen "x" Button Removal (`ContinuationSplitView.tsx` - 217 lines):**
+     - Removed the floating close button overlay (`floatingCloseBtn` and `Ionicons name="close"`) from the continuation pane.
+     - Split screen view is now completely unobstructed; users toggle continuation mode smoothly via the 2-finger pinch gesture or the header tab bar split toggle.
+  2. **Recent Files State & Tracking (`useRecentFiles.ts` - 70 lines):**
+     - Built custom hook `useRecentFiles` tracking up to 12 recently accessed/edited files.
+     - Prioritizes actively edited files (`isEdit: true` sets `lastEdited` and bumps file to front).
+     - Provides instant removal/dismissal (`removeRecentFile`).
+     - Wired into [`IDELayout.tsx`](file:///home/janelle/Documents/projects/ai-coder/src/ide/components/IDELayout.tsx) (490 lines) across `handleSelectFile`, `handleContentChange`, and chat file open triggers.
+  3. **Header Recent Files Navigation Strip (`EditorTabBar.tsx` - 413 lines):**
+     - Utilizes the generous empty header space between the active file display and the quick action buttons.
+     - Renders a sleek, horizontally scrollable strip of recently edited files (`recentFilesToDisplay`, excluding the active file to avoid duplication).
+     - Each file chip displays the language file icon (`getFileIcon`), file name, subtle green dot indicator (`dirtyDot`) if edited, and close `×` button.
+     - One-tap quick switching: tapping any chip immediately activates that file in the editor.
+- **Verification:**
+  - TypeScript type check (`npx tsc --noEmit`) exited with code 0 (zero errors).
+  - All files strictly under 500 lines (`ContinuationSplitView.tsx`: 217, `useRecentFiles.ts`: 70, `EditorTabBar.tsx`: 413, `EditorView.tsx`: 447, `IDELayout.tsx`: 490).
+  - Automated unit test (`scratch/test_split_close_and_recents.js`) passed all assertions with 100% success.
+
+### [2026-09-13] - Header Space Optimization (Remove Format Document & Icon-Only Lock/Edit)
+- **User Directive:** "in the header remove the format document button it is unecessary, also the lock view and editing should only show icons to save space"
+- **Architecture & Design:**
+  - In [`EditorTabBar.tsx`](file:///home/janelle/Documents/projects/ai-coder/src/ide/components/EditorTabBar.tsx) (303 lines):
+    - Removed manual "Format Document" action button (`sparkles` icon) from the quick actions toolbar.
+    - Removed "Format Document" action item from the 3-dots dropdown menu.
+    - Updated overflow menu check to rely on `onExitProject || onOpenSettings`.
+    - Made the mode switch badge (`modeBadge`) strictly icon-only: removed "View" and "Editing" text labels, saving 40-50px of horizontal header space.
+    - Compacted `modeBadge` to a sleek 22x22px square button rendering `pencil` (in green tint when editing) or `lock-closed-outline` (in muted gray when locked/view mode).
+    - Preserved generous touch targets (`hitSlop: 8px`) and accessibility labels for smooth touch interaction.
+- **Verification:**
+  - TypeScript type check (`npx tsc --noEmit`) exited with code 0 (zero errors).
+  - All files strictly under 500 lines (`EditorTabBar.tsx` at 303 lines, limit 500).
+  - Automated unit test (`scratch/test_tabbar_header_cleanup.js`) passed all 6 assertions.
+
+### [2026-09-13] - Transparent Format Toast Label (Zero Background & Zero Shift)
+- **User Directive:** "the label that pops up "code is already formated" its block should not have a background"
+- **Architecture & Design:**
+  - In [`EditorFloatingHud.tsx`](file:///home/janelle/Documents/projects/ai-coder/src/ide/components/editor/EditorFloatingHud.tsx) (106 lines):
+    - Removed `backgroundColor: theme.bgSecondary` and `borderBottomColor: theme.border` from the format toast banner.
+    - Updated `styles.formatToast` to use `backgroundColor: "transparent"`, `position: "absolute"`, `top: 38`, `alignSelf: "center"`, `zIndex: 95`, and `pointerEvents="none"`.
+    - Removed borders and added subtle text shadow (`rgba(0,0,0,0.4)`) for crisp legibility over code across all themes.
+    - The format notification (`sparkles` icon and text, e.g. "Code is already formatted") now floats cleanly with zero background block obstruction and zero layout shift.
+- **Verification:**
+  - TypeScript type check (`npx tsc --noEmit`) exited with code 0 (zero errors).
+  - All files strictly under 500 lines (Rule 5).
+
+### [2026-09-13] - Done-Editing Navbar Auto-Open (Manually Hidden Explorer Flow)
+- **User Directive:** "when i manually hide the explorer bar then i finished editing a file, it should automatically open navbar, only trigger if it is automatically turned off"
+- **Architecture & Design:**
+  1. **Manual Explorer Bar State Tracking (`IDELayout.tsx` - 492 lines):**
+     - Tracked `manualSidebarHiddenRef` on `onToggleCollapse` (`true`) and `onToggleSidebar` (`false`).
+     - Preserves the user's manual choice to hide the explorer bar so exiting edit mode (`handleEditModeChange(false)`) no longer forces the sidebar open against their preference.
+  2. **Navbar Turned-Off Reason Distinction:**
+     - Distinguishes between automatic hide (`navbarTurnedOffReasonRef.current = 'auto'`) upon landscape mode entry vs. manual hide (`navbarTurnedOffReasonRef.current = 'manual'`) via the bottom bar chevron button.
+  3. **Conditional Navbar Auto-Open on Done Editing:**
+     - When finishing editing a file while the explorer bar was manually hidden, checks if the navbar was **automatically** turned off (`isLandscapeNavbarHiddenRef.current && navbarTurnedOffReasonRef.current === 'auto'`).
+     - If automatically turned off, expands the navbar seamlessly (`setIsLandscapeNavbarHidden(false)`).
+     - If manually turned off by the user, keeps it hidden ("only trigger if it is automatically turned off").
+- **Verification:**
+  - TypeScript type check (`npx tsc --noEmit`) exited with code 0 (zero errors).
+  - All codebase files strictly under 500 lines (Rule 5).
+  - Automated unit test (`scratch/test_done_editing_navbar_flow.js`) verified all 4 interaction flows (auto-open, manual suppress, default restore, and sidebar reopen).
+
+### [2026-09-13] - Manual Landscape Navbar Toggle Icon (Zero Auto-Trigger)
+- **User Directive:** "instead of auto triggering the navbar , just place a icon that has no bg to turn the navbar on again"
+- **Architecture & Design:**
+  1. **Removed Auto-Trigger Scroll Listeners:**
+     - Removed all scroll-up velocity/distance checks and `onScrollUp` triggers across `IDELayout.tsx`, `EditorView.tsx` (433 lines), and `ContinuationSplitView.tsx` (240 lines).
+     - Scrolling the IDE up or down no longer causes unwanted navbar popups or flickering.
+  2. **Transparent Show Navbar Button Centered (`IDEBottomBar.tsx` - 341 lines):**
+     - When the bottom navbar is hidden in landscape mode, `IDEBottomBar` renders in a collapsed absolute overlay centered horizontally (`position: "absolute"`, `bottom: 2`, `left: 0`, `right: 0`, `alignItems: "center"`, `backgroundColor: "transparent"`).
+     - Renders a clean `chevron-up` icon (size 16, `theme.textMuted`) with no background color and generous touch padding (`hitSlop: 12-16px`).
+     - Placed at the dead center of the screen bottom so corner widgets, line numbers, and editor content never occlude or hide it.
+     - Uses `pointerEvents="box-none"` so touches outside the small button pass straight through to the editor underneath.
+     - Takes 0 lines or pixels of layout flow space in the editor.
+     - Tapping this icon triggers `onShowNavbar()`, which cleanly expands the full bottom navbar.
+  3. **Seamless Toggle Pair:**
+     - When the navbar is visible in landscape, the small transparent `chevron-down` button beside the Editor tab collapses it.
+     - When the navbar is collapsed in landscape, the small transparent `chevron-up` button at the center bottom expands it.
+- **Verification:**
+  - TypeScript type check (`npx tsc --noEmit`) exited with code 0 (zero errors).
+  - All files strictly under 500 lines (Rule 5).
+  - Automated unit test (`scratch/test_manual_navbar_toggle.js`) verified manual toggling without scroll auto-triggers.
+
+### [2026-09-13] - Compact Floating Keyword Suggestion Strip (Zero Layout Shift)
+- **User Directive:** "the suggestion strip below that suggest keywords has a veri big block, compact it no need to take full ide horizontal screen place it somewhereand remove its block color so it doesnt take a single space"
+- **Architecture & Design:**
+  1. **Zero Layout Shift / Inflow Space (`CompletionBar.tsx` - 141 lines):**
+     - Converted the completion container from an in-flow full-width block (`height: 38`, `width: 100%`) into an absolute floating overlay (`position: "absolute"`).
+     - Removed the solid background block color (`backgroundColor: "transparent"`) and border line so the container consumes 0 vertical layout space and eliminates content jumping when suggestions appear/disappear.
+     - Configured `pointerEvents="box-none"` so touches outside the suggestion chips pass directly through to the code lines underneath.
+  2. **Compact Self-Sizing Pill Chips:**
+     - Restricted container width (`maxWidth: "88%"`, `alignSelf: "flex-start"` at `left: 8`) so it no longer stretches across the entire screen.
+     - Compacted chip dimensions: reduced vertical padding (`paddingVertical: 3`), tightened icon badges (14x14px), and refined typography (`fontSize: 11`).
+     - Added subtle glassmorphic backdrop on individual pills (`theme.bgSecondary` with 95% opacity and subtle 1px border) so text is crisp and readable without occluding the editor background.
+  3. **Dynamic Floating Offset (`EditorView.tsx` - 440 lines):**
+     - Automatically docks above the active soft keyboard when open (`keyboardBottomPadding + offset`), or right above the status bar / bottom edge when closed.
+- **Verification:**
+  - Full TypeScript type check (`npx tsc --noEmit`) passed with code 0 (zero errors).
+  - All files strictly conform to the 500-line ceiling (Rule 5).
+  - Automated unit test (`scratch/test_compact_completion_bar.js`) verified badge symbols, detail truncations, absolute positioning math, and 0 layout space consumption.
+
+### [2026-09-13] - Landscape Full Screen, Auto-Hide Navbar & Split Header Cleanup
+- **User Directive:** "when on landscape mode, the tab where it shows, line 1-14 of 54, continuation line 15-28, this block should be removed, it takes too much space of the screen, also if in landscape mode it should automatically trigger full screen mode that disables safe are mode, and hides any notification bar, and the bottom navbar auto hides, and shows only when the user scrolls the ide upward and itll stay on, but put a button that triggers it off again so it hides, it should be in the navbar beside the editor, it should be small and no background color"
+- **Architecture & Design:**
+  1. **Continuation Split-Screen Header Removal (`ContinuationSplitView.tsx` - 248 lines):**
+     - Completely removed the 28px top header bar blocks (`Lines X-Y of Z` and `Continuation: Lines A-B`) from both columns, returning full vertical screen height directly to code lines.
+     - Added an absolute-positioned floating close button (`styles.floatingCloseBtn`) on the top-right corner taking 0 vertical line space.
+  2. **Automatic Edge-to-Edge Full Screen in Landscape (`IDELayout.tsx` - 483 lines):**
+     - Disables safe area padding in landscape (`paddingTop: 0, paddingLeft: 0, paddingRight: 0, paddingBottom: 0`).
+     - Hides the system notification/status bar completely via `<StatusBar hidden={desktopFullscreen || isLandscape} />` and `StatusBar.setHidden(desktopFullscreen || isLandscape, "fade")`.
+     - Automatically restores safe area padding and the status bar when returning to portrait mode.
+  3. **Auto-Hiding Bottom Navbar with Upward Scroll Reveal (`IDELayout.tsx` & `EditorView.tsx` - 436 lines):**
+     - Bottom navbar auto-hides by default upon entering landscape mode.
+     - Upward scroll detection in both single-pane and split-screen modes (`prevScrollY - currentScrollY > 8`) triggers `onScrollUp()`, smoothly revealing the bottom navbar.
+     - Navbar **stays on** persistently across subsequent scrolls until explicitly dismissed.
+  4. **Transparent Hide Button Beside Editor Tab (`IDEBottomBar.tsx` - 305 lines):**
+     - Placed a small button with no background color (`backgroundColor: "transparent"`) right beside the Editor tab button in `IDEBottomBar`.
+     - Uses `chevron-down` icon (size 13) with `hitSlop` for effortless one-tap dismiss of the navbar.
+- **Verification:**
+  - TypeScript type check (`npx tsc --noEmit`) passed with code 0 (zero errors).
+  - Every single file in the project is strictly < 500 lines (Rule 5).
+  - Automated test (`scratch/test_landscape_navbar_behavior.js`) verified safe area bypass in landscape, status bar visibility toggling, scroll-up reveal detection, stay-on persistence, and manual hide button dismiss.
+
+### [2026-09-13] - IDE Pinch Zoom & Landscape Continuation Split-Screen
+- **User Directive:** "i want to be able to zoom in and zoom out in the ide please make this supported, also in landsacape mode, the user should be able to trigger split screen ide in which the other side is the continuation of that screen, just 2 finger tap together and move away for triggering split screen, while 2 finger tap then move closer to turn off split screen"
+- **Architecture & Design:**
+  1. **Zero External Gestures / Zero Bloatware (Rule 1):** Built entirely using React Native core touch responder lifecycle (`onTouchStart`, `onTouchMove`, `onTouchEnd`) calculating Euclidean finger distance (\( \sqrt{\Delta x^2 + \Delta y^2} \)) and horizontal axis displacement (\( |\Delta x| \)).
+  2. **Editor Font & Metric Scaling:**
+     - Clamped font sizes smoothly between `9px` (min) and `26px` (max), with instant calculation of dynamic `lineHeight` (`Math.round(fontSize * 1.55)`) and `charWidth` (`fontSize * 0.60`).
+     - Live HUD badge (`Zoom: 115%` / `15px`) displays transiently during pinch scaling.
+     - Settings persistence via `saveEditorSettings({ fontSize })`.
+     - Dynamically scales code lines, gutter line numbers, active edit cursor, horizontal scroll bounds, and indent guides.
+  3. **Continuation Split-Screen (Book / Dual-Column Layout):**
+     - Left pane displays lines \( [S, S + P) \) and right pane continues seamlessly from \( [S + P, S + 2P) \), where \( P \) is the visible page height in lines.
+     - Synchronized vertical scrolling across both columns ensures zero duplicated or skipped lines.
+     - Independent horizontal scrolling on each pane accommodates long lines.
+     - Dual-column header clearly indicators: "Left Column: Lines 1-45" and "Right Column: Lines 46-90 (Continuation)".
+     - Close button (`close-circle-outline`) and Tab Bar toggle button (`tablet-landscape-outline`) for quick mouse/touch access.
+  4. **Gesture Disambiguation:**
+     - Trigger Split-Screen ON: In landscape mode (`isLandscape`), two fingers tapping close together (`initialDist < 130px`) and spreading outward horizontally (`deltaDx > 85px`) engages continuation split view with haptic feedback and HUD toast.
+     - Trigger Split-Screen OFF: While split-screen is active, two fingers starting apart (`startAbsDx > 100px`) and pinching inward (`deltaDist < -75px`) turns off split view and returns to single-pane view.
+     - Pinch Zoom: When split triggers are not engaged, multi-touch pinch smoothly scales the editor font size.
+- **Components & Modular Refactoring (Strict Rule 5 Compliance):**
+  - `src/ide/services/configService.ts`: Added `fontSize?: number` (default 13) to `EditorSettings`.
+  - `src/ide/components/editor/indentGuideUtils.ts`: Added dynamic `charWidth` support to indent guide calculations.
+  - `src/ide/components/editor/useEditorGestures.ts` (178 lines): Manages orientation, gesture classification, font size clamping, HUD badges, and split-screen state.
+  - `src/ide/components/editor/ContinuationSplitView.tsx` (264 lines): Dual-column continuation split layout with tokenized syntax highlighting, gutter markers, active editing, and synced pagination.
+  - `src/ide/components/editor/EditorStatusBar.tsx` (112 lines): Bracket matching and error diagnostics status bar.
+  - `src/ide/components/editor/EditorFloatingHud.tsx` (106 lines): Non-intrusive floating HUD for zoom percentages, split notifications, and format alerts.
+  - `src/ide/components/editor/useEditorTextPipeline.ts` (118 lines): Synchronous ref mirrors and typing pipeline.
+  - `src/ide/components/EditorEditRow.tsx` (354 lines): Scaled gutters, text inputs, and indent guides.
+  - `src/ide/components/EditorTabBar.tsx` (336 lines): Added landscape split toggle icon.
+  - `src/ide/components/EditorView.tsx` (429 lines): Reduced from 527 to 429 lines, cleanly integrating the pipeline and continuation view.
+- **Verification:**
+  - Full TypeScript type check (`npx tsc --noEmit`) exited with code 0 (0 errors).
+  - Every single file in the project is strictly < 500 lines (Rule 5).
+  - Scratch unit test (`scratch/test_editor_zoom_split.js`) verified zoom clamping [9, 26], metric ratios, gesture classification in landscape vs. portrait, and continuation split line partitioning.
 
 ### [2026-09-13] - Pixel-Perfect Collision-Free Indent Guides & User Setting Toggle
 - **User Directive:** "the lines is it really supposed to be like this? can we improve it" (with screenshot showing vertical lines slicing through `Scanner`, `//`, `System`, `double`, `switch`, `case`, `break`)

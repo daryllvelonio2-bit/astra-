@@ -314,23 +314,23 @@ export async function executeRunPlan(
   cb: RunCallbacks
 ): Promise<void> {
   if (plan.kind === "unsupported") {
+    cb.onOpenTerminal();
     ideActionService.emit("RUN_IN_TERMINAL", {
       command: `printf "\\033[1;31m✖ %s\\033[0m\\n" ${q(plan.message || "Nothing to run.")}`,
       workspaceId,
       userInitiated: true,
     });
-    cb.onOpenTerminal();
     return;
   }
 
   try {
     if (!(await isEnvironmentReady())) {
+      cb.onOpenTerminal();
       ideActionService.emit("RUN_IN_TERMINAL", {
         command: `printf "\\033[1;33m⚡ Linux environment is still provisioning (watch Settings → Linux).\\033[0m\\n"`,
         workspaceId,
         userInitiated: true,
       });
-      cb.onOpenTerminal();
       return;
     }
   } catch (_) {}
@@ -339,21 +339,21 @@ export async function executeRunPlan(
     const known = resolveRuntimeForBinary(plan.runtime);
     if (known) {
       const autoCmd = buildAutoInstallRunScript(plan.command, known, plan.displayName);
+      cb.onOpenTerminal();
       ideActionService.emit("RUN_IN_TERMINAL", {
         command: autoCmd,
         workspaceId,
         userInitiated: true,
       });
-      cb.onOpenTerminal();
       return;
     }
 
+    cb.onOpenTerminal();
     ideActionService.emit("RUN_IN_TERMINAL", {
       command: `printf "\\033[1;31m✖ Error: '${plan.runtime}' not found in Linux environment.\\033[0m\\n\\033[2m${EXTRAS_HINT}\\033[0m\\n"`,
       workspaceId,
       userInitiated: true,
     });
-    cb.onOpenTerminal();
     return;
   }
 
@@ -362,20 +362,20 @@ export async function executeRunPlan(
       const known = resolveRuntimeForBinary(plan.runtime);
       if (known) {
         const autoCmd = buildAutoInstallRunScript(plan.command, known, plan.displayName);
+        cb.onOpenTerminal();
         ideActionService.emit("RUN_IN_TERMINAL", {
           command: autoCmd,
           workspaceId,
           userInitiated: true,
         });
-        cb.onOpenTerminal();
         return;
       }
+      cb.onOpenTerminal();
       ideActionService.emit("RUN_IN_TERMINAL", {
         command: `printf "\\033[1;31m✖ Error: '${plan.runtime}' not found in Linux environment.\\033[0m\\n\\033[2m${EXTRAS_HINT}\\033[0m\\n"`,
         workspaceId,
         userInitiated: true,
       });
-      cb.onOpenTerminal();
       return;
     }
 
@@ -415,10 +415,10 @@ export async function executeRunPlan(
     isServer: false,
   });
 
+  cb.onOpenTerminal();
   ideActionService.emit("RUN_IN_TERMINAL", {
     command: runCmd,
     workspaceId,
     userInitiated: true,
   });
-  cb.onOpenTerminal();
 }

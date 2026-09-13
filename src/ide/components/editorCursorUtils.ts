@@ -73,3 +73,53 @@ export function computeChunkStartOffset(rawLines: string[], startIndex: number):
   return off;
 }
 
+/**
+ * Build a precomputed array of byte offsets where each line starts.
+ * offsets[0] = 0 (first line), offsets[i] = position of the i-th '\n' + 1.
+ * Total length = number of lines. O(N) once, then all lookups are O(log N).
+ */
+export function buildLineStartOffsets(content: string): number[] {
+  const offsets: number[] = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 10) { // '\n'
+      offsets.push(i + 1);
+    }
+  }
+  return offsets;
+}
+
+/**
+ * Binary search: given a character offset into content, return the 0-based
+ * line index. O(log N) vs the previous O(N) content.slice().split("\n").
+ */
+export function offsetToLine(lineStarts: number[], offset: number): number {
+  let lo = 0;
+  let hi = lineStarts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    if (lineStarts[mid] <= offset) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo;
+}
+
+/**
+ * Find the character length of the longest line using the precomputed offsets.
+ * O(N) in number of lines but zero string allocation (no split).
+ */
+export function maxLineLengthFromOffsets(
+  lineStarts: number[],
+  contentLength: number
+): number {
+  let max = 0;
+  for (let i = 0; i < lineStarts.length; i++) {
+    const start = lineStarts[i];
+    const end = i + 1 < lineStarts.length ? lineStarts[i + 1] - 1 : contentLength;
+    const len = end - start;
+    if (len > max) max = len;
+  }
+  return max;
+}

@@ -18,12 +18,7 @@ import { runningTasksService, RunningTask } from "../../ai/services/runningTasks
 import { FileNode } from "../types";
 import { useSidebarResizer } from "./useSidebarResizer";
 import { useWorkspaceFileActions } from "./useWorkspaceFileActions";
-import {
-  readFileContent,
-  loadOrCreateDefaultWorkspace,
-  loadWorkspace,
-  Workspace,
-} from "../services/workspaceService";
+import { readFileContent, loadOrCreateDefaultWorkspace, loadWorkspace, Workspace } from "../services/workspaceService";
 import { useDebouncedFileSave } from "./useDebouncedFileSave";
 import { useWorkspaceAutoRefresh } from "./useWorkspaceAutoRefresh";
 import { useTheme } from "../../theme/themeContext";
@@ -31,16 +26,10 @@ import { useOrientation } from "../../theme/useOrientation";
 import { useIdeActionBridge } from "./useIdeActionBridge";
 import { SettingsModal } from "./SettingsModal";
 import { resolveChatPathToRelative } from "../services/chatFileLinkService";
+import { useRecentFiles } from "./editor/useRecentFiles";
 import {
-  BottomTabVisibility,
-  DEFAULT_BOTTOM_TABS,
-  firstVisibleTab,
-  loadAstraEnabled,
-  loadBottomTabs,
-  loadDefaultEditorUi,
-  normalizeBottomTabs,
-  subscribeConfigChanges,
-  ToggleableBottomTab,
+  BottomTabVisibility, DEFAULT_BOTTOM_TABS, firstVisibleTab, loadAstraEnabled,
+  loadBottomTabs, loadDefaultEditorUi, normalizeBottomTabs, subscribeConfigChanges, ToggleableBottomTab,
 } from "../services/configService";
 
 interface IDELayoutProps {
@@ -57,6 +46,7 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   const { theme } = useTheme();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
+  const { recentFiles, recordRecentFile, removeRecentFile } = useRecentFiles(workspaceId);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [bottomTab, setBottomTab] = useState<ToggleableBottomTab>("editor");
   const [visitedTabs, setVisitedTabs] = useState<Set<ToggleableBottomTab>>(() => new Set([bottomTab]));
@@ -110,6 +100,10 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     }
   }, [visibleTabs, bottomTab]);
   const [desktopFullscreen, setDesktopFullscreen] = useState(false);
+  const [isLandscapeNavbarHidden, setIsLandscapeNavbarHidden] = useState(true);
+  const isLandscapeNavbarHiddenRef = useRef(true);
+  const navbarTurnedOffReasonRef = useRef<"auto" | "manual" | null>("auto");
+  const manualSidebarHiddenRef = useRef(false);
   const [browserUrl, setBrowserUrl] = useState<string>("");
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [isSettingsModalVisible, setSettingsModalVisible] = useState(false);
@@ -121,11 +115,19 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   const lastLoadStatusRef = useRef(0);
   const prevLoadedWsIdRef = useRef<string | null>(null);
 
-  // Landscape leaves little horizontal room: park the file sidebar on rotate
-  // (user can still reopen it manually; only fires on orientation change).
+  // Landscape mode: auto-hide navbar & park file sidebar on rotate
   useEffect(() => {
     setIsSidebarOpen(!isLandscape);
+    if (isLandscape) {
+      setIsLandscapeNavbarHidden(true);
+      isLandscapeNavbarHiddenRef.current = true;
+      navbarTurnedOffReasonRef.current = "auto";
+    }
   }, [isLandscape]);
+
+  useEffect(() => {
+    StatusBar.setHidden(desktopFullscreen || isLandscape, "fade");
+  }, [desktopFullscreen, isLandscape]);
 
   useEffect(() => {
     const unsubTasks = runningTasksService.subscribe(setRunningTasks);
@@ -141,13 +143,15 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     try {
       const content = await readFileContent(targetWs.id, relative);
       const fileName = relative.split("/").pop() || relative;
-      setActiveFile({
+      const fileNode: FileNode = {
         id: `${targetWs.id}::${relative}`,
         name: fileName,
         type: "file",
         path: relative,
         content: content || "",
-      });
+      };
+      setActiveFile(fileNode);
+      recordRecentFile(fileNode, false);
       safeSetBottomTab("editor");
       if (!content) {
         Alert.alert("File opened", `${fileName} is empty or could not be read at:\n${relative}`);
@@ -155,7 +159,7 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     } catch (e: any) {
       Alert.alert("Could not open file", e?.message || relative);
     }
-  }, [safeSetBottomTab]);
+  }, [safeSetBottomTab, recordRecentFile]);
 
   const handleOpenInBrowser = useCallback((targetUrl: string) => {
     setBrowserUrl(targetUrl);
@@ -249,46 +253,46 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
       content: file.content || "",
     };
     setActiveFile(selected);
+    recordRecentFile(selected, false);
     safeSetBottomTab("editor");
-    if (!isLandscape) {
-      setIsSidebarOpen(false);
-    }
+    if (!isLandscape) setIsSidebarOpen(false);
     try {
       await flushPendingSave();
       const content = await readFileContent(workspace.id, targetPath);
       setActiveFile((prev) => (prev && prev.id === selected.id ? { ...prev, content: content ?? "" } : prev));
     } catch (_) {}
-  }, [workspace, isLandscape, safeSetBottomTab, flushPendingSave]);
+  }, [workspace, isLandscape, safeSetBottomTab, flushPendingSave, recordRecentFile]);
 
   const handleContentChange = (newContent: string) => {
     if (!activeFile) return;
     setActiveFile((prev) => (prev ? { ...prev, content: newContent } : null));
     scheduleSave(activeFile.path || activeFile.name, newContent);
+    recordRecentFile(activeFile, true);
   };
 
   const handleEditModeChange = useCallback((editing: boolean) => {
-    setIsSidebarOpen(!editing);
+    if (editing) {
+      setIsSidebarOpen(false);
+    } else {
+      if (manualSidebarHiddenRef.current) {
+        setIsSidebarOpen(false);
+        if (isLandscapeNavbarHiddenRef.current && navbarTurnedOffReasonRef.current === "auto") {
+          setIsLandscapeNavbarHidden(false);
+          isLandscapeNavbarHiddenRef.current = false;
+          navbarTurnedOffReasonRef.current = null;
+        }
+      } else {
+        setIsSidebarOpen(true);
+      }
+    }
   }, []);
 
   const {
-    selectedNode,
-    modalMode,
-    setModalMode,
-    modalInput,
-    setModalInput,
-    menuPosition,
-    handleLongPressNode,
-    confirmAndDeleteNode,
-    handleRenameSubmit,
-    handleCreateNode,
-    handleMoveNode,
-    handleRunActiveFile,
+    selectedNode, modalMode, setModalMode, modalInput, setModalInput, menuPosition,
+    handleLongPressNode, confirmAndDeleteNode, handleRenameSubmit, handleCreateNode,
+    handleMoveNode, handleRunActiveFile,
   } = useWorkspaceFileActions({
-    workspace,
-    setWorkspace,
-    activeFile,
-    setActiveFile,
-    refreshWorkspace,
+    workspace, setWorkspace, activeFile, setActiveFile, refreshWorkspace,
     onOpenTerminal: () => safeSetBottomTab("terminal"),
     onOpenPreview: handleOpenInBrowser,
   });
@@ -306,11 +310,21 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingTop: desktopFullscreen ? 0 : insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.bgPrimary,
+          paddingTop: (desktopFullscreen || isLandscape) ? 0 : insets.top,
+          paddingLeft: (desktopFullscreen || isLandscape) ? 0 : insets.left,
+          paddingRight: (desktopFullscreen || isLandscape) ? 0 : insets.right,
+        },
+      ]}
+    >
       <StatusBar
         barStyle={theme.isDark ? "light-content" : "dark-content"}
         backgroundColor={theme.bgSecondary}
-        hidden={desktopFullscreen}
+        hidden={desktopFullscreen || isLandscape}
       />
 
       {/* Main Workspace Area */}
@@ -322,7 +336,10 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
               files={workspace.root.children || []}
               onSelectFile={handleSelectFile}
               activeFileId={activeFile?.id}
-              onToggleCollapse={() => setIsSidebarOpen(false)}
+              onToggleCollapse={() => {
+                manualSidebarHiddenRef.current = true;
+                setIsSidebarOpen(false);
+              }}
               onRefreshFiles={refreshWorkspace}
               onLongPressNode={handleLongPressNode}
               onCreateFile={handleCreateNode}
@@ -342,13 +359,20 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
             <View style={[styles.tabContent, bottomTab !== "editor" && styles.hiddenTab]}>
               <EditorView
                 fileName={activeFile?.name}
+                activeFilePath={activeFile?.path}
                 content={activeFile?.content || ""}
                 onChangeContent={handleContentChange}
                 onExitProject={handleBackToPicker}
-                onToggleSidebar={!isSidebarOpen ? () => setIsSidebarOpen(true) : undefined}
+                onToggleSidebar={!isSidebarOpen ? () => {
+                  manualSidebarHiddenRef.current = false;
+                  setIsSidebarOpen(true);
+                } : undefined}
                 onRunFile={handleRunActiveFile}
                 onEditModeChange={handleEditModeChange}
                 onOpenSettings={() => setSettingsModalVisible(true)}
+                recentFiles={recentFiles}
+                onSelectRecentFile={handleSelectFile}
+                onCloseRecentFile={removeRecentFile}
               />
               <MonacoEngineHost />
             </View>
@@ -359,25 +383,21 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
               <TerminalView key={workspace?.id || "none"} workspaceId={workspace?.id} />
             </View>
           )}
-
           {visitedTabs.has("browser") && (
             <View style={[styles.tabContent, bottomTab !== "browser" && styles.hiddenTab]}>
               <WebBrowserPreview initialUrl={browserUrl} workspaceId={workspace?.id} />
             </View>
           )}
-
           {visitedTabs.has("git") && (
             <View style={[styles.tabContent, bottomTab !== "git" && styles.hiddenTab]}>
               <GitHubDesktopView workspaceId={workspace?.id} projectName={workspace?.name} visible={bottomTab === "git"} />
             </View>
           )}
-
           {visitedTabs.has("desktop") && (
             <View style={[styles.tabContent, bottomTab !== "desktop" && styles.hiddenTab]}>
               <DesktopView visible={bottomTab === "desktop"} onFullscreenChange={setDesktopFullscreen} />
             </View>
           )}
-
           {visitedTabs.has("vscode") && (
             <View style={[styles.tabContent, bottomTab !== "vscode" && styles.hiddenTab]}>
               <VSCodeView workspaceDir={workspace?.dirPath} visible={bottomTab === "vscode"} />
@@ -400,7 +420,7 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
         </View>
       </View>
 
-      {/* Bottom Panel Toggle Bar (Auto-hidden when soft keyboard is open) */}
+      {/* Bottom Panel Toggle Bar */}
       {!isKeyboardVisible && !desktopFullscreen && (
         <IDEBottomBar
           bottomTab={bottomTab}
@@ -408,40 +428,39 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
           runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
           compact={isLandscape}
           visibleTabs={visibleTabs}
+          isLandscapeNavbarHidden={isLandscapeNavbarHidden}
+          onHideNavbar={() => {
+            setIsLandscapeNavbarHidden(true);
+            isLandscapeNavbarHiddenRef.current = true;
+            navbarTurnedOffReasonRef.current = "manual";
+          }}
+          onShowNavbar={() => {
+            setIsLandscapeNavbarHidden(false);
+            isLandscapeNavbarHiddenRef.current = false;
+            navbarTurnedOffReasonRef.current = null;
+          }}
         />
       )}
 
       {/* File Action Modal */}
       {modalMode !== "none" && (
         <FileActionModal
-          modalMode={modalMode}
-          selectedNode={selectedNode}
-          menuPosition={menuPosition}
-          modalInput={modalInput}
-          onChangeInput={setModalInput}
-          onClose={() => setModalMode("none")}
+          modalMode={modalMode} selectedNode={selectedNode} menuPosition={menuPosition}
+          modalInput={modalInput} onChangeInput={setModalInput} onClose={() => setModalMode("none")}
           onSelectRename={() => { setModalInput(selectedNode?.name || ""); setModalMode("rename"); }}
           onSelectAdd={() => { setModalInput(""); setModalMode("add"); }}
-          onDeleteConfirm={confirmAndDeleteNode}
-          onRenameSubmit={handleRenameSubmit}
+          onDeleteConfirm={confirmAndDeleteNode} onRenameSubmit={handleRenameSubmit}
           onAddSubmit={() => { setModalMode("none"); handleCreateNode(modalInput); setModalInput(""); }}
           onBackToOptions={() => setModalMode("options")}
         />
       )}
 
-      {/* Settings Modal */}
+      {/* Settings & Marketplace Modals */}
       <SettingsModal
-        visible={isSettingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-        workspaceId={workspace?.id}
-        onSyncWorkspace={refreshWorkspace}
+        visible={isSettingsModalVisible} onClose={() => setSettingsModalVisible(false)}
+        workspaceId={workspace?.id} onSyncWorkspace={refreshWorkspace}
       />
-
-      {/* Extensions & Agents Marketplace Modal */}
-      <ExtensionMarketplaceModal
-        visible={isMarketplaceVisible}
-        onClose={() => setMarketplaceVisible(false)}
-      />
+      <ExtensionMarketplaceModal visible={isMarketplaceVisible} onClose={() => setMarketplaceVisible(false)} />
     </View>
   );
 }

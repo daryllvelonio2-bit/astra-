@@ -397,6 +397,16 @@ export function tokenizeCode(
   return result;
 }
 
+function pushTok(tokens: CodeToken[], text: string, type: TokenType) {
+  if (!text) return;
+  const last = tokens[tokens.length - 1];
+  if (last && last.type === type) {
+    last.text += text;
+  } else {
+    tokens.push({ text, type });
+  }
+}
+
 function tokenizeLineFragment(
   line: string,
   grammar?: LanguageGrammar | null,
@@ -411,76 +421,58 @@ function tokenizeLineFragment(
   let lastIndex = 0;
 
   while ((match = regex.exec(line)) !== null) {
-    // Token-count guard: collapse the unread remainder into one plain token
-    // so pathological lines can't create thousands of views.
     if (tokens.length >= MAX_TOKENS_PER_LINE) {
-      tokens.push({ text: line.slice(lastIndex), type: "plain" });
+      pushTok(tokens, line.slice(lastIndex), "plain");
       lastIndex = line.length;
       break;
     }
     if (match.index > lastIndex) {
-      tokens.push({ text: line.slice(lastIndex, match.index), type: "plain" });
+      pushTok(tokens, line.slice(lastIndex, match.index), "plain");
     }
 
-    const [
-      full,
-      comment,
-      str,
-      jsxTag,
-      funcCall,
-      propKey,
-      num,
-      word,
-      operator,
-    ] = match;
+    const [full, comment, str, jsxTag, funcCall, propKey, num, word, operator] = match;
 
     if (comment) {
-      tokens.push({ text: comment, type: "comment" });
+      pushTok(tokens, comment, "comment");
     } else if (str) {
-      tokens.push({ text: str, type: "string" });
+      pushTok(tokens, str, "string");
     } else if (jsxTag) {
-      tokens.push({ text: jsxTag, type: "jsx_tag" });
+      pushTok(tokens, jsxTag, "jsx_tag");
     } else if (funcCall) {
-      if (grammar ? grammar.keywords.has(funcCall) : JS_KEYWORDS.has(funcCall)) {
-        tokens.push({ text: funcCall, type: "keyword" });
-      } else if (grammar?.types?.has(funcCall)) {
-        tokens.push({ text: funcCall, type: "jsx_tag" });
-      } else {
-        tokens.push({ text: funcCall, type: "function" });
-      }
+      const isKw = grammar ? grammar.keywords.has(funcCall) : JS_KEYWORDS.has(funcCall);
+      const isTy = grammar?.types?.has(funcCall);
+      pushTok(tokens, funcCall, isKw ? "keyword" : isTy ? "jsx_tag" : "function");
     } else if (propKey) {
-      tokens.push({ text: propKey, type: "property" });
+      pushTok(tokens, propKey, "property");
     } else if (num) {
-      tokens.push({ text: num, type: "number" });
+      pushTok(tokens, num, "number");
     } else if (word) {
       const isKeyword = grammar ? grammar.keywords.has(word) : JS_KEYWORDS.has(word);
       const isType = grammar?.types?.has(word);
       const isSpecial = grammar?.specialTokens?.has(word);
 
       if (isKeyword) {
-        tokens.push({ text: word, type: "keyword" });
-      } else if (isType) {
-        tokens.push({ text: word, type: "jsx_tag" }); // Types rendered in type/tag color
+        pushTok(tokens, word, "keyword");
+      } else if (isType || PASCAL_CASE_WORD_REGEX.test(word)) {
+        pushTok(tokens, word, "jsx_tag");
       } else if (isSpecial) {
-        tokens.push({ text: word, type: "function" });
+        pushTok(tokens, word, "function");
       } else if (BOOLEANS_AND_SPECIAL.has(word)) {
-        tokens.push({ text: word, type: "boolean" });
-      } else if (PASCAL_CASE_WORD_REGEX.test(word)) {
-        tokens.push({ text: word, type: "jsx_tag" }); // Component / Type name
+        pushTok(tokens, word, "boolean");
       } else {
-        tokens.push({ text: word, type: "plain" });
+        pushTok(tokens, word, "plain");
       }
     } else if (operator) {
-      tokens.push({ text: operator, type: "operator" });
+      pushTok(tokens, operator, "operator");
     } else {
-      tokens.push({ text: full, type: "plain" });
+      pushTok(tokens, full, "plain");
     }
 
     lastIndex = regex.lastIndex;
   }
 
   if (lastIndex < line.length) {
-    tokens.push({ text: line.slice(lastIndex), type: "plain" });
+    pushTok(tokens, line.slice(lastIndex), "plain");
   }
 
   return tokens;

@@ -35,6 +35,7 @@ export function useWorkspaceFileActions({
   const [modalMode, setModalMode] = useState<"none" | "options" | "rename" | "add">("none");
   const [modalInput, setModalInput] = useState("");
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 50, y: 150 });
+  const [isRunning, setIsRunning] = useState(false);
 
   const handleLongPressNode = (node: FileNode, coords: { x: number; y: number }) => {
     setSelectedNode(node);
@@ -130,8 +131,9 @@ export function useWorkspaceFileActions({
   };
 
   const handleRunActiveFile = async (code: string, fileName: string) => {
-    if (!workspace || !activeFile) return;
+    if (!workspace || !activeFile || isRunning) return;
     const filePath = activeFile.path || activeFile.name;
+    setIsRunning(true);
     try {
       // Persist first so the guest executes exactly what's on screen.
       try {
@@ -145,6 +147,8 @@ export function useWorkspaceFileActions({
       });
     } catch (err: any) {
       Alert.alert("Run Error", err?.message || String(err));
+    } finally {
+      setIsRunning(false);
     }
   };
 
@@ -163,5 +167,6 @@ export function useWorkspaceFileActions({
     handleCreateNode,
     handleMoveNode,
     handleRunActiveFile,
+    isRunning,
   };
 }

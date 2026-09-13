@@ -190,7 +190,8 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
         const newTabs: TerminalTab[] = [];
 
         tasks.forEach((task) => {
-          const tabId = `task-${task.id}`;
+          // task.id already has the "task-" prefix (e.g. "task-port-8080")
+          const tabId = task.id;
           if (!existingIds.has(tabId)) {
             newTabs.push({
               id: tabId,
@@ -211,7 +212,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
         const updated = { ...prevOutputs };
 
         tasks.forEach((task) => {
-          const tabId = `task-${task.id}`;
+          const tabId = task.id;
           const currentOut = updated[tabId];
           const taskOut = task.output || "";
           if (currentOut !== taskOut && taskOut) {
@@ -226,9 +227,9 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
     // Auto-focus the newly triggered task tab
     const unsubTrigger = runningTasksService.subscribeTrigger((taskId) => {
-      const targetId = taskId ? `task-${taskId}` : undefined;
-      if (targetId) {
-        setActiveSessionId(targetId);
+      // taskId already has the "task-" prefix from runningTasksService
+      if (taskId) {
+        setActiveSessionId(taskId);
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
       }
     });

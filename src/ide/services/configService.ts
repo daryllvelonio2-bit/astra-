@@ -89,6 +89,7 @@ export interface EditorSettings {
   enableCompletions: boolean;
   formatOnSave: boolean;
   showIndentGuides?: boolean;
+  fontSize?: number;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -99,6 +100,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   enableCompletions: true,
   formatOnSave: true,
   showIndentGuides: true,
+  fontSize: 13,
 };
 
 

@@ -1,12 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useState, useEffect, useMemo } from "react";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
 import { getFileIcon } from "./fileExplorerUtils";
 import { subscribeIconTheme } from "../services/extensions/iconThemeService";
+import { RecentFileItem } from "./editor/useRecentFiles";
+
+const FONT_FAMILY = Platform.OS === "ios" ? "Menlo" : "monospace";
 
 interface EditorTabBarProps {
   fileName?: string;
+  activeFilePath?: string;
   isEditing: boolean;
   onToggleEdit: () => void;
   onDoneEdit: () => void;
@@ -19,10 +23,17 @@ interface EditorTabBarProps {
   onOpenSettings?: () => void;
   onFormat?: () => void;
   isFormatting?: boolean;
+  isLandscape?: boolean;
+  isSplitScreen?: boolean;
+  onToggleSplitScreen?: () => void;
+  recentFiles?: RecentFileItem[];
+  onSelectRecentFile?: (file: RecentFileItem) => void;
+  onCloseRecentFile?: (filePath: string) => void;
 }
 
 export function EditorTabBar({
   fileName,
+  activeFilePath,
   isEditing,
   onToggleEdit,
   onDoneEdit,
@@ -35,14 +46,28 @@ export function EditorTabBar({
   onOpenSettings,
   onFormat,
   isFormatting = false,
+  isLandscape = false,
+  isSplitScreen = false,
+  onToggleSplitScreen,
+  recentFiles = [],
+  onSelectRecentFile,
+  onCloseRecentFile,
 }: EditorTabBarProps) {
   const { theme } = useTheme();
   const [showDropdown, setShowDropdown] = useState(false);
   const [barWidth, setBarWidth] = useState(0);
 
+  // Filter out the active file so recents show files you can switch TO
+  const recentFilesToDisplay = useMemo(() => {
+    if (!recentFiles || recentFiles.length === 0) return [];
+    return recentFiles.filter(
+      (f) => f.name !== fileName && (activeFilePath ? f.path !== activeFilePath : true)
+    );
+  }, [recentFiles, fileName, activeFilePath]);
+
   // Narrow editor (sidebar open / small screen): collapse secondary actions
   // into the overflow menu so buttons never squeeze or overlap.
-  const hasOverflowMenu = !!onExitProject || !!onOpenSettings || !!onFormat;
+  const hasOverflowMenu = !!onExitProject || !!onOpenSettings;
   const narrow = barWidth > 0 && barWidth < 420;
   const collapseActions = narrow && hasOverflowMenu;
 
@@ -71,22 +96,24 @@ export function EditorTabBar({
           {fileName ?? "No file open"}
         </Text>
         {fileName && (
-        <TouchableOpacity
-          style={[styles.modeBadge, styles.noShrink, { backgroundColor: theme.bgTertiary, borderColor: theme.border }, isEditing && { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen }]}
-          onPress={onToggleEdit}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={isEditing ? "pencil" : "lock-closed-outline"}
-            size={11}
-            color={isEditing ? theme.accentGreen : theme.textMuted}
-          />
-          {!narrow && (
-            <Text style={[styles.modeBadgeText, isEditing ? { color: theme.accentGreen } : { color: theme.textMuted }]}>
-              {isEditing ? "Editing" : "View"}
-            </Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.modeBadge,
+              styles.noShrink,
+              { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+              isEditing && { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen },
+            ]}
+            onPress={onToggleEdit}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            accessibilityLabel={isEditing ? "Switch to view mode" : "Switch to editing mode"}
+          >
+            <Ionicons
+              name={isEditing ? "pencil" : "lock-closed-outline"}
+              size={12}
+              color={isEditing ? theme.accentGreen : theme.textMuted}
+            />
+          </TouchableOpacity>
         )}
         {fileName && (errorCount > 0 || warningCount > 0) && (
           <TouchableOpacity
@@ -106,6 +133,56 @@ export function EditorTabBar({
         )}
       </View>
 
+      {/* Recently Edited Files in the generous header space */}
+      {recentFilesToDisplay.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.recentFilesScroll}
+          contentContainerStyle={styles.recentFilesContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {recentFilesToDisplay.map((file) => (
+            <TouchableOpacity
+              key={file.path || file.name}
+              style={[
+                styles.recentChip,
+                { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+              ]}
+              onPress={() => onSelectRecentFile?.(file)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            >
+              <View style={styles.recentChipIcon}>
+                {getFileIcon(file.name)}
+              </View>
+              <Text
+                style={[styles.recentChipText, { color: theme.textSecondary }]}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
+                {file.name}
+              </Text>
+              {file.lastEdited ? (
+                <View style={[styles.dirtyDot, { backgroundColor: theme.accentGreen }]} />
+              ) : null}
+              {onCloseRecentFile && (
+                <TouchableOpacity
+                  style={styles.recentChipClose}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onCloseRecentFile(file.path);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                >
+                  <Ionicons name="close" size={10} color={theme.textMuted} />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       {/* Quick Toolbar (file actions only when a file is open) */}
       <View style={[styles.tabActions, styles.noShrink]}>
         {fileName && isEditing && (
@@ -120,20 +197,23 @@ export function EditorTabBar({
             <Ionicons name="play" size={16} color={theme.accentGreen} />
           </TouchableOpacity>
         )}
-        {fileName && onFormat && !narrow && (
+        {fileName && isLandscape && onToggleSplitScreen && (
           <TouchableOpacity
-            style={styles.actionIconBtn}
-            onPress={onFormat}
+            style={[
+              styles.actionIconBtn,
+              isSplitScreen && { backgroundColor: `${theme.accent}25`, borderRadius: 6 },
+            ]}
+            onPress={onToggleSplitScreen}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             <Ionicons
-              name={isFormatting ? "sparkles" : "sparkles-outline"}
+              name={isSplitScreen ? "tablet-portrait-outline" : "tablet-landscape-outline"}
               size={16}
-              color={isFormatting ? theme.accentGreen : theme.accent}
+              color={isSplitScreen ? theme.accent : theme.textSecondary}
             />
           </TouchableOpacity>
         )}
-        {(onExitProject || onOpenSettings || onFormat) && (
+        {(onExitProject || onOpenSettings) && (
           <TouchableOpacity onPress={() => setShowDropdown(true)} style={styles.actionIconBtn}>
             <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
           </TouchableOpacity>
@@ -149,23 +229,6 @@ export function EditorTabBar({
             onPress={() => setShowDropdown(false)}
           />
           <View style={[styles.dropdownBox, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
-            {onFormat && (
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setShowDropdown(false);
-                  onFormat();
-                }}
-              >
-                <Ionicons
-                  name={isFormatting ? "sparkles" : "sparkles-outline"}
-                  size={16}
-                  color={isFormatting ? theme.accentGreen : theme.accent}
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={[styles.dropdownItemText, { color: theme.textPrimary }]}>Format Document</Text>
-              </TouchableOpacity>
-            )}
             {onOpenSettings && (
               <TouchableOpacity
                 style={styles.dropdownItem}
@@ -210,9 +273,9 @@ const styles = StyleSheet.create({
   tabLeft: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
-    marginRight: 8,
     gap: 6,
+    flexShrink: 0,
+    maxWidth: 220,
   },
   hamburgerBtn: {
     marginRight: 2,
@@ -221,25 +284,60 @@ const styles = StyleSheet.create({
   tabTitle: {
     fontSize: 13,
     fontWeight: "500",
-    maxWidth: 160,
+    maxWidth: 130,
     flexShrink: 1,
+  },
+  recentFilesScroll: {
+    flex: 1,
+    marginHorizontal: 8,
+    maxHeight: 28,
+  },
+  recentFilesContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 1,
+  },
+  recentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    gap: 5,
+    maxWidth: 150,
+  },
+  recentChipIcon: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  recentChipText: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY,
+    fontWeight: "500",
+    maxWidth: 90,
+  },
+  dirtyDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  recentChipClose: {
+    padding: 1,
+    borderRadius: 3,
+    marginLeft: 2,
   },
   noShrink: {
     flexShrink: 0,
   },
   modeBadge: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    justifyContent: "center",
+    width: 22,
+    height: 22,
     borderRadius: 4,
     borderWidth: 1,
-  },
-  modeBadgeEditing: {},
-  modeBadgeText: {
-    fontSize: 10.5,
-    fontWeight: "500",
   },
   problemBadge: {
     flexDirection: "row",
