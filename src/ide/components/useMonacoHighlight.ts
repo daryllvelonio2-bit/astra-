@@ -66,13 +66,11 @@ export function useMonacoHighlight(
       setCorrected(hit);
       return;
     }
-    // Same window (typing): keep previous correction, no regex flash.
-    // Scrolled/switched file: stale line numbers would be wrong -> clear.
-    if (windowRef.current !== windowKey) {
-      windowRef.current = windowKey;
-      appliedSigRef.current = "";
-      setCorrected(null);
-    }
+    // When code changed and is not in cache, clear stale correction immediately
+    // so tokenizedLines synchronously renders newly typed characters with zero lag.
+    windowRef.current = windowKey;
+    appliedSigRef.current = "";
+    setCorrected(null);
     // Empty chunk (deleted everything): nothing to correct, drop any stale
     // paint so deleted lines can't resurrect from the previous correction.
     if (!code) {

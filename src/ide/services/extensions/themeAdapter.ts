@@ -32,6 +32,11 @@ export function extractSyntaxTokenColors(
     if (!fg) continue;
 
     const rawScopes = rule.scope;
+    if (!rawScopes) {
+      base.plain = fg;
+      continue;
+    }
+
     const scopes: string[] = Array.isArray(rawScopes)
       ? rawScopes
       : typeof rawScopes === "string"
@@ -41,20 +46,17 @@ export function extractSyntaxTokenColors(
     for (const scope of scopes) {
       const s = scope.toLowerCase();
 
-      if (s.startsWith("comment") || s.includes("punctuation.definition.comment")) {
+      if (s.includes("comment")) {
         base.comment = fg;
-      } else if (s.startsWith("string") || s.includes("punctuation.definition.string")) {
+      } else if (s.includes("string")) {
         base.string = fg;
-      } else if (
-        s.startsWith("keyword") ||
-        s.startsWith("storage") ||
-        s === "keyword.control"
-      ) {
+      } else if (s.includes("keyword") || s.includes("storage")) {
         base.keyword = fg;
       } else if (
         s.includes("entity.name.function") ||
         s.includes("support.function") ||
-        s.startsWith("meta.function-call")
+        s.includes("meta.function-call") ||
+        s.includes("variable.function")
       ) {
         base.function = fg;
       } else if (
@@ -64,17 +66,17 @@ export function extractSyntaxTokenColors(
         s.includes("support.type")
       ) {
         base.jsx_tag = fg;
-      } else if (s.includes("constant.numeric") || s.startsWith("number")) {
+      } else if (s.includes("constant.numeric") || s.includes("number")) {
         base.number = fg;
       } else if (
-        s.includes("variable.other.property") ||
+        s.includes("property") ||
         s.includes("support.type.property-name") ||
         s.includes("variable.object.property")
       ) {
         base.property = fg;
       } else if (s.includes("constant.language.boolean") || s.includes("constant.language")) {
         base.boolean = fg;
-      } else if (s.includes("keyword.operator") || s.startsWith("operator")) {
+      } else if (s.includes("operator") || s.includes("punctuation.accessor")) {
         base.operator = fg;
       }
     }
@@ -192,6 +194,9 @@ export function convertVsCodeThemeToThemeColors(
     (isDark ? "#f85149" : "#cf222e");
 
   const tokenColors = extractSyntaxTokenColors(themeData?.tokenColors, isDark);
+  if (textPrimary && (!tokenColors.plain || tokenColors.plain === (isDark ? TOKEN_COLORS_DARK.plain : TOKEN_COLORS_LIGHT.plain))) {
+    tokenColors.plain = textPrimary;
+  }
 
   return {
     id: themeId,

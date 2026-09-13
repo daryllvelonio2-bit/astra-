@@ -276,6 +276,18 @@ export async function readExtensionJson<T = any>(filePath: string): Promise<T | 
           } as T;
         }
       }
+      // Resolve external tokenColors path if specified as a string
+      if (typeof anyData.tokenColors === "string") {
+        const cleanTok = anyData.tokenColors.replace(/^\.\//, "");
+        const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+        const resolvedTok = anyData.tokenColors.startsWith("/") ? anyData.tokenColors : `${dir}/${cleanTok}`;
+        const tokData = await readExtensionJson<any>(resolvedTok);
+        if (tokData) {
+          anyData.tokenColors = Array.isArray(tokData)
+            ? tokData
+            : (tokData.tokenColors || tokData.settings || []);
+        }
+      }
     }
 
     return data;

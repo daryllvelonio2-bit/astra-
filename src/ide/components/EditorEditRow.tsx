@@ -3,7 +3,7 @@ import { View, Text, TextInput, ScrollView, StyleSheet, Platform, NativeSyntheti
 import { CodeToken, getTokenColors } from "../services/syntaxTokenizer";
 
 interface EditorEditRowProps {
-  tokenizedLines: { lineNumber: number; tokens: CodeToken[] }[];
+  tokenizedLines: { lineNumber: number; tokens: CodeToken[]; indentWidth?: number }[];
   chunkText: string;
   gutterWidth: number;
   editGutterColor: (lineNum: number) => string;
@@ -15,6 +15,7 @@ interface EditorEditRowProps {
   onBlur?: () => void;
   isEditing?: boolean;
   keyboardMouseMode?: boolean;
+  cursorLine?: number;
 }
 
 const LINE_HEIGHT = 20;
@@ -24,13 +25,16 @@ const FONT_FAMILY = Platform.OS === "ios" ? "Menlo" : "monospace";
 // Monospace advance at 13px is ~7.8px; deliberately overestimated so the
 // input is always at least as wide as its longest line -> never soft-wraps.
 const CHAR_WIDTH = 8.5;
-// Cap: absurdly long single lines (huge minified blobs) fall back to wrap
-// rather than building a view wider than the GPU can rasterize.
+// Cap: absurdly long single lines fall back to wrap rather than GPU crash.
 const MAX_NOWRAP_CHARS = 1800;
 
 /**
- * Edit Mode row for EditorView: pinned gutter with active cursor/error indicators,
- * horizontal ScrollView, and token-colored multiline TextInput.
+ * Dual-Layer Editor Row for EditorView:
+ * 1. Pinned gutter on the left with line numbers and error indicators.
+ * 2. Syntax Highlight Layer: Renders tokens in full color via native Text
+ *    components (bypassing Android ReactEditText child styling limitations).
+ * 3. Transparent TextInput Overlay (in Edit Mode): Handles keyboard input,
+ *    cursor positioning, and selection without overriding token colors.
  */
 export const EditorEditRow = React.memo(function EditorEditRow({
   tokenizedLines,
@@ -45,12 +49,30 @@ export const EditorEditRow = React.memo(function EditorEditRow({
   onBlur,
   isEditing = true,
   keyboardMouseMode = false,
+  cursorLine,
 }: EditorEditRowProps) {
   const tokenPalette = useMemo(() => getTokenColors(theme), [theme]);
 
-  // One logical line = exactly one visual row (parity with view mode):
-  // width fits the longest line so native never wraps a tail into a bogus
-  // "lower block" that desyncs gutter + cursor.
+  const renderToken = (token: CodeToken, tIdx: number) => {
+    const tokenColor =
+      token.type === "comment"
+        ? tokenPalette.comment || theme.textMuted
+        : tokenPalette[token.type] || tokenPalette.plain || theme.textPrimary;
+    return (
+      <Text
+        key={`tok-${tIdx}`}
+        style={[
+          styles.tokenText,
+          { color: tokenColor },
+          token.type === "comment" && styles.commentText,
+        ]}
+      >
+        {token.text}
+      </Text>
+    );
+  };
+
+  // Width fits the longest line so native never wraps a tail
   const contentWidth = useMemo(() => {
     let max = 0;
     for (const line of tokenizedLines) {
@@ -65,9 +87,7 @@ export const EditorEditRow = React.memo(function EditorEditRow({
   const hViewWRef = useRef(0);
   const hScrollXRef = useRef(0);
 
-  // Keep the cursor horizontally visible while typing long lines. Only
-  // scrolls when the cursor is outside the current viewport, so it never
-  // fights manual scrolling. Ref-only: no re-render, no loop.
+  // Keep the cursor horizontally visible while typing long lines.
   const followCursorX = (offset: number) => {
     const vw = hViewWRef.current;
     if (!vw) return;
@@ -94,6 +114,7 @@ export const EditorEditRow = React.memo(function EditorEditRow({
   const handleHScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     hScrollXRef.current = e.nativeEvent.contentOffset.x;
   };
+
   return (
     <View style={[styles.editorRow, { backgroundColor: theme.bgPrimary }]}>
       {/* Pinned Gutter on the left */}
@@ -103,17 +124,27 @@ export const EditorEditRow = React.memo(function EditorEditRow({
           { width: gutterWidth, backgroundColor: theme.bgSecondary, borderRightColor: theme.border },
         ]}
       >
-        <Text style={[styles.gutterText, { color: theme.textMuted }]}>
-          {tokenizedLines.map((line, lIdx) => (
-            <Text key={`g-${line.lineNumber}`} style={{ color: editGutterColor(line.lineNumber) }}>
-              {line.lineNumber}
-              {lIdx < tokenizedLines.length - 1 ? "\n" : ""}
-            </Text>
-          ))}
-        </Text>
+        {tokenizedLines.map((line) => {
+          const color = editGutterColor(line.lineNumber);
+          const isError = color === theme.accentRed;
+          return (
+            <View key={`g-${line.lineNumber}`} style={styles.gutterLineBox}>
+              <Text
+                style={[
+                  styles.gutterText,
+                  { color },
+                  isError && styles.gutterTextBold,
+                ]}
+                numberOfLines={1}
+              >
+                {isError && line.lineNumber < 1000 ? `●${line.lineNumber}` : line.lineNumber}
+              </Text>
+            </View>
+          );
+        })}
       </View>
 
-      {/* Horizontally scrollable TextInput in Edit Mode */}
+      {/* Horizontally scrollable code area */}
       <ScrollView
         horizontal
         ref={hScrollRef}
@@ -124,46 +155,67 @@ export const EditorEditRow = React.memo(function EditorEditRow({
         onScroll={handleHScroll}
         scrollEventThrottle={16}
       >
-        <TextInput
-          ref={textInputRef}
-          style={[styles.editorInput, { color: theme.textPrimary, width: contentWidth }]}
-          multiline
-          scrollEnabled={false}
-          editable={isEditing}
-          showSoftInputOnFocus={keyboardMouseMode ? false : isEditing}
-          pointerEvents={isEditing ? "auto" : "none"}
-          onChangeText={onEditChange}
-          selection={selection}
-          onSelectionChange={(e) => handleSelChange(e.nativeEvent.selection)}
-          autoCapitalize="none"
-          autoCorrect={false}
-          textAlignVertical="top"
-          onBlur={onBlur}
-        >
-          {tokenizedLines.map((line, lIdx) => (
-            <Text key={`line-${line.lineNumber}`}>
-              {line.tokens.map((token: CodeToken, tIdx: number) => {
-                const tokenColor =
-                  token.type === "comment"
-                    ? theme.textMuted
-                    : tokenPalette[token.type] || tokenPalette.plain;
+        <View style={[styles.codeContainer, { width: contentWidth }]}>
+          {!isEditing ? (
+            /* View Mode: Vibrant Syntax Highlighted Code (rendered with full native Text colors) */
+            <View style={styles.syntaxLayer}>
+              {tokenizedLines.map((line) => {
                 return (
-                  <Text
-                    key={`tok-${tIdx}`}
-                    style={[
-                      styles.tokenText,
-                      { color: tokenColor },
-                      token.type === "comment" && { fontStyle: "italic", color: theme.textMuted },
-                    ]}
-                  >
-                    {token.text}
-                  </Text>
+                  <View key={`line-${line.lineNumber}`} style={styles.codeLineBox}>
+                    {/* Indent Guide */}
+                    {line.indentWidth && line.indentWidth >= 2 ? (
+                      <View
+                        style={[
+                          styles.indentGuide,
+                          {
+                            left: Math.min(line.indentWidth * CHAR_WIDTH, 140),
+                            backgroundColor: theme.borderLight || theme.border,
+                          },
+                        ]}
+                      />
+                    ) : null}
+                    <Text style={styles.codeLineText} numberOfLines={1}>
+                      {line.tokens.length === 0 ? " " : line.tokens.map(renderToken)}
+                    </Text>
+                  </View>
                 );
               })}
-              {lIdx < tokenizedLines.length - 1 ? "\n" : ""}
-            </Text>
-          ))}
-        </TextInput>
+            </View>
+          ) : (
+            /* Edit Mode: Single-layer TextInput with native colored token children (zero ghosting, zero double text) */
+            <TextInput
+              ref={textInputRef}
+              style={[
+                styles.editorInput,
+                {
+                  width: contentWidth,
+                },
+              ]}
+              multiline
+              scrollEnabled={false}
+              editable={true}
+              showSoftInputOnFocus={!keyboardMouseMode}
+              onChangeText={onEditChange}
+              selection={selection}
+              onSelectionChange={(e) => handleSelChange(e.nativeEvent.selection)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textAlignVertical="top"
+              onBlur={onBlur}
+              cursorColor={theme.accent}
+              selectionColor={Platform.OS === "android" ? `${theme.accent}45` : undefined}
+            >
+              <Text key="editor-tokens">
+                {tokenizedLines.map((line, lIdx) => (
+                  <Text key={`line-${line.lineNumber}`}>
+                    {line.tokens.length === 0 ? null : line.tokens.map(renderToken)}
+                    {lIdx < tokenizedLines.length - 1 ? "\n" : ""}
+                  </Text>
+                ))}
+              </Text>
+            </TextInput>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -176,9 +228,16 @@ const styles = StyleSheet.create({
   },
   gutterContainer: {
     borderRightWidth: 1,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
     paddingRight: 2,
     alignItems: "center",
+  },
+  gutterLineBox: {
+    height: LINE_HEIGHT,
+    justifyContent: "center",
+    alignItems: "center",
+    width: "100%",
   },
   gutterText: {
     fontFamily: FONT_FAMILY,
@@ -187,27 +246,63 @@ const styles = StyleSheet.create({
     textAlign: "center",
     includeFontPadding: false,
   },
+  gutterTextBold: {
+    fontWeight: "700",
+  },
   horizontalScroll: {
     flex: 1,
   },
   editHorizontalContent: {
     minWidth: "100%",
   },
-  editorInput: {
+  codeContainer: {
+    position: "relative",
+  },
+  syntaxLayer: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: 6,
+    paddingRight: 24,
+  },
+  codeLineBox: {
+    height: LINE_HEIGHT,
+    justifyContent: "center",
+    position: "relative",
+  },
+  indentGuide: {
+    position: "absolute",
+    width: 1,
+    top: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  codeLineText: {
     fontFamily: FONT_FAMILY,
     fontSize: FONT_SIZE,
     lineHeight: LINE_HEIGHT,
-    paddingVertical: 8,
-    paddingLeft: 6,
-    paddingRight: 24,
-    minWidth: "100%",
-    textAlignVertical: "top",
     includeFontPadding: false,
   },
   tokenText: {
     fontFamily: FONT_FAMILY,
     fontSize: FONT_SIZE,
     lineHeight: LINE_HEIGHT,
+    includeFontPadding: false,
+  },
+  commentText: {
+    fontStyle: "italic",
+  },
+  editorInput: {
+    fontFamily: FONT_FAMILY,
+    fontSize: FONT_SIZE,
+    lineHeight: LINE_HEIGHT,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: 6,
+    paddingRight: 24,
+    minWidth: "100%",
+    margin: 0,
+    borderWidth: 0,
+    textAlignVertical: "top",
     includeFontPadding: false,
   },
 });

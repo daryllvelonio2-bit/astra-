@@ -85,19 +85,20 @@ const RULES: { match: string; type: TokenType }[] = [
   { match: "string", type: "string" },
   { match: "keyword", type: "keyword" },
   { match: "number", type: "number" },
-  { match: "entity.name.function", type: "function" },
+  { match: "function", type: "function" },
   { match: "type", type: "jsx_tag" },
+  { match: "class", type: "jsx_tag" },
   { match: "tag", type: "jsx_tag" },
   { match: "attribute", type: "property" },
+  { match: "property", type: "property" },
   { match: "key", type: "property" },
   { match: "delimiter", type: "operator" },
   { match: "bracket", type: "operator" },
   { match: "operator", type: "operator" },
-  { match: "identifier", type: "function" },
 ];
 
 export function monacoScopeToTokenType(scope: string): TokenType {
-  const s = (scope || "").toLowerCase().replace(/[.\s]+/g, " ");
+  const s = (scope || "").toLowerCase();
   for (const rule of RULES) {
     if (s.includes(rule.match)) return rule.type;
   }

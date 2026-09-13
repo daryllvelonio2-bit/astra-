@@ -386,6 +386,7 @@ export function EditorView({
           chunkText={visibleCodeChunk}
           gutterWidth={gutterWidth}
           editGutterColor={(ln) => computeGutterColor(ln, assists, cursorFullLine, theme)}
+          cursorLine={cursorFullLine}
           textInputRef={textInputRef}
           theme={theme}
           onEditChange={handleEditChange}
