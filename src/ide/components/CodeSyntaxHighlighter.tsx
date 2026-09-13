@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Platform, ScrollView } from "react-native";
 import { TokenizedLine, CodeToken, getTokenColors } from "../services/syntaxTokenizer";
 import { CodeDiagnostic } from "../services/codeDiagnosticsService";
 import { useTheme } from "../../theme/themeContext";
+import { detectIndentStep, computeLineGuides } from "./editor/indentGuideUtils";
 
 interface CodeSyntaxHighlighterProps {
   tokenizedLines: TokenizedLine[];
@@ -32,6 +33,9 @@ export function CodeSyntaxHighlighter({
   const { theme: globalTheme } = useTheme();
   const theme = themeProp || globalTheme;
   const tokenPalette = getTokenColors(theme);
+  const indentStep = React.useMemo(() => detectIndentStep(tokenizedLines, 2), [tokenizedLines]);
+  const lineGuides = React.useMemo(() => computeLineGuides(tokenizedLines, true, indentStep), [tokenizedLines, indentStep]);
+  const guideColor = theme.editorIndentGuide || (theme.isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.09)");
 
   const gutterColorFor = (lineNumber: number): string => {
     if (errorLines?.has(lineNumber)) return theme.accentRed;
@@ -42,20 +46,32 @@ export function CodeSyntaxHighlighter({
   };
 
   const lineBgFor = (lineNumber: number): string | undefined => {
-    if (errorLines?.has(lineNumber)) return `${theme.accentRed}14`;
-    if (matchUnmatched && matchLines?.has(lineNumber)) return `${theme.accentRed}14`;
-    if (matchLines?.has(lineNumber)) return `${theme.accent}10`;
+    if (errorLines?.has(lineNumber)) return `${theme.accentRed}12`;
+    if (matchLines?.has(lineNumber)) return `${theme.accent}15`;
     return undefined;
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
-      {/* Pinned Gutter with line numbers */}
-      <View style={[styles.gutter, { width: gutterWidth, backgroundColor: theme.bgSecondary, borderRightColor: theme.border }]}>
+      {/* Pinned Line Number Gutter */}
+      <View style={[styles.gutter, { width: gutterWidth, borderColor: theme.border }]}>
         {tokenizedLines.map((line) => (
-          <View key={`num-${line.lineNumber}`} style={[styles.lineBox, { height: lineHeight }]}>
-            <Text style={[styles.gutterNum, { fontSize: fontSize - 2, lineHeight, color: gutterColorFor(line.lineNumber) }]}>
-              {errorLines?.has(line.lineNumber) && line.lineNumber < 1000 ? `●${line.lineNumber}` : line.lineNumber}
+          <View
+            key={`gutter-${line.lineNumber}`}
+            style={[styles.lineBox, { height: lineHeight }, lineBgFor(line.lineNumber) && { backgroundColor: lineBgFor(line.lineNumber) }]}
+          >
+            <Text
+              style={[
+                styles.gutterNum,
+                {
+                  fontSize: fontSize - 2,
+                  lineHeight,
+                  color: gutterColorFor(line.lineNumber),
+                },
+                activeLine === line.lineNumber && { fontWeight: "bold" },
+              ]}
+            >
+              {line.lineNumber}
             </Text>
           </View>
         ))}
@@ -69,20 +85,21 @@ export function CodeSyntaxHighlighter({
         contentContainerStyle={styles.codeBodyContent}
       >
         <View style={[styles.codeBody, { backgroundColor: theme.bgPrimary }]}>
-          {tokenizedLines.map((line) => (
+          {tokenizedLines.map((line, lIdx) => (
             <View
               key={`line-${line.lineNumber}`}
               style={[styles.lineBox, { height: lineHeight }, lineBgFor(line.lineNumber) && { backgroundColor: lineBgFor(line.lineNumber) }]}
             >
-              {/* Indent Guide Line */}
-              {line.indentWidth >= 2 && (
+              {/* Indent Guide Lines */}
+              {lineGuides[lIdx]?.map((gLeft) => (
                 <View
+                  key={`gl-${gLeft}`}
                   style={[
                     styles.indentGuide,
-                    { left: Math.min(line.indentWidth * 7.2, 120), height: lineHeight, backgroundColor: theme.border },
+                    { left: gLeft, height: lineHeight, backgroundColor: guideColor },
                   ]}
                 />
-              )}
+              ))}
               <Text style={[styles.codeLineText, { fontSize, lineHeight, color: theme.textPrimary }]}>
                 {line.tokens.map((token: CodeToken, idx: number) => {
                   const tokenColor =

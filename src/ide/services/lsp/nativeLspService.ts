@@ -56,12 +56,28 @@ export async function runBackgroundDiagnostics(
     }
 
     const defaultLanguageTools: Record<string, string[]> = {
-      py: ["python3", "flake8", "ruff"],
+      java: ["javac"],
+      kt: ["kotlinc"],
+      kts: ["kotlinc"],
+      go: ["go"],
+      py: ["ruff", "flake8", "python3"],
       php: ["php"],
-      sh: ["bash"],
+      sh: ["shellcheck", "bash"],
+      bash: ["shellcheck", "bash"],
+      zsh: ["shellcheck", "bash"],
       c: ["gcc", "clang"],
-      cpp: ["g++", "clang++"],
+      cpp: ["g++", "clang++", "cppcheck"],
+      cc: ["g++", "clang++"],
+      cxx: ["g++", "clang++"],
+      h: ["gcc", "clang"],
+      hpp: ["g++", "clang++"],
       rs: ["rustc"],
+      js: ["eslint", "tsc"],
+      jsx: ["eslint"],
+      ts: ["eslint", "tsc"],
+      tsx: ["eslint", "tsc"],
+      mjs: ["eslint"],
+      cjs: ["eslint"],
     };
     for (const t of defaultLanguageTools[ext] || []) {
       if (!candidateTools.includes(t)) candidateTools.push(t);
@@ -71,28 +87,45 @@ export async function runBackgroundDiagnostics(
       return null;
     }
 
-    // 2. Prepare temporary file for checking in Linux
+    // 2. Prepare temporary file for checking in Linux (preserves real file name & class name for compilers)
     const base = FileSystem.documentDirectory || "/data/user/0/com.janelle.aicoder/files/";
-    const tmpFileName = `.astra_diag_${ext}`;
-    const tmpFileUri = `${base.replace(/\/+$/, "")}/tmp/${tmpFileName}`;
+    const rawBaseName = (filePath.split("/").pop() || "").replace(/[^a-zA-Z0-9._-]/g, "") || `file.${ext}`;
+    const cleanBaseName = rawBaseName.endsWith(`.${ext}`) ? rawBaseName : `${rawBaseName}.${ext}`;
+    const tmpFileUri = `${base.replace(/\/+$/, "")}/tmp/${cleanBaseName}`;
     await FileSystem.writeAsStringAsync(tmpFileUri, content);
-    const linuxPath = `/tmp/${tmpFileName}`;
+    const linuxPath = `/tmp/${cleanBaseName}`;
 
     // 3. Find and run the active extension tool in Linux PRoot
     for (const tool of candidateTools) {
       if (!(await isToolAvailable(tool, workspaceId))) continue;
 
       let checkCmd = `"${tool}" check "${linuxPath}" 2>&1 || "${tool}" "${linuxPath}" 2>&1`;
-      if (tool === "python3") {
+      if (tool === "javac") {
+        checkCmd = `javac -Xlint:all -proc:none "${linuxPath}" 2>&1`;
+      } else if (tool === "kotlinc") {
+        checkCmd = `kotlinc "${linuxPath}" 2>&1`;
+      } else if (tool === "go") {
+        checkCmd = `go vet "${linuxPath}" 2>&1 || go build -o /dev/null "${linuxPath}" 2>&1`;
+      } else if (tool === "python3") {
         checkCmd = `python3 -m py_compile "${linuxPath}" 2>&1`;
+      } else if (tool === "ruff") {
+        checkCmd = `ruff check "${linuxPath}" 2>&1`;
+      } else if (tool === "flake8") {
+        checkCmd = `flake8 "${linuxPath}" 2>&1`;
       } else if (tool === "php") {
         checkCmd = `php -l "${linuxPath}" 2>&1`;
+      } else if (tool === "shellcheck") {
+        checkCmd = `shellcheck -f gcc "${linuxPath}" 2>&1`;
       } else if (tool === "bash") {
         checkCmd = `bash -n "${linuxPath}" 2>&1`;
       } else if (tool === "gcc" || tool === "clang" || tool === "g++" || tool === "clang++") {
         checkCmd = `${tool} -fsyntax-only "${linuxPath}" 2>&1`;
       } else if (tool === "rustc") {
         checkCmd = `rustc --emit=metadata "${linuxPath}" 2>&1`;
+      } else if (tool === "eslint") {
+        checkCmd = `eslint "${linuxPath}" 2>&1 || npx eslint "${linuxPath}" 2>&1`;
+      } else if (tool === "tsc") {
+        checkCmd = `tsc --noEmit "${linuxPath}" 2>&1`;
       }
 
       const res = await Promise.race([
@@ -116,7 +149,7 @@ export async function runBackgroundDiagnostics(
 
 /**
  * Universal Unix / GCC / Clang / Linter diagnostic parser.
- * Handles standard Unix output formats across all languages dynamically.
+ * Handles standard Unix, Python, Rust, and Java compiler formats dynamically.
  */
 export function parseUniversalDiagnostics(
   rawOutput: string,
@@ -141,14 +174,69 @@ export function parseUniversalDiagnostics(
   const standardRegex = /(?:^|[\r\n])(?:[^\r\n:]+:)?(\d+):(?:(\d+):?)?\s*(?:\[([^\]]+)\]\s*)?(?:(error|warning|warn|info|note|fatal|syntax error):?\s*)?(.+)/i;
   // PHP format: Parse error: syntax error... in path on line 12
   const phpRegex = /(?:Parse error|Fatal error):\s*(.*?)\s+in\s+.*?\s+on\s+line\s+(\d+)/i;
+  const pyLineRegex = /File ".*?", line (\d+)/i;
+  const rustLocRegex = /-->\s*(?:[^\r\n:]+:)?(\d+):(\d+)/i;
 
-  for (const rawLine of lines) {
+  let pendingPyLine: number | null = null;
+  let pendingRustMsg: string | null = null;
+  let pendingRustSev: "error" | "warning" = "error";
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
     const line = rawLine.trim();
     if (!line || line.startsWith("Checked ") || line.startsWith("Summary:") || line.startsWith("Found 0")) {
       continue;
     }
 
     const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, "");
+
+    // Python py_compile format
+    const pyMatch = cleanLine.match(pyLineRegex);
+    if (pyMatch) {
+      pendingPyLine = parseInt(pyMatch[1], 10);
+      continue;
+    }
+    if (pendingPyLine !== null && /^(?:SyntaxError|IndentationError|TabError):/i.test(cleanLine)) {
+      diagnostics.push({
+        line: pendingPyLine,
+        col: 1,
+        message: cleanLine,
+        severity: "error",
+        source: sourceName,
+      });
+      pendingPyLine = null;
+      continue;
+    }
+
+    // Rustc compiler error header
+    const rustHeadMatch = cleanLine.match(/^(error|warning)(?:\[\w+\])?:\s*(.+)/i);
+    if (rustHeadMatch) {
+      pendingRustSev = rustHeadMatch[1].toLowerCase().includes("warn") ? "warning" : "error";
+      pendingRustMsg = rustHeadMatch[2].trim();
+      continue;
+    }
+    const rustLocMatch = cleanLine.match(rustLocRegex);
+    if (rustLocMatch && pendingRustMsg) {
+      diagnostics.push({
+        line: parseInt(rustLocMatch[1], 10),
+        col: parseInt(rustLocMatch[2], 10),
+        message: pendingRustMsg,
+        severity: pendingRustSev,
+        source: sourceName,
+      });
+      pendingRustMsg = null;
+      continue;
+    }
+
+    // Caret column pointer (e.g. javac or python column pointer)
+    if (/^\s*\^\s*$/.test(rawLine) && diagnostics.length > 0) {
+      const caretCol = rawLine.indexOf("^") + 1;
+      const last = diagnostics[diagnostics.length - 1];
+      if (last && last.col === 1 && caretCol > 1) {
+        last.col = caretCol;
+      }
+      continue;
+    }
 
     const phpMatch = cleanLine.match(phpRegex);
     if (phpMatch) {

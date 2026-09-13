@@ -25,6 +25,8 @@ function getBadgeSymbol(kind: CompletionItem["kind"]): { letter: string; colorKe
       return { letter: "k", colorKey: "accentRed" };
     case "snippet":
       return { letter: "⎘", colorKey: "accentGold" };
+    case "property":
+      return { letter: "p", colorKey: "accent" };
     case "variable":
     default:
       return { letter: "v", colorKey: "accentGreen" };

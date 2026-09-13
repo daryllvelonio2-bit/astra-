@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
+import { getFileIcon } from "./fileExplorerUtils";
+import { subscribeIconTheme } from "../services/extensions/iconThemeService";
 
 interface EditorTabBarProps {
   fileName?: string;
@@ -44,6 +46,13 @@ export function EditorTabBar({
   const narrow = barWidth > 0 && barWidth < 420;
   const collapseActions = narrow && hasOverflowMenu;
 
+  const [, setIconTick] = useState(0);
+  useEffect(() => {
+    return subscribeIconTheme(() => {
+      setIconTick((t) => t + 1);
+    });
+  }, []);
+
   return (
     <View
       style={[styles.tabBar, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}
@@ -55,7 +64,9 @@ export function EditorTabBar({
             <Ionicons name="menu" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
         )}
-        <Ionicons name="document-text-outline" size={16} color={fileName ? theme.accent : theme.textMuted} style={{ marginRight: 6 }} />
+        <View style={{ marginRight: 6 }}>
+          {fileName ? getFileIcon(fileName) : <Ionicons name="document-text-outline" size={16} color={theme.textMuted} />}
+        </View>
         <Text style={[styles.tabTitle, { color: fileName ? theme.textPrimary : theme.textMuted }]} numberOfLines={1} ellipsizeMode="middle">
           {fileName ?? "No file open"}
         </Text>

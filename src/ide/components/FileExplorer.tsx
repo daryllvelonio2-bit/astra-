@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { FileNode } from "../types";
 import { useFileDragDrop } from "./useFileDragDrop";
 import { getFileIcon, sortNodes } from "./fileExplorerUtils";
+import { subscribeIconTheme } from "../services/extensions/iconThemeService";
 import { styles } from "./fileExplorerStyles";
 import { useTheme } from "../../theme/themeContext";
 
@@ -84,6 +85,13 @@ export function FileExplorer({
     return () => clearTimeout(t);
   }, [expandedFolders, files, measureAllFolders]);
 
+  const [, setIconTick] = React.useState(0);
+  useEffect(() => {
+    return subscribeIconTheme(() => {
+      setIconTick((t) => t + 1);
+    });
+  }, []);
+
   const handleInlineSubmit = () => {
     const trimmed = inlineName.trim();
     if (!trimmed) {
@@ -140,12 +148,9 @@ export function FileExplorer({
                 color={isHovered ? theme.accent : theme.textMuted}
                 style={{ marginRight: 4 }}
               />
-              <Ionicons
-                name={isExpanded ? "folder-open" : "folder"}
-                size={16}
-                color={isHovered ? theme.accent : theme.accentGold}
-                style={{ marginRight: 6 }}
-              />
+              <View style={{ marginRight: 6 }}>
+                {getFileIcon(node.name, true, isExpanded)}
+              </View>
               <Text style={[styles.folderName, { color: theme.textPrimary }, isHovered && { color: theme.accent, fontWeight: "700" }]} numberOfLines={1}>
                 {node.name}
               </Text>

@@ -9,7 +9,6 @@ import { ProblemsPanel } from "./ProblemsPanel";
 import { useEditorAssists } from "./useEditorAssists";
 import { firstErrorLine } from "../services/codeDiagnosticsService";
 import { tokenizeCode } from "../services/syntaxTokenizer";
-import { useMonacoHighlight } from "./useMonacoHighlight";
 import { EditorEditRow } from "./EditorEditRow";
 import { useEditorCursorScroll } from "./useEditorCursorScroll";
 import { getGutterWidth, computeTappedLine, computeCursorOffset, computeGutterColor, spliceWindowChunk, computeChunkStartOffset } from "./editorCursorUtils";
@@ -105,10 +104,7 @@ export function EditorView({
     [visibleCodeChunk, fileName, startIndex]
   );
 
-  // Phase 4: hidden Monaco correction overlays the regex first paint.
-  // Null while pending/failed -> regex output stays on screen.
-  const monacoLines = useMonacoHighlight(visibleCodeChunk, fileName, startIndex + 1);
-  const displayLines = monacoLines ?? tokenizedLines;
+  const displayLines = tokenizedLines;
 
   // Char offset of the visible chunk within the full file (for cursor mapping).
   const chunkStartOffset = useMemo(
@@ -392,6 +388,8 @@ export function EditorView({
           onEditChange={handleEditChange}
           selection={assists.selection}
           onSelectionChange={handleSelectionChange}
+          showIndentGuides={editorSettings.showIndentGuides !== false}
+          tabSize={editorSettings.tabSize}
         />
 
         {/* Bottom Spacer: Virtualizes unrendered lines below window */}

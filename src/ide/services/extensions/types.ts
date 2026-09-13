@@ -32,6 +32,12 @@ export interface ExtensionTheme {
   path: string; // relative path inside extension directory
 }
 
+export interface ExtensionIconTheme {
+  id: string;
+  label: string;
+  path: string; // relative path inside extension directory
+}
+
 export interface ExtensionLanguageConfig {
   id: string;
   extensions?: string[];
@@ -51,6 +57,7 @@ export interface InstalledExtension {
   installedAt: number;
   installDir: string;
   themes: ExtensionTheme[];
+  iconThemes?: ExtensionIconTheme[];
   snippets: Array<{ language?: string; path: string }>;
   languages: ExtensionLanguageConfig[];
   binaries?: string[];
@@ -63,4 +70,5 @@ export interface InstalledExtension {
 export interface ExtensionRegistryState {
   installed: Record<string, InstalledExtension>;
   activeThemeId?: string;
+  activeIconThemeId?: string;
 }

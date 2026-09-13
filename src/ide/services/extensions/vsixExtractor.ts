@@ -4,6 +4,7 @@ import {
   ExtensionMarketplaceItem,
   InstalledExtension,
   ExtensionTheme,
+  ExtensionIconTheme,
   ExtensionLanguageConfig,
 } from "./types";
 import { writeFileText, makeDir } from "../nativeFs";
@@ -103,6 +104,17 @@ export async function downloadAndExtractVsix(
 
       onProgress?.(70, "Syncing assets to native IDE & VS Code...");
 
+      // Discover any executables in extension/bin
+      const binCheck = await executeCommand(
+        `if [ -d "${stageDir}/extension/bin" ]; then ls -1 "${stageDir}/extension/bin" 2>/dev/null; elif [ -d "${stageDir}/bin" ]; then ls -1 "${stageDir}/bin" 2>/dev/null; fi`
+      );
+      if (binCheck.stdout) {
+        for (const line of binCheck.stdout.split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (trimmed && !binaries.includes(trimmed)) binaries.push(trimmed);
+        }
+      }
+
       await executeCommand(
         `mkdir -p "/extensions/${item.id}" "/root/.local/share/code-server/extensions/${item.id}"; ` +
         `if [ -d "${stageDir}/extension" ]; then ` +
@@ -112,28 +124,43 @@ export async function downloadAndExtractVsix(
         `  cp -rf "${stageDir}/"* "/extensions/${item.id}/" 2>/dev/null || true; ` +
         `  cp -rf "${stageDir}/"* "/root/.local/share/code-server/extensions/${item.id}/" 2>/dev/null || true; ` +
         `fi; ` +
-        `if [ -d "${stageDir}/extension/bin" ]; then ` +
-        `  mkdir -p /root/.local/bin /usr/local/bin; ` +
-        `  for b in "${stageDir}/extension/bin/"*; do ` +
-        `    if [ -f "$b" ]; then ` +
-        `      bn=$(basename "$b"); ` +
-        `      chmod +x "$b"; ` +
-        `      cp -f "$b" "/usr/local/bin/$bn" 2>/dev/null || true; ` +
-        `      cp -f "$b" "/root/.local/bin/$bn" 2>/dev/null || true; ` +
-        `    fi; ` +
-        `  done; ` +
-        `fi; ` +
+        `mkdir -p /root/.local/bin /usr/local/bin; ` +
+        `for b in "${stageDir}/extension/bin/"* "${stageDir}/bin/"*; do ` +
+        `  if [ -f "$b" ]; then ` +
+        `    bn=$(basename "$b"); ` +
+        `    chmod +x "$b"; ` +
+        `    cp -f "$b" "/usr/local/bin/$bn" 2>/dev/null || true; ` +
+        `    cp -f "$b" "/root/.local/bin/$bn" 2>/dev/null || true; ` +
+        `  fi; ` +
+        `done; ` +
         `rm -rf "${stageDir}" "/tmp/${cleanId}.vsix" 2>/dev/null || true`
       );
+
+      // Handle pkg.bin CLI scripts (e.g. linters, formatters, node CLIs)
+      if (pkg?.bin) {
+        const binEntries = typeof pkg.bin === "string" ? { [item.name]: pkg.bin } : pkg.bin;
+        for (const [binName, binRelPath] of Object.entries(binEntries)) {
+          if (!binaries.includes(binName)) binaries.push(binName);
+          const cleanRel = String(binRelPath).replace(/^\.\//, "");
+          await executeCommand(
+            `mkdir -p /usr/local/bin /root/.local/bin; ` +
+            `printf '#!/bin/sh\\nexec node "/extensions/${item.id}/${cleanRel}" "$@\\n" > "/usr/local/bin/${binName}"; ` +
+            `chmod +x "/usr/local/bin/${binName}"; ` +
+            `cp -f "/usr/local/bin/${binName}" "/root/.local/bin/${binName}" 2>/dev/null || true`
+          );
+        }
+      }
     }
   } catch {}
 
   const themes: ExtensionTheme[] = [];
+  const iconThemes: ExtensionIconTheme[] = [];
   const snippets: Array<{ language?: string; path: string }> = [];
 
   if (usedNativeUnzip && pkg) {
     const contributes = pkg.contributes || {};
     const rawThemes: any[] = Array.isArray(contributes.themes) ? contributes.themes : [];
+    const rawIconThemes: any[] = Array.isArray(contributes.iconThemes) ? contributes.iconThemes : [];
     const rawSnippets: any[] = Array.isArray(contributes.snippets) ? contributes.snippets : [];
 
     for (const t of rawThemes) {
@@ -143,6 +170,15 @@ export async function downloadAndExtractVsix(
         label: t.label || t.id || "Custom Theme",
         uiTheme: t.uiTheme || "vs-dark",
         path: themePath,
+      });
+    }
+
+    for (const it of rawIconThemes) {
+      const itPath = (it.path || "").replace(/^\.\//, "");
+      iconThemes.push({
+        id: `${item.id}.${it.id || "icons"}`,
+        label: it.label || "Icon Theme",
+        path: itPath,
       });
     }
 
@@ -205,6 +241,41 @@ export async function downloadAndExtractVsix(
         snippets.push({ language: s.language, path: snipPath });
       }
     }
+
+    const rawIconThemes: any[] = Array.isArray(contributes.iconThemes) ? contributes.iconThemes : [];
+    for (const it of rawIconThemes) {
+      const itPath = (it.path || "").replace(/^\.\//, "");
+      const zipPath = zip.file(`extension/${itPath}`) ? `extension/${itPath}` : zip.file(itPath) ? itPath : null;
+      if (zipPath) {
+        const content = await zip.file(zipPath)!.async("string");
+        const targetFile = `${installDir}/${itPath}`;
+        const parentDir = targetFile.substring(0, targetFile.lastIndexOf("/"));
+        await makeDir(parentDir);
+        await writeFileText(targetFile, content);
+      }
+      for (const [relPath, zipEntry] of Object.entries(zip.files)) {
+        if (!zipEntry.dir && (relPath.endsWith(".svg") || relPath.endsWith(".png"))) {
+          const cleanRel = relPath.replace(/^extension\//, "");
+          const targetFile = `${installDir}/${cleanRel}`;
+          const parentDir = targetFile.substring(0, targetFile.lastIndexOf("/"));
+          await makeDir(parentDir);
+          const svgContent = await zipEntry.async("string");
+          await writeFileText(targetFile, svgContent);
+        }
+      }
+      iconThemes.push({
+        id: `${item.id}.${it.id || "icons"}`,
+        label: it.label || "Icon Theme",
+        path: itPath,
+      });
+    }
+  }
+
+  if (pkg?.bin) {
+    const binEntries = typeof pkg.bin === "string" ? { [item.name]: pkg.bin } : pkg.bin;
+    for (const binName of Object.keys(binEntries)) {
+      if (!binaries.includes(binName)) binaries.push(binName);
+    }
   }
 
   // Save extension manifest to disk
@@ -234,6 +305,7 @@ export async function downloadAndExtractVsix(
     installedAt: Date.now(),
     installDir,
     themes,
+    iconThemes,
     snippets,
     languages,
     binaries,

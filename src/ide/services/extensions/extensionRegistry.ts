@@ -67,6 +67,7 @@ export async function loadExtensionRegistry(): Promise<ExtensionRegistryState> {
       cachedState = {
         installed: parsed.installed || {},
         activeThemeId: parsed.activeThemeId,
+        activeIconThemeId: parsed.activeIconThemeId,
       };
       triggerBackgroundRuntimeCheck(cachedState.installed);
       return cachedState;
@@ -295,4 +296,38 @@ export async function loadAllExtensionThemeColors(): Promise<Record<string, Them
     map[item.id] = themeColors;
   }
   return map;
+}
+
+/**
+ * Retrieves all icon themes from all enabled extensions.
+ */
+export async function getInstalledIconThemes(): Promise<
+  Array<{ id: string; label: string; extensionId: string; installDir: string; path: string }>
+> {
+  const state = await loadExtensionRegistry();
+  const results: Array<{ id: string; label: string; extensionId: string; installDir: string; path: string }> = [];
+
+  for (const ext of Object.values(state.installed)) {
+    if (!ext.enabled || !ext.iconThemes) continue;
+    for (const it of ext.iconThemes) {
+      results.push({
+        id: it.id,
+        label: it.label,
+        extensionId: ext.id,
+        installDir: ext.installDir,
+        path: it.path,
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Activates an installed icon theme (or undefined to revert to default vector icons).
+ */
+export async function setActiveIconTheme(iconThemeId?: string): Promise<void> {
+  const state = await loadExtensionRegistry();
+  state.activeIconThemeId = iconThemeId;
+  await saveExtensionRegistry(state);
 }

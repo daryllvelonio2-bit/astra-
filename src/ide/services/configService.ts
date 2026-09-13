@@ -88,6 +88,7 @@ export interface EditorSettings {
   autoIndentOnEnter: boolean;
   enableCompletions: boolean;
   formatOnSave: boolean;
+  showIndentGuides?: boolean;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -97,6 +98,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   autoIndentOnEnter: true,
   enableCompletions: true,
   formatOnSave: true,
+  showIndentGuides: true,
 };
 
 

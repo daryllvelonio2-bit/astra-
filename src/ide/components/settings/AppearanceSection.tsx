@@ -3,7 +3,13 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppTheme } from "../../services/configService";
 import { ThemeColors, THEMES } from "../../../theme/themeContext";
-import { getInstalledThemes, subscribeExtensionRegistry } from "../../services/extensions/extensionRegistry";
+import {
+  getInstalledThemes,
+  getInstalledIconThemes,
+  setActiveIconTheme,
+  loadExtensionRegistry,
+  subscribeExtensionRegistry,
+} from "../../services/extensions/extensionRegistry";
 
 interface ThemeOption {
   id: AppTheme;
@@ -33,12 +39,18 @@ interface AppearanceSectionProps {
 
 export function AppearanceSection({ activeTheme, onSelectTheme, theme, onRerunStartup }: AppearanceSectionProps) {
   const [extensionThemes, setExtensionThemes] = useState<Array<{ id: string; label: string }>>([]);
+  const [iconThemes, setIconThemes] = useState<Array<{ id: string; label: string }>>([]);
+  const [activeIconThemeId, setActiveIconThemeId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const loadExtThemes = async () => {
       try {
         const list = await getInstalledThemes();
         setExtensionThemes(list.map((t) => ({ id: t.id, label: t.label })));
+        const reg = await loadExtensionRegistry();
+        setActiveIconThemeId(reg.activeIconThemeId);
+        const icons = await getInstalledIconThemes();
+        setIconThemes(icons.map((it) => ({ id: it.id, label: it.label })));
       } catch {}
     };
 
@@ -119,6 +131,69 @@ export function AppearanceSection({ activeTheme, onSelectTheme, theme, onRerunSt
           })}
         </View>
       )}
+
+      <View style={{ marginTop: 8, gap: 8 }}>
+        <Text style={[styles.sectionHeading, { color: theme.textMuted }]}>FILE ICON THEME</Text>
+        <TouchableOpacity
+          style={[
+            styles.themeCard,
+            { backgroundColor: theme.bgPrimary, borderColor: !activeIconThemeId ? theme.accent : theme.border },
+            !activeIconThemeId && { borderWidth: 1.5 },
+          ]}
+          onPress={async () => {
+            await setActiveIconTheme(undefined);
+            setActiveIconThemeId(undefined);
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.themeCardHeader}>
+            <View style={styles.themeIconRow}>
+              <View style={[styles.themeIconBox, { backgroundColor: `${theme.accent}20` }]}>
+                <Ionicons name="images" size={15} color={theme.accent} />
+              </View>
+              <Text style={[styles.themeTitle, { color: theme.textPrimary }]}>Default (Native Language Icons)</Text>
+            </View>
+            {!activeIconThemeId && <Ionicons name="checkmark-circle" size={16} color={theme.accent} />}
+          </View>
+          <Text style={[styles.themeDesc, { color: theme.textMuted }]}>
+            High-performance native vector icons for all programming languages
+          </Text>
+        </TouchableOpacity>
+
+        {iconThemes.map((it) => {
+          const isSelected = activeIconThemeId === it.id;
+          return (
+            <TouchableOpacity
+              key={it.id}
+              style={[
+                styles.themeCard,
+                { backgroundColor: theme.bgPrimary, borderColor: isSelected ? theme.accent : theme.border },
+                isSelected && { borderWidth: 1.5 },
+              ]}
+              onPress={async () => {
+                await setActiveIconTheme(it.id);
+                setActiveIconThemeId(it.id);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.themeCardHeader}>
+                <View style={styles.themeIconRow}>
+                  <View style={[styles.themeIconBox, { backgroundColor: `${theme.accent}20` }]}>
+                    <Ionicons name="sparkles" size={15} color={theme.accent} />
+                  </View>
+                  <Text style={[styles.themeTitle, { color: theme.textPrimary }]} numberOfLines={1}>
+                    {it.label}
+                  </Text>
+                </View>
+                {isSelected && <Ionicons name="checkmark-circle" size={16} color={theme.accent} />}
+              </View>
+              <Text style={[styles.themeDesc, { color: theme.textMuted }]}>
+                {isSelected ? "Active marketplace icon theme" : "Tap to activate marketplace icon theme"}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {onRerunStartup && (
         <View style={styles.startupWrap}>

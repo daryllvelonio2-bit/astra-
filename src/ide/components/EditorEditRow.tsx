@@ -1,6 +1,7 @@
 import React, { useMemo, useRef } from "react";
 import { View, Text, TextInput, ScrollView, StyleSheet, Platform, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent } from "react-native";
 import { CodeToken, getTokenColors } from "../services/syntaxTokenizer";
+import { detectIndentStep, computeLineGuides } from "./editor/indentGuideUtils";
 
 interface EditorEditRowProps {
   tokenizedLines: { lineNumber: number; tokens: CodeToken[]; indentWidth?: number }[];
@@ -16,6 +17,8 @@ interface EditorEditRowProps {
   isEditing?: boolean;
   keyboardMouseMode?: boolean;
   cursorLine?: number;
+  showIndentGuides?: boolean;
+  tabSize?: number;
 }
 
 const LINE_HEIGHT = 20;
@@ -50,8 +53,24 @@ export const EditorEditRow = React.memo(function EditorEditRow({
   isEditing = true,
   keyboardMouseMode = false,
   cursorLine,
+  showIndentGuides = true,
+  tabSize = 2,
 }: EditorEditRowProps) {
   const tokenPalette = useMemo(() => getTokenColors(theme), [theme]);
+
+  const indentStep = useMemo(
+    () => detectIndentStep(tokenizedLines, tabSize),
+    [tokenizedLines, tabSize]
+  );
+
+  const lineGuides = useMemo(
+    () => computeLineGuides(tokenizedLines, showIndentGuides, indentStep),
+    [tokenizedLines, showIndentGuides, indentStep]
+  );
+
+  const guideColor =
+    theme.editorIndentGuide ||
+    (theme.isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.09)");
 
   const renderToken = (token: CodeToken, tIdx: number) => {
     const tokenColor =
@@ -156,30 +175,38 @@ export const EditorEditRow = React.memo(function EditorEditRow({
         scrollEventThrottle={16}
       >
         <View style={[styles.codeContainer, { width: contentWidth }]}>
-          {!isEditing ? (
-            /* View Mode: Vibrant Syntax Highlighted Code (rendered with full native Text colors) */
-            <View style={styles.syntaxLayer}>
-              {tokenizedLines.map((line) => {
+          {/* Indent Guide Background Underlay (renders consistently in View Mode and Edit Mode without blocking touches) */}
+          {showIndentGuides && (
+            <View style={[StyleSheet.absoluteFill, styles.guideUnderlay]} pointerEvents="none">
+              {tokenizedLines.map((line, idx) => {
+                const guides = lineGuides[idx];
+                if (!guides || guides.length === 0) {
+                  return <View key={`g-${line.lineNumber}`} style={styles.guideLineBox} />;
+                }
                 return (
-                  <View key={`line-${line.lineNumber}`} style={styles.codeLineBox}>
-                    {/* Indent Guide */}
-                    {line.indentWidth && line.indentWidth >= 2 ? (
+                  <View key={`g-${line.lineNumber}`} style={styles.guideLineBox}>
+                    {guides.map((gLeft) => (
                       <View
-                        style={[
-                          styles.indentGuide,
-                          {
-                            left: Math.min(line.indentWidth * CHAR_WIDTH, 140),
-                            backgroundColor: theme.borderLight || theme.border,
-                          },
-                        ]}
+                        key={`gl-${gLeft}`}
+                        style={[styles.indentGuide, { left: gLeft, backgroundColor: guideColor }]}
                       />
-                    ) : null}
-                    <Text style={styles.codeLineText} numberOfLines={1}>
-                      {line.tokens.length === 0 ? " " : line.tokens.map(renderToken)}
-                    </Text>
+                    ))}
                   </View>
                 );
               })}
+            </View>
+          )}
+
+          {!isEditing ? (
+            /* View Mode: Vibrant Syntax Highlighted Code (rendered with full native Text colors) */
+            <View style={styles.syntaxLayer}>
+              {tokenizedLines.map((line) => (
+                <View key={`line-${line.lineNumber}`} style={styles.codeLineBox}>
+                  <Text style={styles.codeLineText} numberOfLines={1}>
+                    {line.tokens.length === 0 ? " " : line.tokens.map(renderToken)}
+                  </Text>
+                </View>
+              ))}
             </View>
           ) : (
             /* Edit Mode: Single-layer TextInput with native colored token children (zero ghosting, zero double text) */
@@ -269,12 +296,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
+  guideUnderlay: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: 6,
+    paddingRight: 24,
+  },
+  guideLineBox: {
+    height: LINE_HEIGHT,
+    position: "relative",
+  },
   indentGuide: {
     position: "absolute",
     width: 1,
     top: 0,
     bottom: 0,
-    zIndex: 1,
   },
   codeLineText: {
     fontFamily: FONT_FAMILY,

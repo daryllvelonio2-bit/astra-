@@ -188,6 +188,27 @@ export function EditorSection({
         </View>
       </View>
 
+      {/* Indent Guides Toggle */}
+      <View style={[styles.card, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
+        <View style={styles.row}>
+          <View style={[styles.iconBox, { backgroundColor: `${theme.accent}15` }]}>
+            <Ionicons name="reorder-four-outline" size={18} color={theme.accent} />
+          </View>
+          <View style={styles.textCol}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>Indent Guides</Text>
+            <Text style={[styles.description, { color: theme.textMuted }]}>
+              Show vertical nesting guidelines in code blocks.
+            </Text>
+          </View>
+          <Switch
+            value={editorSettings.showIndentGuides !== false}
+            onValueChange={(val) => onChangeEditorSettings({ ...editorSettings, showIndentGuides: val })}
+            trackColor={{ false: theme.border, true: `${theme.accentGreen}80` }}
+            thumbColor={editorSettings.showIndentGuides !== false ? theme.accentGreen : theme.textMuted}
+          />
+        </View>
+      </View>
+
       <Text style={[styles.sectionHeading, { color: theme.textMuted, marginTop: 12 }]}>
         HARDWARE INPUT & PERIPHERALS
       </Text>
