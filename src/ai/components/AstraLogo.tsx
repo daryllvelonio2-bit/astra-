@@ -8,8 +8,10 @@ interface AstraLogoProps {
   style?: StyleProp<ViewStyle>;
   /** Defaults to true — pass false for a frozen mark. */
   animated?: boolean;
+  /** Optional solid color to override gradients. */
+  color?: string;
 }
 
-export function AstraLogo({ width = 36, height = 36, style, animated = true }: AstraLogoProps) {
-  return <AstraMarkAnimated width={width} height={height} style={style} animated={animated} />;
+export function AstraLogo({ width = 36, height = 36, style, animated = true, color }: AstraLogoProps) {
+  return <AstraMarkAnimated width={width} height={height} style={style} animated={animated} color={color} />;
 }

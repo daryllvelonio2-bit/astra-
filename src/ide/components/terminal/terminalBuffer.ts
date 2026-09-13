@@ -26,31 +26,44 @@ const ASTRA_ART = [
 
 const SEP = "-----------------------------------";
 
-export function getBannerTitle(workspaceId?: string): string {
+export function getBannerTitle(workspaceId?: string, isDark: boolean = true): string {
   const dir = workspaceId ? `/workspaces/${workspaceId}` : "/workspace";
-  const P = "\u001b[1;35m"; // pink / magenta (icons, art, user@host) — visible on dark + light
-  const D = "\u001b[2m"; // dim default foreground (separator) — adapts to theme
   const R = "\u001b[0m";
-  // NOTE: detail values intentionally use the terminal default foreground
-  // (no hardcoded white) so they stay readable in light mode (#0f172a)
-  // and dark mode (#f1f3f4) alike.
+
+  // Vibrant, high-contrast palette
+  const artColor = isDark ? "\u001b[1;36m" : "\u001b[1;34m";
+  const userColor = "\u001b[1;32m";
+  const hostColor = isDark ? "\u001b[1;36m" : "\u001b[1;34m";
+  const dimColor = "\u001b[90m";
+
+  // Metric icon colors
+  const cOs = "\u001b[1;36m";
+  const cKer = "\u001b[1;35m";
+  const cSh = "\u001b[1;33m";
+  const cWs = "\u001b[1;34m";
+  const cTerm = "\u001b[1;32m";
+  const cEng = "\u001b[1;31m";
+
+  // Labels: bold high-contrast
+  const L = isDark ? "\u001b[1;37m" : "\u001b[1;30m";
+
   const lines = [
-    `${P}${ASTRA_ART[0]}${R}`,
-    `${P}${ASTRA_ART[1]}${R}`,
-    `${P}${ASTRA_ART[2]}${R}`,
-    `${P}${ASTRA_ART[3]}${R}`,
-    `${P}${ASTRA_ART[4]}${R}`,
+    `${artColor}${ASTRA_ART[0]}${R}`,
+    `${artColor}${ASTRA_ART[1]}${R}`,
+    `${artColor}${ASTRA_ART[2]}${R}`,
+    `${artColor}${ASTRA_ART[3]}${R}`,
+    `${artColor}${ASTRA_ART[4]}${R}`,
     ``,
-    `${P}astra@alpine${R}`,
-    `${D}${SEP}${R}`,
-    `${P}  ▲  ${R}OS:        Alpine Linux (PRoot)`,
-    `${P}  ◉  ${R}Kernel:     Linux (embedded userland)`,
-    `${P}  >- ${R}Shell:      busybox ash`,
-    `${P}  ⬢  ${R}Workspace:  ${dir}`,
-    `${P}  ⚙  ${R}Terminal:   xterm pty`,
-    `${P}  ●  ${R}Engine:     PRoot + busybox`,
+    `${userColor}astra${R}@${hostColor}alpine${R}`,
+    `${dimColor}──────────────────────────────────────────${R}`,
+    `  ${cOs}▲${R}  ${L}OS:${R}         Alpine Linux (PRoot sandbox)`,
+    `  ${cKer}◉${R}  ${L}Kernel:${R}     Linux userland (embedded)`,
+    `  ${cSh}⚡${R} ${L}Shell:${R}      busybox ash`,
+    `  ${cWs}📁${R} ${L}Workspace:${R}  ${cWs}${dir}${R}`,
+    `  ${cTerm}💻${R} ${L}Terminal:${R}   xterm.js pty`,
+    `  ${cEng}🚀${R} ${L}Engine:${R}     PRoot + busybox`,
     ``,
-    `  \u001b[31m●\u001b[32m●\u001b[33m●\u001b[34m●\u001b[35m●\u001b[36m●\u001b[37m●\u001b[90m●${R}`,
+    `  \u001b[31m● \u001b[32m● \u001b[33m● \u001b[34m● \u001b[35m● \u001b[36m● \u001b[37m● \u001b[90m●${R}`,
   ];
   return lines.join("\r\n") + "\r\n";
 }

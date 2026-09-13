@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ScrollView } from "react-native";
 import { useTerminalHistory, useTerminalClipboard } from "./terminalHistory";
 import {
@@ -11,7 +11,7 @@ import {
   initializeEnvironment,
 } from "../../../../modules/linux-runner/src";
 import { PTY_XTERM_ENABLED } from "./ptyConfig";
-import { TERMINAL_THEMES, TerminalTheme } from "./terminalThemes";
+import { themeToTerminalTheme, TerminalTheme } from "./terminalThemes";
 import { runningTasksService, RunningTask } from "../../../ai/services/runningTasksService";
 import { useRunSessionEffect } from "./useRunSession";
 import { useTheme } from "../../../theme/themeContext";
@@ -32,7 +32,7 @@ interface UseTerminalSessionProps {
   workspaceId?: string;
 }
 
-const getBanner = (workspaceId?: string) => getBannerTitle(workspaceId);
+const getBanner = (workspaceId?: string, isDark: boolean = true) => getBannerTitle(workspaceId, isDark);
 
 // Shell spawn honoring the Phase 2 flag (PTY vs legacy pipe shell).
 async function startShellSession(sessionId: string, workspaceId?: string) {
@@ -53,21 +53,19 @@ const formatTaskTabName = (cmd: string) => {
 };
 
 export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
-  const { themeMode } = useTheme();
+  const { theme: appTheme } = useTheme();
+  const isDarkInitial = appTheme.isDark;
   const [sessions, setSessions] = useState<TerminalTab[]>([
     { id: "session-1", name: "1: sh" },
   ]);
   const [activeSessionId, setActiveSessionId] = useState<string>("session-1");
   const [sessionOutputs, setSessionOutputs] = useState<Record<string, string>>({
-    "session-1": getBanner(workspaceId),
+    "session-1": getBanner(workspaceId, isDarkInitial),
   });
   const [isCtrlActive, setIsCtrlActive] = useState<boolean>(false);
   const [isAltActive, setIsAltActive] = useState<boolean>(false);
   const [isReady, setIsReady] = useState<boolean>(false);
-  const [fontSize, setFontSize] = useState<number>(12.5);
-  const [themeId, setThemeId] = useState<string>(
-    themeMode === "light" ? "light" : themeMode === "midnight" ? "midnight" : "alpine"
-  );
+  const [fontSize, setFontSize] = useState<number>(14);
   const { recordCommand, navigateHistory } = useTerminalHistory();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -92,18 +90,10 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     });
   }, []);
 
-  // Sync terminal theme with global app theme mode
-  useEffect(() => {
-    if (themeMode === "light") {
-      setThemeId("light");
-    } else if (themeMode === "midnight") {
-      setThemeId("midnight");
-    } else if (themeMode === "dark") {
-      setThemeId("alpine");
-    }
-  }, [themeMode]);
-
-  const activeTheme: TerminalTheme = TERMINAL_THEMES[themeId] || TERMINAL_THEMES.alpine;
+  const activeTheme: TerminalTheme = useMemo(
+    () => themeToTerminalTheme(appTheme),
+    [appTheme]
+  );
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -301,11 +291,11 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
   );
 
   const zoomIn = useCallback(() => {
-    setFontSize((prev) => Math.min(22, prev + 1));
+    setFontSize((prev) => Math.min(24, prev + 1));
   }, []);
 
   const zoomOut = useCallback(() => {
-    setFontSize((prev) => Math.max(9, prev - 1));
+    setFontSize((prev) => Math.max(10, prev - 1));
   }, []);
 
   const addNewSession = useCallback(async () => {
@@ -330,11 +320,10 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       if (sessions.length <= 1) return;
 
       if (idToClose.startsWith("task-")) {
-        const taskId = idToClose.replace(/^task-/, "");
+        const taskId = idToClose;
         const stopped = await runningTasksService.killTask(taskId);
         if (!stopped) {
-          showToast("Could not stop task — server still running");
-          return;
+          runningTasksService.forceRemoveTask(taskId);
         }
         showToast("Background task stopped");
       } else {
@@ -359,14 +348,10 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
   const restartActiveSession = useCallback(async () => {
     if (activeSessionId.startsWith("task-")) {
-      const taskId = activeSessionId.replace(/^task-/, "");
-      const task = runningTasksService.getRunningTasks().find((t) => t.id === taskId);
+      const taskId = activeSessionId;
+      const task = runningTasksService.findTask(taskId);
       if (task) {
-        const stopped = await runningTasksService.killTask(taskId);
-        if (!stopped) {
-          showToast("Could not stop task — server still running");
-          return;
-        }
+        await runningTasksService.killTask(taskId, true);
         runningTasksService.addTask({
           command: task.command,
           port: task.port,
@@ -387,8 +372,8 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
   const clearActiveSession = useCallback(() => {
     if (activeSessionId.startsWith("task-")) {
-      const taskId = activeSessionId.replace(/^task-/, "");
-      const task = runningTasksService.getRunningTasks().find((t) => t.id === taskId);
+      const taskId = activeSessionId;
+      const task = runningTasksService.findTask(taskId);
       const banner = `\u001b[1;34m⚡ Background Task: \u001b[1;37m${task?.command || "Task"}\u001b[0m\r\n----------------------------------------\r\n`;
       setSessionOutputs((prev) => ({
         ...prev,
@@ -418,8 +403,6 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     isReady,
     fontSize,
     theme: activeTheme,
-    themeId,
-    setThemeId,
     toastMessage,
     scrollRef,
     sendInput,

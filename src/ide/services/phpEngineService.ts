@@ -1,6 +1,5 @@
 import { PhpEngine } from "../../../modules/php-engine/src";
 import * as FileSystem from "expo-file-system/legacy";
-import { runPistonCode } from "../../ai/runner/pistonRunner";
 
 const WORKSPACES_DIR = `${FileSystem.documentDirectory}workspaces/`;
 
@@ -32,12 +31,14 @@ export class PhpEngineService {
       }
     }
 
-    // Execute through Piston Engine
-    const res = await runPistonCode(code, "php");
-    if (res.stderr) {
-      return res.stdout ? `${res.stdout}\n[Error]: ${res.stderr}` : `[PHP Error]: ${res.stderr}`;
-    }
-    return res.stdout || "(No output returned by PHP script)";
+    // Execute through local Linux PRoot environment
+    try {
+      const { PRootService } = require("./prootService");
+      const res = await PRootService.runCommand(`php -r ${JSON.stringify(code)}`);
+      if (res && res.stdout) return res.stdout;
+      if (res && res.stderr) return `[PHP Error]: ${res.stderr}`;
+    } catch (_) {}
+    return "(PHP Engine is not available on this device)";
   }
 
   /** Run a Laravel Artisan CLI command */

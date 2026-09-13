@@ -52,55 +52,45 @@ export function CognitiveModeModal({
       <TouchableOpacity
         key={opt.id}
         style={[
-          styles.optionCard,
+          styles.optionRow,
           { backgroundColor: theme.bgTertiary, borderColor: theme.border },
           isSelected && {
             borderColor: opt.highlightColor,
-            backgroundColor: `${opt.highlightColor}15`,
+            backgroundColor: `${opt.highlightColor}18`,
           },
         ]}
         onPress={() => onSelectMode(opt.id)}
         activeOpacity={0.7}
       >
-        <View style={styles.optionHeader}>
-          <View style={styles.badgeRow}>
-            <View
-              style={[
-                styles.badge,
-                { backgroundColor: `${opt.highlightColor}20` },
-              ]}
-            >
-              <Text style={[styles.badgeText, { color: opt.highlightColor }]}>
-                {opt.badge}
-              </Text>
-            </View>
+        <View style={styles.optionContent}>
+          <View style={styles.optionTitleRow}>
+            <Text style={[styles.optionBadge, { color: opt.highlightColor }]}>
+              {opt.badge}
+            </Text>
             <Text
               style={[
                 styles.optionName,
-                { color: theme.textPrimary },
-                isSelected && { color: opt.highlightColor, fontWeight: "700" },
+                { color: isSelected ? opt.highlightColor : theme.textPrimary },
               ]}
+              numberOfLines={1}
             >
-              {opt.name}
+              {opt.shortName}
             </Text>
           </View>
-          {isSelected && (
-            <Ionicons
-              name="checkmark-circle"
-              size={18}
-              color={opt.highlightColor}
-            />
-          )}
+          <Text
+            style={[styles.optionDesc, { color: theme.textSecondary }]}
+            numberOfLines={1}
+          >
+            {opt.description}
+          </Text>
         </View>
-        <Text style={[styles.optionDesc, { color: theme.textSecondary }]}>{opt.description}</Text>
-        {opt.tag ? (
-          <View style={[styles.tagRow, { borderTopColor: theme.border }]}>
-            <Text style={[styles.tagLabel, { color: theme.textMuted }]}>CLI / Prompt Tag:</Text>
-            <Text style={[styles.tagCode, { color: theme.accent }]}>
-              {opt.cliFlag} {opt.tag ? `• ${opt.tag}` : ""}
-            </Text>
-          </View>
-        ) : null}
+        {isSelected && (
+          <Ionicons
+            name="checkmark-circle"
+            size={16}
+            color={opt.highlightColor}
+          />
+        )}
       </TouchableOpacity>
     );
   };
@@ -108,22 +98,17 @@ export function CognitiveModeModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={[styles.backdrop, { backgroundColor: theme.overlay }]} activeOpacity={1} onPress={onClose}>
-        <View style={[styles.modalCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
+        <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
           <View style={[styles.header, { borderBottomColor: theme.border }]}>
-            <View>
-              <Text style={[styles.title, { color: theme.textPrimary }]}>Astra Cognitive Modes</Text>
-              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                Select reasoning depth & game engine specializations
-              </Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color={theme.textMuted} />
+            <Text style={[styles.title, { color: theme.textPrimary }]}>Cognitive Mode</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close" size={17} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
             {/* Reasoning Effort Section */}
-            <Text style={[styles.sectionHeader, { color: theme.textMuted, marginTop: 12 }]}>REASONING EFFORT</Text>
+            <Text style={[styles.sectionHeader, { color: theme.textMuted }]}>EFFORT</Text>
             <View style={styles.effortRow}>
               {EFFORT_OPTIONS.map((e) => {
                 const isEffortSelected = selectedEffort === e.id;
@@ -153,16 +138,16 @@ export function CognitiveModeModal({
             </View>
 
             {/* Cognitive Profiles */}
-            <Text style={[styles.sectionHeader, { color: theme.textMuted }]}>COGNITIVE PROFILES</Text>
+            <Text style={[styles.sectionHeader, { color: theme.textMuted }]}>MODES</Text>
             {cognitiveModes.map(renderModeOption)}
 
             {/* Godot 4.x Game Development */}
-            <Text style={[styles.sectionHeader, { color: theme.textMuted, marginTop: 14 }]}>
-              GODOT 4.X GAME DEVELOPMENT
+            <Text style={[styles.sectionHeader, { color: theme.textMuted, marginTop: 8 }]}>
+              GAME DEV (GODOT)
             </Text>
             {gamingModes.map(renderModeOption)}
           </ScrollView>
-        </View>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );
@@ -177,111 +162,84 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: "100%",
-    maxWidth: 420,
-    maxHeight: "85%",
-    borderRadius: 16,
+    maxWidth: 320,
+    maxHeight: "78%",
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 16,
+    padding: 12,
     elevation: 8,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-    paddingBottom: 10,
+    alignItems: "center",
+    marginBottom: 8,
+    paddingBottom: 7,
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: 13.5,
     fontWeight: "700",
   },
-  subtitle: {
-    fontSize: 11.5,
-    marginTop: 2,
-  },
   closeBtn: {
-    padding: 4,
+    padding: 2,
   },
   scrollArea: {
     flexGrow: 0,
   },
   sectionHeader: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    marginBottom: 8,
+    fontSize: 9.5,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    marginBottom: 4,
     marginTop: 4,
   },
   effortRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 14,
+    gap: 4,
+    marginBottom: 8,
   },
   effortBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 4.5,
+    borderRadius: 6,
     borderWidth: 1,
     alignItems: "center",
-  },
-  effortBtnActive: {
   },
   effortLabel: {
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "600",
   },
-  effortLabelActive: {
-    fontWeight: "700",
-  },
-  optionCard: {
-    borderRadius: 10,
-    padding: 11,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  optionHeader: {
+  optionRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 7,
+    paddingVertical: 5.5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
     marginBottom: 4,
   },
-  badgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  optionContent: {
+    flex: 1,
+    marginRight: 6,
   },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  badgeText: {
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  optionName: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  optionDesc: {
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 2,
-  },
-  tagRow: {
+  optionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 6,
-    paddingTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  tagLabel: {
-    fontSize: 10,
+  optionBadge: {
+    fontSize: 11,
+    fontWeight: "700",
   },
-  tagCode: {
+  optionName: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  optionDesc: {
     fontSize: 10,
-    fontFamily: "monospace",
+    lineHeight: 13,
+    marginTop: 1,
   },
 });

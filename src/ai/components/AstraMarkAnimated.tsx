@@ -8,6 +8,8 @@ interface AstraMarkAnimatedProps {
   style?: StyleProp<ViewStyle>;
   /** When false, renders the same mark frozen (no loops running). Defaults to true. */
   animated?: boolean;
+  /** Optional solid color to override gradients. */
+  color?: string;
 }
 
 // Acode loading-logo timing: 1500ms infinite cycle, scale 1 -> ~1.13 -> 1
@@ -59,6 +61,7 @@ export function AstraMarkAnimated({
   height = 36,
   style,
   animated = true,
+  color,
 }: AstraMarkAnimatedProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const legGradId = `astraLeg${uid}`;
@@ -94,7 +97,7 @@ export function AstraMarkAnimated({
           <Path
             d="M54 104 L30 130 L54 156"
             fill="none"
-            stroke={`url(#${chevGradId})`}
+            stroke={color || `url(#${chevGradId})`}
             strokeWidth="17"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -123,7 +126,7 @@ export function AstraMarkAnimated({
           <Path
             d="M146 104 L170 130 L146 156"
             fill="none"
-            stroke={`url(#${chevGradId})`}
+            stroke={color || `url(#${chevGradId})`}
             strokeWidth="17"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -153,7 +156,7 @@ export function AstraMarkAnimated({
           <Path
             d="M100 62 L58 158 M72 126 L128 126"
             fill="none"
-            stroke={`url(#${legGradId})`}
+            stroke={color || `url(#${legGradId})`}
             strokeWidth="20"
             strokeLinecap="round"
           />
@@ -182,7 +185,7 @@ export function AstraMarkAnimated({
           <Path
             d="M100 62 L142 158"
             fill="none"
-            stroke={`url(#${legGradId})`}
+            stroke={color || `url(#${legGradId})`}
             strokeWidth="20"
             strokeLinecap="round"
           />
@@ -210,7 +213,7 @@ export function AstraMarkAnimated({
           </Defs>
           <Path
             d="M100 8 C103 26 110 33 128 36 C110 39 103 46 100 64 C97 46 90 39 72 36 C90 33 97 26 100 8 Z"
-            fill={`url(#${starGradId})`}
+            fill={color || `url(#${starGradId})`}
           />
         </Svg>
       </Animated.View>

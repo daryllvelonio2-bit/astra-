@@ -1,4 +1,8 @@
-import { readFileContent } from "./workspaceService";
+import {
+  readFileContent,
+  getWorkspaceDirPath,
+  resolveFullPath,
+} from "./workspaceService";
 import { runningTasksService } from "../../ai/services/runningTasksService";
 import {
   executeCommand,
@@ -162,18 +166,16 @@ export async function resolveRunPlan(
   const lower = rootNames.map((n) => n.toLowerCase());
   const has = (...cands: string[]) => cands.some((c) => lower.includes(c.toLowerCase()));
 
-  // HTML always previews in the Browser tab via a real local server so
-  // relative CSS/JS/images and fetch() keep working.
+  // HTML previews directly in the Browser tab — instant preview, zero terminal, zero server overhead.
   if (ext === "html" || ext === "htm") {
-    const port = pickPort();
-    const dir = guestDir(workspaceId, filePath);
+    const baseDir = await getWorkspaceDirPath(workspaceId);
+    const fullPath = resolveFullPath(baseDir, filePath);
+    const fileUrl = fullPath.startsWith("file://") ? fullPath : `file://${fullPath}`;
     return {
       kind: "browser",
-      command: `pkill -f "http.server ${port}" 2>/dev/null; python3 -m http.server ${port} -d ${q(dir)} &`,
-      displayName: `serve ${name} :${port}`,
-      runtime: "python3",
-      url: `http://127.0.0.1:${port}/${name}`,
-      port,
+      command: "",
+      displayName: name,
+      url: fileUrl,
     };
   }
 
@@ -275,14 +277,14 @@ export async function resolveRunPlan(
 
   // Static site fallback
   if (has("index.html")) {
-    const port = pickPort();
+    const baseDir = await getWorkspaceDirPath(workspaceId);
+    const fullPath = resolveFullPath(baseDir, "index.html");
+    const fileUrl = fullPath.startsWith("file://") ? fullPath : `file://${fullPath}`;
     return {
       kind: "browser",
-      command: `pkill -f "http.server ${port}" 2>/dev/null; python3 -m http.server ${port} -d ${q(`/workspaces/${workspaceId}`)} &`,
-      displayName: `serve index.html :${port}`,
-      runtime: "python3",
-      url: `http://127.0.0.1:${port}/index.html`,
-      port,
+      command: "",
+      displayName: "index.html",
+      url: fileUrl,
     };
   }
 
@@ -358,6 +360,12 @@ export async function executeRunPlan(
   }
 
   if (plan.kind === "browser" && plan.url) {
+    if (!plan.command) {
+      // Direct browser preview (e.g. HTML files) — no server or terminal required
+      cb.onOpenBrowser(plan.url);
+      return;
+    }
+
     if (plan.runtime && !(await hasRuntime(plan.runtime))) {
       const known = resolveRuntimeForBinary(plan.runtime);
       if (known) {

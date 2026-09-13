@@ -25,9 +25,23 @@ const html = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <style>__XTERM_CSS__</style>
 <style>
-html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: hidden; }
-#terminal { height: 100%; width: 100%; padding: 4px 6px; box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: __BG__;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+#terminal {
+  height: 100%;
+  width: 100%;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
 .xterm-helper-textarea { opacity: 0 !important; }
+.xterm .xterm-viewport { background-color: transparent !important; }
 </style>
 </head>
 <body>
@@ -39,10 +53,16 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
 (function () {
   var term = new Terminal({
     cursorBlink: true,
+    cursorStyle: 'block',
+    cursorWidth: 2,
     fontSize: __FONT__,
-    fontFamily: '"JetBrains Mono", Menlo, Consolas, monospace',
+    fontFamily: 'ui-monospace, "SF Mono", "Roboto Mono", "JetBrains Mono", Menlo, Consolas, monospace',
+    fontWeight: '500',
+    fontWeightBold: '700',
+    letterSpacing: 0.3,
+    lineHeight: 1.25,
     scrollback: 5000,
-    theme: { background: '__BG__', foreground: '__FG__', cursor: '__CURSOR__' },
+    theme: __THEME_JSON__,
     convertEol: false
   });
   var fit = new FitAddon.FitAddon();
@@ -115,6 +135,15 @@ html, body { margin: 0; padding: 0; height: 100%; background: __BG__; overflow: 
   window.__astraFit = function () { reportSize(); };
   window.__astraFocus = function () { try { term.focus(); } catch (e) {} };
   window.__astraSetFontSize = function (px) { try { term.options.fontSize = px; reportSize(); } catch (e) {} };
+  window.__astraSetTheme = function (thm) {
+    try {
+      term.options.theme = thm;
+      if (thm && thm.background) {
+        document.body.style.backgroundColor = thm.background;
+      }
+      reportSize();
+    } catch (e) {}
+  };
   window.__astraGetSelection = function () {
     try { post({ type: 'selection', text: term.getSelection() }); }
     catch (e) { post({ type: 'selection', text: '' }); }
@@ -144,15 +173,22 @@ export interface XtermHtmlOptions {
   foreground: string;
   cursor: string;
   fontSize: number;
+  theme?: Record<string, string>;
 }
 
 const BLOB = ${JSON.stringify(withLibs)};
 
 export function buildXtermHtml(o: XtermHtmlOptions): string {
+  const themeObj = o.theme || {
+    background: o.background,
+    foreground: o.foreground,
+    cursor: o.cursor,
+  };
   return BLOB.replaceAll("__BG__", () => o.background)
     .replaceAll("__FG__", () => o.foreground)
     .replaceAll("__CURSOR__", () => o.cursor)
-    .replaceAll("__FONT__", () => String(o.fontSize));
+    .replaceAll("__FONT__", () => String(o.fontSize))
+    .replaceAll("__THEME_JSON__", () => JSON.stringify(themeObj));
 }
 `;
 

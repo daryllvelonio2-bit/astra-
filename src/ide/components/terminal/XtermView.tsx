@@ -17,6 +17,7 @@ import {
 } from "../../../../modules/linux-runner/src";
 import { buildXtermHtml } from "./xtermHtml.generated";
 import { utf8ToB64 } from "./terminalEncoding";
+import { TerminalTheme, getXtermTheme } from "./terminalThemes";
 
 export interface XtermViewHandle {
   focusTerminal: () => void;
@@ -27,9 +28,10 @@ export interface XtermViewHandle {
 interface XtermViewProps {
   sessionId: string;
   fontSize: number;
-  background: string;
-  foreground: string;
-  cursor: string;
+  theme?: TerminalTheme;
+  background?: string;
+  foreground?: string;
+  cursor?: string;
   onRemoteResize?: (cols: number, rows: number) => void;
   /** Banner (title + build tag) painted above the replayed history. */
   banner?: string;
@@ -54,7 +56,17 @@ const MAX_QUEUE = 512;
 
 export const XtermView = memo(
   forwardRef<XtermViewHandle, XtermViewProps>(function XtermView(
-    { sessionId, fontSize, background, foreground, cursor, banner, onRemoteResize, onRequestKeyboard },
+    {
+      sessionId,
+      fontSize,
+      theme,
+      background,
+      foreground,
+      cursor,
+      banner,
+      onRemoteResize,
+      onRequestKeyboard,
+    },
     ref
   ) {
   const webRef = useRef<WebView>(null);
@@ -78,9 +90,21 @@ export const XtermView = memo(
   const keyboardRef = useRef(onRequestKeyboard);
   keyboardRef.current = onRequestKeyboard;
 
+  const activeBg = theme?.background || background || "#0d1117";
+  const activeFg = theme?.foreground || foreground || "#f0f6fc";
+  const activeCursor = theme?.cursor || cursor || "#58a6ff";
+  const xtermTheme = useMemo(() => (theme ? getXtermTheme(theme) : undefined), [theme]);
+
   const html = useMemo(
-    () => buildXtermHtml({ background, foreground, cursor, fontSize: 13 }),
-    [background, foreground, cursor]
+    () =>
+      buildXtermHtml({
+        background: activeBg,
+        foreground: activeFg,
+        cursor: activeCursor,
+        fontSize,
+        theme: xtermTheme,
+      }),
+    [activeBg, activeFg, activeCursor, fontSize, xtermTheme]
   );
 
   const injectWrite = (b64: string) => {
@@ -196,6 +220,15 @@ export const XtermView = memo(
       );
     }
   }, [fontSize]);
+
+  // Dynamic theme update
+  useEffect(() => {
+    if (readyRef.current && xtermTheme) {
+      webRef.current?.injectJavaScript(
+        `window.__astraSetTheme&&window.__astraSetTheme(${JSON.stringify(xtermTheme)});true;`
+      );
+    }
+  }, [xtermTheme]);
 
   const handleReady = async () => {
     pageLoadedRef.current = true;

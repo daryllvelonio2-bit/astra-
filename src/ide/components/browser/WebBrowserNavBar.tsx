@@ -69,7 +69,7 @@ export function WebBrowserNavBar({
       {/* Address Input Bar */}
       <View style={[styles.urlInputBox, { backgroundColor: theme.bgInput, borderColor: theme.border }]}>
         <Ionicons
-          name={url.startsWith("https") ? "lock-closed" : "globe-outline"}
+          name={url.startsWith("https") ? "lock-closed" : url.startsWith("file") ? "document-text-outline" : "globe-outline"}
           size={13}
           color={hasError ? theme.accentRed : url.startsWith("https") ? theme.accentGreen : theme.accent}
           style={{ marginRight: 6 }}

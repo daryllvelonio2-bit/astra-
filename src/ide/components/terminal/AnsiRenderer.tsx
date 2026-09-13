@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 import { Text, TextStyle, StyleSheet } from "react-native";
-import { TerminalTheme, TERMINAL_THEMES } from "./terminalThemes";
+import { TerminalTheme, themeToTerminalTheme } from "./terminalThemes";
+import { useTheme } from "../../../theme/themeContext";
 
 interface AnsiRendererProps {
   rawText: string;
@@ -93,7 +94,7 @@ const ANSI_BG_COLORS_LIGHT: Record<number, string> = {
 };
 
 function isLightTerminalTheme(theme: TerminalTheme): boolean {
-  return theme.id === "light";
+  return theme.isDark === false || theme.id === "light";
 }
 
 /**
@@ -183,8 +184,10 @@ export const AnsiRenderer = memo(function AnsiRenderer({
   rawText,
   isFocused = true,
   fontSize = 12.5,
-  theme = TERMINAL_THEMES.alpine,
+  theme: customTheme,
 }: AnsiRendererProps) {
+  const { theme: appTheme } = useTheme();
+  const theme = customTheme || themeToTerminalTheme(appTheme);
   // Empty buffer renders just the cursor — never a fake prompt (a hardcoded
   // prompt would freeze a stale directory on screen instead of the real one).
   const displayText = rawText || "";

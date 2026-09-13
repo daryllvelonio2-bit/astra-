@@ -12,7 +12,6 @@ interface TerminalHeaderProps {
   onCloseSession: (id: string) => void;
   onRestartSession: () => void;
   onClearSession: () => void;
-  onOpenThemePicker: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onCopyOutput?: () => void;
@@ -27,7 +26,6 @@ export function TerminalHeader({
   onCloseSession,
   onRestartSession,
   onClearSession,
-  onOpenThemePicker,
   onZoomIn,
   onZoomOut,
   onCopyOutput,
@@ -74,7 +72,7 @@ export function TerminalHeader({
               <Text
                 style={[
                   styles.tabText,
-                  { color: isActive ? appTheme.textPrimary : s.isTask ? appTheme.accentGreen : appTheme.textMuted },
+                  { color: isActive ? appTheme.textPrimary : s.isTask ? appTheme.accentGreen : appTheme.textSecondary },
                 ]}
               >
                 {s.name}
@@ -97,7 +95,7 @@ export function TerminalHeader({
           onPress={onAddSession}
           activeOpacity={0.7}
         >
-          <Ionicons name="add" size={14} color={appTheme.textMuted} />
+          <Ionicons name="add" size={15} color={appTheme.textSecondary} />
         </TouchableOpacity>
       </ScrollView>
 
@@ -108,24 +106,17 @@ export function TerminalHeader({
           onPress={onZoomOut}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="remove-outline" size={14} color={appTheme.textMuted} />
+          <Ionicons name="remove-outline" size={15} color={appTheme.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={onZoomIn}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="add-outline" size={14} color={appTheme.textMuted} />
+          <Ionicons name="add-outline" size={15} color={appTheme.textSecondary} />
         </TouchableOpacity>
 
-        {/* Theme Palette */}
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={onOpenThemePicker}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <Ionicons name="color-palette-outline" size={14} color={appTheme.textMuted} />
-        </TouchableOpacity>
+
 
         {/* Copy Output */}
         {onCopyOutput && (
@@ -134,7 +125,7 @@ export function TerminalHeader({
             onPress={onCopyOutput}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <Ionicons name="copy-outline" size={14} color={appTheme.textMuted} />
+            <Ionicons name="copy-outline" size={15} color={appTheme.textSecondary} />
           </TouchableOpacity>
         )}
 
@@ -145,7 +136,7 @@ export function TerminalHeader({
             onPress={onPasteClipboard}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <Ionicons name="clipboard-outline" size={14} color={appTheme.textMuted} />
+            <Ionicons name="clipboard-outline" size={15} color={appTheme.textSecondary} />
           </TouchableOpacity>
         )}
 
@@ -155,7 +146,7 @@ export function TerminalHeader({
           onPress={onRestartSession}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="refresh-outline" size={14} color={appTheme.textMuted} />
+          <Ionicons name="refresh-outline" size={15} color={appTheme.textSecondary} />
         </TouchableOpacity>
 
         {/* Clear Active */}
@@ -164,7 +155,7 @@ export function TerminalHeader({
           onPress={onClearSession}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="trash-outline" size={14} color={appTheme.textMuted} />
+          <Ionicons name="trash-outline" size={15} color={appTheme.textSecondary} />
         </TouchableOpacity>
       </View>
     </View>

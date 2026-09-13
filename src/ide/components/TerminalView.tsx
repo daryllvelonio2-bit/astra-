@@ -16,7 +16,6 @@ import { ExtraKeysBar } from "./terminal/ExtraKeysBar";
 import { XtermView, XtermViewHandle } from "./terminal/XtermView";
 import { getBannerTitle } from "./terminal/terminalBuffer";
 import { PTY_XTERM_ENABLED } from "./terminal/ptyConfig";
-import { ThemePickerModal } from "./terminal/ThemePickerModal";
 import { useTerminalInput } from "./terminal/useTerminalInput";
 import {
   estimateTerminalGrid,
@@ -40,8 +39,6 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
     activeOutput,
     fontSize,
     theme,
-    themeId,
-    setThemeId,
     toastMessage,
     scrollRef,
     sendInput,
@@ -98,7 +95,6 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
   }, []);
 
   const keyboardPad = useTerminalKeyboardPad(windowHeight);
-  const [showThemeModal, setShowThemeModal] = useState<boolean>(false);
   const viewportSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const sentGridRef = useRef<Record<string, TerminalGrid>>({});
 
@@ -173,7 +169,6 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
           }
           clearActiveSession();
         }}
-        onOpenThemePicker={() => setShowThemeModal(true)}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onCopyOutput={
@@ -194,10 +189,11 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
           ref={xtermRef}
           sessionId={activeSessionId}
           fontSize={fontSize}
+          theme={theme}
           background={theme.background}
           foreground={theme.foreground}
           cursor={theme.cursor}
-          banner={getBannerTitle(workspaceId)}
+          banner={getBannerTitle(workspaceId, theme.id !== "light")}
           onRequestKeyboard={handleFocusTerminal}
         />
       ) : (
@@ -274,15 +270,6 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
         onSubmitEditing={sendEnter}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
-      />
-
-      {/* Theme Modal */}
-      <ThemePickerModal
-        visible={showThemeModal}
-        themeId={themeId}
-        activeTheme={theme}
-        onSelectTheme={setThemeId}
-        onClose={() => setShowThemeModal(false)}
       />
     </View>
   );

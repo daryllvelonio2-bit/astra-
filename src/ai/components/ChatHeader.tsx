@@ -13,6 +13,7 @@ interface ChatHeaderProps {
   selectedModel: string;
   selectedCognitiveMode?: AstraCognitiveMode;
   onOpenSessions?: () => void;
+  onOpenCognitiveModes?: () => void;
 }
 
 export function ChatHeader({
@@ -21,6 +22,7 @@ export function ChatHeader({
   selectedModel,
   selectedCognitiveMode = "default",
   onOpenSessions,
+  onOpenCognitiveModes,
 }: ChatHeaderProps) {
   const { theme } = useTheme();
   const displayTitle =
@@ -62,20 +64,41 @@ export function ChatHeader({
             <Text style={[styles.subtitleEngine, { color: theme.accentGreen }]} numberOfLines={1}>
               {modelShortName}
             </Text>
-            {selectedCognitiveMode !== "default" && (
-              <>
-                <Text style={[styles.dotSeparator, { color: theme.borderLight }]}>•</Text>
-                <Text
-                  style={[styles.subtitleEngine, { color: modeInfo.highlightColor }]}
-                  numberOfLines={1}
-                >
-                  {modeInfo.badge}
-                </Text>
-              </>
-            )}
           </View>
         </View>
       </TouchableOpacity>
+
+      {onOpenCognitiveModes && (
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            {
+              backgroundColor: theme.bgTertiary,
+              borderColor: selectedCognitiveMode !== "default" ? modeInfo.highlightColor : theme.border,
+            },
+          ]}
+          onPress={onOpenCognitiveModes}
+          activeOpacity={0.7}
+          accessibilityLabel={`Mode: ${modeInfo.badge}. Select cognitive mode.`}
+        >
+          <Text
+            style={[
+              styles.modeButtonText,
+              {
+                color: selectedCognitiveMode !== "default" ? modeInfo.highlightColor : theme.textPrimary,
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {modeInfo.badge}
+          </Text>
+          <Ionicons
+            name="chevron-down"
+            size={9}
+            color={selectedCognitiveMode !== "default" ? modeInfo.highlightColor : theme.textMuted}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -136,5 +159,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     flexShrink: 1,
+  },
+  modeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 5,
+    borderWidth: 1,
+    marginLeft: 6,
+    flexShrink: 0,
+  },
+  modeButtonText: {
+    fontSize: 10.5,
+    fontWeight: "600",
+    lineHeight: 13,
   },
 });

@@ -40,7 +40,22 @@ export function RunningTasksBar({ onOpenUrl }: RunningTasksBarProps) {
     setKillingId(task.id);
     const stopped = await runningTasksService.killTask(task.id);
     setKillingId(null);
-    if (!stopped) Alert.alert("Could not stop task", "The server is still running. Please try again.");
+    if (!stopped) {
+      Alert.alert(
+        "Could Not Stop Task",
+        "The server is still responding. Would you like to force stop it?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Force Stop",
+            style: "destructive",
+            onPress: () => {
+              runningTasksService.forceRemoveTask(task.id);
+            },
+          },
+        ]
+      );
+    }
   };
 
   const handleKillAll = async () => {

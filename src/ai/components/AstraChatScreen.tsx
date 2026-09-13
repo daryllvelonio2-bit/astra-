@@ -17,14 +17,19 @@ import { LiveAgentStatusBar } from "./LiveAgentStatusBar";
 import { ChatHeader } from "./ChatHeader";
 import { ModelPickerModal } from "./ModelPickerModal";
 import { CognitiveModeModal } from "./CognitiveModeModal";
-import { CognitiveModeBar } from "./CognitiveModeBar";
 import { ExecutionResultModal } from "./ExecutionResultModal";
 import { ChatSessionsModal } from "./ChatSessionsModal";
 import { ActionApprovalModal } from "./ActionApprovalModal";
-import { AstraLogo } from "./AstraLogo";
 import { useChatSession } from "./useChatSession";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTheme } from "../../theme/themeContext";
+
+const ASTRA_ASCII = `    _    ____ _____ ____      _    
+   / \\  / ___|_   _|  _ \\    / \\   
+  / _ \\ \\___ \\ | | | |_) |  / _ \\  
+ / ___ \\ ___) || | |  _ <  / ___ \\ 
+/_/   \\_\\____/ |_| |_| \\_\\/_/   \\_\\`;
+
 export interface AstraChatScreenProps {
   workspaceId?: string;
   onNavigateToWorkspaces?: () => void;
@@ -75,6 +80,7 @@ export function AstraChatScreen({
     handleCreateNewChat,
     handleDeleteSession,
     handleRunSnippet,
+    handleRunInTerminal,
     handleApplyFile,
     handleSelectModel,
     handleSelectCognitiveMode,
@@ -119,6 +125,7 @@ export function AstraChatScreen({
         selectedModel={selectedModel}
         selectedCognitiveMode={selectedCognitiveMode}
         onOpenSessions={() => setShowSessionsModal(true)}
+        onOpenCognitiveModes={() => setShowCognitiveModeModal(true)}
       />
 
       <ScrollView
@@ -154,30 +161,8 @@ export function AstraChatScreen({
 
         {messages.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.logoCardWrapper}>
-              <View style={[styles.logoCardGlow, { backgroundColor: theme.borderGlow }, isMidnight && { backgroundColor: theme.accentCyan }]} />
-              <View style={[styles.logoCard, { backgroundColor: theme.bgTertiary, borderColor: theme.border, shadowColor: theme.accent }]}>
-                <AstraLogo width={50} height={50} />
-              </View>
-            </View>
-            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>Astra Pair Programmer</Text>
-            {workspace ? (
-              <View style={styles.emptySubtitleRow}>
-                <Text style={[styles.emptySubtitlePrefix, { color: theme.textSecondary }]}>Active in</Text>
-                <View style={[styles.emptyProjectBadge, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}>
-                  <Ionicons name="folder" size={12} color={theme.accent} />
-                  <Text style={[styles.emptyProjectBadgeText, { color: theme.accent }]} numberOfLines={1}>
-                    {workspace.name}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <Text style={[styles.emptySubtitleText, { color: theme.textSecondary }]}>
-                Ask questions, generate code, or explore your workspace.
-              </Text>
-            )}
-            <Text style={[styles.emptyHintText, { color: theme.textMuted }]}>
-              Ask questions, build features, or run terminal tasks below.
+            <Text style={[styles.emptyAscii, { color: theme.textPrimary }]}>
+              {ASTRA_ASCII}
             </Text>
           </View>
         ) : (
@@ -197,12 +182,6 @@ export function AstraChatScreen({
         liveInfo={liveStatus as any}
         elapsedSeconds={elapsedSeconds}
         onStop={handleStopAgent}
-      />
-
-      <CognitiveModeBar
-        selectedMode={selectedCognitiveMode}
-        onSelectMode={handleSelectCognitiveMode}
-        onOpenModeModal={() => setShowCognitiveModeModal(true)}
       />
 
       <View style={[styles.inputContainer, { backgroundColor: theme.bgSecondary, borderTopColor: theme.border }]}>
@@ -299,7 +278,11 @@ export function AstraChatScreen({
         onDeleteSession={handleDeleteSession}
         onClose={() => setShowSessionsModal(false)}
       />
-      <ExecutionResultModal runOutput={runOutput} onClose={() => setRunOutput(null)} />
+      <ExecutionResultModal
+        runOutput={runOutput}
+        onClose={() => setRunOutput(null)}
+        onRunInTerminal={handleRunInTerminal}
+      />
     </View>
   );
 }
@@ -315,70 +298,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 8,
   },
-  logoCardWrapper: {
-    position: "relative",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
-  logoCardGlow: {
-    position: "absolute",
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-  },
-  logoCard: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    overflow: "hidden",
-  },
-  emptyTitle: {
-    fontSize: 17,
+  emptyAscii: {
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "700",
-    letterSpacing: 0.2,
-  },
-  emptySubtitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flexWrap: "wrap",
-    justifyContent: "center",
-  },
-  emptySubtitlePrefix: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  emptyProjectBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  emptyProjectBadgeText: {
-    fontSize: 12.5,
-    fontWeight: "600",
-    maxWidth: 160,
-  },
-  emptySubtitleText: {
-    fontSize: 13,
     textAlign: "center",
-    lineHeight: 18,
-  },
-  emptyHintText: {
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 2,
+    letterSpacing: 0,
+    marginTop: 10,
   },
   loadOlderBtn: {
     flexDirection: "row",

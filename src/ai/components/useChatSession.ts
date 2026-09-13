@@ -3,29 +3,17 @@ import { Alert, ScrollView } from "react-native";
 import { processAgentQuery } from "../agent/agentCore";
 import { AgentChatMessage, AgentStatus, ConversationSession, LiveStatusInfo, AgentStep } from "../agent/agentTypes";
 import {
-  listSessions,
-  getActiveSession,
-  createSession,
-  deleteSession,
-  updateSessionMessages,
-  updateSessionId,
-  subscribeSessionChanges,
+  listSessions, getActiveSession, createSession, deleteSession,
+  updateSessionMessages, updateSessionId, subscribeSessionChanges,
 } from "../services/conversationService";
 import {
-  Workspace,
-  loadWorkspace,
-  loadOrCreateDefaultWorkspace,
-  saveFileContent,
-  notifyWorkspaceChanged,
+  Workspace, loadWorkspace, loadOrCreateDefaultWorkspace,
+  saveFileContent, notifyWorkspaceChanged,
 } from "../../ide/services/workspaceService";
 import { useWorkspaceAutoRefresh } from "../../ide/components/useWorkspaceAutoRefresh";
 import {
-  loadSelectedModel,
-  saveSelectedModel,
-  loadCognitiveMode,
-  saveCognitiveMode,
-  loadReasoningEffort,
-  saveReasoningEffort,
+  loadSelectedModel, saveSelectedModel, loadCognitiveMode,
+  saveCognitiveMode, loadReasoningEffort, saveReasoningEffort,
   subscribeConfigChanges,
 } from "../../ide/services/configService";
 import { sanitizeAgentText, isMachineJsonDump } from "./sanitizeAgentText";
@@ -33,6 +21,7 @@ import { AstraCognitiveMode, AstraEffort } from "../astra/astraModes";
 import { executeCode } from "../runner";
 import { runningTasksService } from "../services/runningTasksService";
 import { reconcileStaleMessages } from "./sessionReconcile";
+import { ideActionService } from "../../ide/services/ideActionService";
 
 export interface UseChatSessionProps {
   workspaceId?: string;
@@ -68,7 +57,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
   const [showSessionsModal, setShowSessionsModal] = useState(false);
   const [sessions, setSessions] = useState<ConversationSession[]>([]);
   const [currentSession, setCurrentSession] = useState<ConversationSession | null>(null);
-  const [runOutput, setRunOutput] = useState<{ code: string; stdout: string; stderr: string } | null>(null);
+  const [runOutput, setRunOutput] = useState<{ code: string; stdout: string; stderr: string; exitCode?: number; environment?: string } | null>(null);
   const [liveStatus, setLiveStatus] = useState<LiveStatusInfo | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -387,26 +376,53 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
     }
   }, [workspace, currentSession?.id, handleSelectSession, handleCreateNewChat]);
 
-  const handleRunSnippet = useCallback(async (code: string, language: string) => {
-    try {
-      const result = await executeCode({ code, language, tier: "client" });
-      setRunOutput({ code, stdout: result.stdout || "(no output)", stderr: result.stderr || "" });
-    } catch (err: any) {
-      Alert.alert("Execution Failed", err.message || "Unknown error executing code");
-    }
-  }, []);
+  const handleRunSnippet = useCallback(
+    async (code: string, language: string) => {
+      try {
+        const result = await executeCode({
+          code,
+          language,
+          tier: "native",
+          workspaceId: workspace?.id,
+        });
+        setRunOutput({
+          code,
+          stdout: result.stdout || "(no output)",
+          stderr: result.stderr || "",
+          exitCode: result.exitCode,
+          environment: result.environment || "Alpine Linux Sandbox",
+        });
+      } catch (err: any) {
+        Alert.alert("Execution Failed", err.message || "Unknown error executing code");
+      }
+    },
+    [workspace?.id]
+  );
 
-  const handleApplyFile = useCallback(async (filePath: string, content: string) => {
-    if (!workspace) return;
-    try {
-      await saveFileContent(workspace.id, filePath, content);
-      notifyWorkspaceChanged(workspace.id);
-      if (onRefreshWorkspace) onRefreshWorkspace();
-      Alert.alert("Success", `Applied changes to ${filePath}`);
-    } catch (err: any) {
-      Alert.alert("Save Failed", err.message || "Could not write file to workspace.");
-    }
-  }, [workspace, onRefreshWorkspace]);
+  const handleRunInTerminal = useCallback(
+    (command: string) => {
+      ideActionService.switchTab("terminal", true);
+      ideActionService.openTerminal(undefined, workspace?.id, true);
+      ideActionService.runInTerminal(command, "Astra AI", workspace?.id, true);
+      setRunOutput(null);
+    },
+    [workspace?.id]
+  );
+
+  const handleApplyFile = useCallback(
+    async (filePath: string, content: string) => {
+      if (!workspace) return;
+      try {
+        await saveFileContent(workspace.id, filePath, content);
+        notifyWorkspaceChanged(workspace.id);
+        if (onRefreshWorkspace) onRefreshWorkspace();
+        Alert.alert("Success", `Applied changes to ${filePath}`);
+      } catch (err: any) {
+        Alert.alert("Save Failed", err.message || "Could not write file to workspace.");
+      }
+    },
+    [workspace, onRefreshWorkspace]
+  );
 
   const handleSelectModel = useCallback(async (modelId: string) => {
     setSelectedModel(modelId);
@@ -434,15 +450,6 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
     setPendingApprovalStep(null);
   }, []);
 
-  const handleApproveSession = useCallback(async () => {
-    if (pendingApprovalResolverRef.current) {
-      pendingApprovalResolverRef.current(true);
-      pendingApprovalResolverRef.current = null;
-    }
-    setShowApprovalModal(false);
-    setPendingApprovalStep(null);
-  }, []);
-
   const handleRejectAction = useCallback(() => {
     if (pendingApprovalResolverRef.current) {
       pendingApprovalResolverRef.current(false);
@@ -453,45 +460,15 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
   }, []);
 
   return {
-    workspace,
-    messages,
-    renderLimit,
-    setRenderLimit,
-    input,
-    setInput,
-    agentStatus,
-    selectedModel,
-    selectedCognitiveMode,
-    selectedEffort,
-    pendingApprovalStep,
-    showApprovalModal,
-    setShowApprovalModal,
-    showModelPicker,
-    setShowModelPicker,
-    showCognitiveModeModal,
-    setShowCognitiveModeModal,
-    showSessionsModal,
-    setShowSessionsModal,
-    sessions,
-    currentSession,
-    runOutput,
-    setRunOutput,
-    liveStatus,
-    elapsedSeconds,
-    scrollRef,
-    shouldScrollToEndRef,
-    handleSend,
-    handleStopAgent,
-    handleSelectSession,
-    handleCreateNewChat,
-    handleDeleteSession,
-    handleRunSnippet,
-    handleApplyFile,
-    handleSelectModel,
-    handleSelectCognitiveMode,
-    handleSelectEffort,
-    handleApproveAction,
-    handleApproveSession,
-    handleRejectAction,
+    workspace, messages, renderLimit, setRenderLimit, input, setInput,
+    agentStatus, selectedModel, selectedCognitiveMode, selectedEffort,
+    pendingApprovalStep, showApprovalModal, setShowApprovalModal,
+    showModelPicker, setShowModelPicker, showCognitiveModeModal, setShowCognitiveModeModal,
+    showSessionsModal, setShowSessionsModal, sessions, currentSession,
+    runOutput, setRunOutput, liveStatus, elapsedSeconds, scrollRef, shouldScrollToEndRef,
+    handleSend, handleStopAgent, handleSelectSession, handleCreateNewChat, handleDeleteSession,
+    handleRunSnippet, handleRunInTerminal, handleApplyFile,
+    handleSelectModel, handleSelectCognitiveMode, handleSelectEffort,
+    handleApproveAction, handleApproveSession: handleApproveAction, handleRejectAction,
   };
 }

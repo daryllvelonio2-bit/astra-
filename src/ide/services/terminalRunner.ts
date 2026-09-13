@@ -2,7 +2,6 @@ import { readFileContent, saveFileContent } from "./workspaceService";
 import { readDir } from "./nativeFs";
 import { PhpEngineService } from "./phpEngineService";
 import { PRootService } from "./prootService";
-import { runPistonCode } from "../../ai/runner/pistonRunner";
 import { runClientJavaScript } from "../../ai/runner/clientRunner";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -103,13 +102,7 @@ export async function dispatchTerminalCommand(
     if (!arg) {
       return { text: `${engine.toUpperCase()} Runner Active\nUsage: ${engine} <file> or ${engine} <code>`, isSystem: true };
     }
-
-    let code = arg;
-    if (/\.[a-zA-Z0-9]+$/.test(arg)) {
-      const content = await readFileContent(workspaceId, arg);
-      code = content || `// File ${arg} is empty`;
-    }
-    const res = await runPistonCode(code, engine);
+    const res = await PRootService.runCommand(trimmed, workspaceId);
     return { text: res.stdout || undefined, error: res.stderr || undefined };
   }
 

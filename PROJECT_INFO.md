@@ -13,9 +13,9 @@
   - `src/ai/`: Agentic terminal, multi-provider LLM gateway, and 3-Tier Execution Gateway (`src/ai/runner/`).
 
 ## Execution Gateway Architecture (3-Tier Runner)
-1. **Tier 1 (Client-Side Sandbox):** Instant offline JS/TS script execution.
-2. **Tier 2 (Piston / Public API):** Multi-language script runner (PHP, Python, Ruby, C++, etc.) using free public execution engines.
-3. **Tier 3 (Embedded Alpine Linux PRoot):** Full-stack rootfs process execution, Node.js runtime, and Astra CLI agent engine running directly inside the app sandbox.
+1. **Tier 1 (Client-Side Sandbox):** Instant offline JS/TS script execution in JavaScript engine.
+2. **Tier 2 (Interactive Terminal Runner):** Direct execution inside the full-featured xterm.js interactive terminal with user session context.
+3. **Tier 3 (Embedded Alpine Linux PRoot):** Native local PRoot Linux process execution with workspace filesystem access, Python, Node.js, PHP, Git, and developer toolchain.
 
 ## Built-in Alpine Linux & PRoot Environment (Android)
 `ai-coder` provisions a full Alpine Linux container embedded directly within the app sandbox via PRoot:

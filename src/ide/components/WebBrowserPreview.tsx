@@ -85,7 +85,7 @@ export function WebBrowserPreview({
 
     finalUrl = finalUrl.replace(/localhost/gi, "127.0.0.1").replace(/0\.0\.0\.0/g, "127.0.0.1");
 
-    if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+    if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://") && !finalUrl.startsWith("file://")) {
       if (/^:?\d+$/.test(finalUrl)) {
         const port = finalUrl.replace(/^:/, "");
         finalUrl = `http://127.0.0.1:${port}`;
@@ -204,6 +204,9 @@ export function WebBrowserPreview({
             domStorageEnabled={true}
             mixedContentMode="always"
             allowsInlineMediaPlayback={true}
+            allowFileAccess={true}
+            allowFileAccessFromFileURLs={true}
+            allowUniversalAccessFromFileURLs={true}
             startInLoadingState={true}
             renderLoading={() => (
               <View style={[styles.centerLoading, { backgroundColor: theme.bgPrimary }]}>

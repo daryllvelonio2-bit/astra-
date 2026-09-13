@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Platform } from "react-native";
 import { useTheme } from "../../../theme/themeContext";
 
 interface ExtraKeysBarProps {
@@ -146,15 +146,20 @@ const styles = StyleSheet.create({
   key: {
     minWidth: 42,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 6,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 1,
   },
   keyLabel: {
     fontSize: 13,
-    fontFamily: "monospace",
-    fontWeight: "600",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontWeight: "700",
   },
 });

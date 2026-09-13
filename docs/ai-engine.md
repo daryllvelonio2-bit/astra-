@@ -44,8 +44,8 @@ The bundled Gemini-CLI fork in `astra-cli/` is provisioned into the guest at
 | Tier | Implementation | Use |
 |---|---|---|
 | Client sandbox | `clientRunner.ts` (`new Function` with captured `console`) | Instant offline JS |
-| Piston API | `pistonRunner.ts` (`emkc.org` Piston, pinned language map) | ~20 remote languages |
-| Native / guest | PRoot shell, `PhpEngineService` | Full toolchain, PHP/Laravel |
+| Interactive Terminal | `terminalRunner.ts` & `ideActionService.runInTerminal` | Interactive user session |
+| Native / guest sandbox | PRoot shell, `PRootService.runCommand`, `PhpEngineService` | Full Alpine Linux toolchain, Python, Node, PHP/Laravel |
 
 ## Chat UI (`components/`)
 

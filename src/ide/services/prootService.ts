@@ -5,7 +5,7 @@ import {
   installPackages,
 } from "../../../modules/linux-runner/src";
 import * as FileSystem from "expo-file-system/legacy";
-import { runPistonCode } from "../../ai/runner/pistonRunner";
+import { readFileContent } from "./workspaceService";
 
 const WORKSPACES_DIR = `${FileSystem.documentDirectory}workspaces/`;
 
@@ -53,20 +53,7 @@ export class PRootService {
       }
     } catch (_) {}
 
-    // Fallback: Dispatch to Piston multi-language runner
-    if (command.startsWith("php ") || command === "php") {
-      const phpCode = command.startsWith("php -r ")
-        ? command.slice(7).replace(/^["']|["']$/g, "")
-        : command.slice(4).trim();
-      const res = await runPistonCode(phpCode.includes("<?php") ? phpCode : `<?php\n${phpCode}`, "php");
-      return { stdout: res.stdout, stderr: res.stderr, exitCode: res.exitCode };
-    }
 
-    if (command.startsWith("python ") || command.startsWith("python3 ") || command === "python") {
-      const pyCode = command.replace(/^python[3]?\s*/, "").trim();
-      const res = await runPistonCode(pyCode, "python");
-      return { stdout: res.stdout, stderr: res.stderr, exitCode: res.exitCode };
-    }
 
     return {
       stdout: `[Alpine PRoot]: Executed "${command}" in ${cwd}\n`,

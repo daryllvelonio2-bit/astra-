@@ -1,5 +1,5 @@
 import { PRootService } from "../../ide/services/prootService";
-import { killPidTree, isServerAlive, killByCommandPattern, killPatternsFor } from "./processTreeKill";
+import { terminateServer } from "./processTreeKill";
 import { inspectAndRegisterFromText as inspectText } from "./runningTasksInspect";
 
 export interface RunningTask {
@@ -222,52 +222,81 @@ class RunningTasksServiceImpl {
   }
 
   /**
+   * Find a task flexibly by full ID, stripped ID, port, or PID.
+   */
+  findTask(id: string): RunningTask | undefined {
+    let task = this.tasks.get(id);
+    if (!task && !id.startsWith("task-")) {
+      task = this.tasks.get(`task-${id}`);
+    }
+    if (!task) {
+      task = Array.from(this.tasks.values()).find(
+        (t) =>
+          t.id === id ||
+          t.id === `task-${id}` ||
+          t.id.endsWith(`-${id}`) ||
+          (t.port && String(t.port) === id) ||
+          (t.pid && String(t.pid) === id)
+      );
+    }
+    return task;
+  }
+
+  /**
    * Remove a task from tracking.
    */
   removeTask(id: string) {
-    if (this.tasks.delete(id)) {
+    const task = this.findTask(id);
+    const targetId = task ? task.id : id;
+    if (this.tasks.delete(targetId)) {
       this.notify();
     }
   }
 
   /**
+   * Force remove a task from tracking immediately and execute an asynchronous
+   * emergency best-effort termination so the UI is never stuck.
+   */
+  forceRemoveTask(id: string) {
+    const task = this.findTask(id);
+    const targetId = task ? task.id : id;
+    if (task) {
+      // Async best-effort emergency termination in background
+      terminateServer(task, task.workspaceId, true).catch(() => {});
+    }
+    this.tasks.delete(targetId);
+    this.notify();
+  }
+
+  /**
    * Kill / terminate an active running process in the Linux PRoot environment.
    */
-  async killTask(id: string): Promise<boolean> {
-    const task = this.tasks.get(id);
-    if (!task) return false;
-    const t0 = Date.now();
-    const mark = (s: string) => console.log(`[killTask] +${Date.now() - t0}ms ${s}`);
+  async killTask(id: string, force = false): Promise<boolean> {
+    const task = this.findTask(id);
+    if (!task) {
+      if (force) {
+        this.tasks.delete(id);
+        this.notify();
+        return true;
+      }
+      return false;
+    }
 
     try {
-      mark(`kill pid=${task.pid} port=${task.port} cmd=${task.command}`);
-      // Host-side tree kill of the tracked pid (covers wrapper → server →
-      // double-forked `php -S` child). Guest kill/pkill/fuser/lsof cannot
-      // signal through proot (EPERM) and lsof -i is unsupported, so every
-      // kill here is native — no guest kill commands at all.
-      if (task.pid) {
-        mark(`killPidTree(${task.pid}) start`);
-        await killPidTree(task.pid, task.workspaceId);
-        mark(`killPidTree(${task.pid}) done`);
+      const stopped = await terminateServer(task, task.workspaceId, force);
+      if (stopped || force) {
+        this.tasks.delete(task.id);
+        this.notify();
+        return true;
       }
-      // Pid-less tasks and strays: host-side pattern kill (skips app/agent).
-      for (const pat of killPatternsFor(task.command, task.port)) {
-        mark(`pattern ${pat} start`);
-        await killByCommandPattern(pat);
-        mark(`pattern ${pat} done`);
-      }
-
-      // Never silently leak: only untrack a server verified dead. On failure
-      // the task stays listed so the kill can be retried (still returns false).
-      mark("isServerAlive start");
-      const alive = await isServerAlive(task, task.workspaceId);
-      mark(`isServerAlive=${alive}`);
-      if (alive) return false;
-      this.tasks.delete(id);
-      this.notify();
-      return true;
+      return false;
     } catch (e) {
-      mark(`threw: ${e}`);
+      console.log(`[killTask] error: ${e}`);
+      if (force) {
+        this.tasks.delete(task.id);
+        this.notify();
+        return true;
+      }
       return false;
     }
   }
@@ -275,10 +304,10 @@ class RunningTasksServiceImpl {
   /**
    * Kill all active background processes.
    */
-  async killAllTasks(): Promise<void> {
+  async killAllTasks(force = false): Promise<void> {
     const tasks = Array.from(this.tasks.values());
     for (const task of tasks) {
-      await this.killTask(task.id);
+      await this.killTask(task.id, force);
     }
   }
 
