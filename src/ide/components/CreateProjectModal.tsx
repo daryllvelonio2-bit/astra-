@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
 import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
+import { useKeyboardMouseMode } from '../context/KeyboardMouseContext';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
 import {
   formatDisplayPath,
@@ -30,6 +31,7 @@ interface CreateProjectModalProps {
 
 export function CreateProjectModal({ visible, onClose, onCreateProject }: CreateProjectModalProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const [projectName, setProjectName] = useState('');
   const [useCustomDirectory, setUseCustomDirectory] = useState(false);
   const [customDirectoryPath, setCustomDirectoryPath] = useState('');
@@ -108,6 +110,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
               onChangeText={setProjectName}
               autoCapitalize="none"
               autoFocus
+              showSoftInputOnFocus={!keyboardMouseMode}
               returnKeyType={useCustomDirectory ? 'next' : 'done'}
               onFocus={() => scrollToField('name')}
               onSubmitEditing={() => {
@@ -187,6 +190,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                     value={customDirectoryPath}
                     onChangeText={setCustomDirectoryPath}
                     autoCapitalize="none"
+                    showSoftInputOnFocus={!keyboardMouseMode}
                     returnKeyType="done"
                     onFocus={() => scrollToField('custom')}
                   />

@@ -29,6 +29,7 @@ import { formatDisplayPath } from '../services/storagePaths';
 import { useTheme } from '../../theme/themeContext';
 import { useOrientation } from '../../theme/useOrientation';
 import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
+import { useKeyboardMouseMode } from '../context/KeyboardMouseContext';
 
 interface ProjectPickerProps {
   onOpenWorkspace: (workspaceId: string) => void;
@@ -38,6 +39,7 @@ interface ProjectPickerProps {
 export function ProjectPicker({ onOpenWorkspace, onRerunStartup }: ProjectPickerProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const { isLandscape } = useOrientation();
   const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(24);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -184,6 +186,7 @@ export function ProjectPicker({ onOpenWorkspace, onRerunStartup }: ProjectPicker
           placeholderTextColor={theme.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          showSoftInputOnFocus={!keyboardMouseMode}
         />
         {searchQuery ? (
           <TouchableOpacity onPress={() => setSearchQuery('')}>

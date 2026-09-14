@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { RunningTask } from "../../../ai/services/runningTasksService";
 import { useTheme } from "../../../theme/themeContext";
@@ -7,11 +7,8 @@ import { useTheme } from "../../../theme/themeContext";
 interface WebBrowserErrorViewProps {
   url: string;
   errorMessage: string;
-  currentPort: string;
   runningTasks: RunningTask[];
-  isStartingServer: boolean;
   onNavigate: (targetUrl: string) => void;
-  onStartServer: () => void;
   onReload: () => void;
   onOpenExternal: () => void;
 }
@@ -19,11 +16,8 @@ interface WebBrowserErrorViewProps {
 export function WebBrowserErrorView({
   url,
   errorMessage,
-  currentPort,
   runningTasks,
-  isStartingServer,
   onNavigate,
-  onStartServer,
   onReload,
   onOpenExternal,
 }: WebBrowserErrorViewProps) {
@@ -68,30 +62,13 @@ export function WebBrowserErrorView({
       {/* Suggestion Commands */}
       <View style={[styles.suggestionCard, { backgroundColor: theme.bgSecondary, borderColor: theme.border }]}>
         <Text style={[styles.suggestionTitle, { color: theme.textSecondary }]}>💡 Start server in terminal or ask Astra AI:</Text>
-        <Text style={[styles.suggestionCode, { color: theme.accent }]}>$ php artisan serve</Text>
-        <Text style={[styles.suggestionCode, { color: theme.accent }]}>$ npx expo start --web</Text>
         <Text style={[styles.suggestionCode, { color: theme.accent }]}>$ npm run dev</Text>
-        <Text style={[styles.suggestionCode, { color: theme.accent }]}>$ python3 -m http.server {currentPort || "8080"}</Text>
+        <Text style={[styles.suggestionCode, { color: theme.accent }]}>$ npx expo start --web</Text>
+        <Text style={[styles.suggestionCode, { color: theme.accent }]}>$ php artisan serve</Text>
       </View>
 
       {/* Actions */}
       <View style={styles.errorActions}>
-        <TouchableOpacity
-          style={[styles.retryBtn, { backgroundColor: theme.accentGreen }]}
-          onPress={onStartServer}
-          disabled={isStartingServer}
-          activeOpacity={0.8}
-        >
-          {isStartingServer ? (
-            <ActivityIndicator size="small" color={theme.sendButtonIcon} style={{ marginRight: 6 }} />
-          ) : (
-            <Ionicons name="play" size={14} color={theme.sendButtonIcon} style={{ marginRight: 6 }} />
-          )}
-          <Text style={[styles.retryBtnText, { color: theme.sendButtonIcon }]}>
-            {isStartingServer ? "Starting Server..." : "Start Web Server"}
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.accent }]} onPress={onReload} activeOpacity={0.8}>
           <Ionicons name="refresh" size={14} color={theme.sendButtonIcon} style={{ marginRight: 4 }} />
           <Text style={[styles.retryBtnText, { color: theme.sendButtonIcon }]}>Retry</Text>

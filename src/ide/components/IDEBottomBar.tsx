@@ -17,6 +17,7 @@ interface IDEBottomBarProps {
   isLandscapeNavbarHidden?: boolean;
   onHideNavbar?: () => void;
   onShowNavbar?: () => void;
+  keyboardMouseMode?: boolean;
 }
 
 function IDEBottomBarInner({
@@ -29,16 +30,16 @@ function IDEBottomBarInner({
   isLandscapeNavbarHidden = false,
   onHideNavbar,
   onShowNavbar,
+  keyboardMouseMode = false,
 }: IDEBottomBarProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Collapsed restore chevron is landscape-editor-only: on other tabs the
-  // floating button would overlap tab content (e.g. terminal ExtraKeysBar),
-  // so those tabs fall through to the full bar (no dead end, no overlap).
-  // Portrait never collapses — the hide affordance isn't offered there.
-  const canOfferHide = compact && !!onHideNavbar;
-  if (canOfferHide && isLandscapeNavbarHidden && bottomTab === "editor") {
+  const isHidden = keyboardMouseMode
+    ? isLandscapeNavbarHidden
+    : (compact && isLandscapeNavbarHidden && bottomTab === "editor");
+  const canOfferHide = (compact || keyboardMouseMode) && !!onHideNavbar;
+  if (canOfferHide && isHidden) {
     return (
       <View style={styles.collapsedBarContainer} pointerEvents="box-none">
         <TouchableOpacity

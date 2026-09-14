@@ -23,6 +23,7 @@ import { ActionApprovalModal } from "./ActionApprovalModal";
 import { useChatSession } from "./useChatSession";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTheme } from "../../theme/themeContext";
+import { useKeyboardMouseMode } from "../../ide/context/KeyboardMouseContext";
 
 const ASTRA_ASCII = `    _    ____ _____ ____      _    
    / \\  / ___|_   _|  _ \\    / \\   
@@ -46,6 +47,7 @@ export function AstraChatScreen({
 }: AstraChatScreenProps) {
   const { keyboardOffset, isKeyboardVisible } = useAccurateKeyboard(4);
   const { theme, isMidnight } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
 
   const {
     workspace,
@@ -205,6 +207,14 @@ export function AstraChatScreen({
           onChangeText={setInput}
           multiline
           maxLength={4000}
+          showSoftInputOnFocus={!keyboardMouseMode}
+          onKeyPress={(e) => {
+            if (e.nativeEvent.key === "Enter" && !(e.nativeEvent as any).shiftKey) {
+              if (input.trim() && agentStatus === "idle") {
+                handleSend();
+              }
+            }
+          }}
         />
         {agentStatus !== "idle" ? (
           <TouchableOpacity

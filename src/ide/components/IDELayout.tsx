@@ -24,12 +24,15 @@ import { useWorkspaceAutoRefresh } from "./useWorkspaceAutoRefresh";
 import { useTheme } from "../../theme/themeContext";
 import { useOrientation } from "../../theme/useOrientation";
 import { useIdeActionBridge } from "./useIdeActionBridge";
+import { useKeyboardMouseMode } from "../context/KeyboardMouseContext";
 import { SettingsModal } from "./SettingsModal";
 import { resolveChatPathToRelative } from "../services/chatFileLinkService";
 import { useRecentFiles } from "./editor/useRecentFiles";
 import { useIDELayoutCallbacks, addVisitedTab } from "./useIDELayoutCallbacks";
+import { useSystemBackHandler } from "./useSystemBackHandler";
 import { useIDELayoutStyles } from "./useIDELayoutStyles";
 import { monacoLangForFile } from "../services/monaco/monacoLanguageMap";
+import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import {
   BottomTabVisibility, DEFAULT_BOTTOM_TABS, firstVisibleTab, loadAstraEnabled,
   loadBottomTabs, loadDefaultEditorUi, normalizeBottomTabs, subscribeConfigChanges, ToggleableBottomTab,
@@ -38,15 +41,17 @@ import {
 interface IDELayoutProps {
   workspaceId?: string;
   onBackToPicker?: () => void;
+  isActive?: boolean;
 }
 
 const shortLoadPath = (p: string) =>
   (p || "").replace(/^file:\/\//, "").split("/").filter(Boolean).slice(-2).join("/");
 
-export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
+export function IDELayout({ workspaceId, onBackToPicker, isActive = true }: IDELayoutProps) {
   const insets = useSafeAreaInsets();
   const { isLandscape } = useOrientation();
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
   const { recentFiles, recordRecentFile, removeRecentFile } = useRecentFiles(workspaceId);
@@ -207,9 +212,6 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     };
   }, []);
 
-  // Smooth 60fps native sidebar dragging without re-rendering tree
-  const { sidebarWidthAnim, isDraggingSidebar, resizerPanHandlers } = useSidebarResizer(130);
-
   useEffect(() => {
     let cancelled = false;
     const onProgress = (dirs: number, path: string) => {
@@ -274,8 +276,7 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     setActiveFile(selected);
     recordRecentFile(selected, false);
     safeSetBottomTab("editor");
-    // Explorer stays open on file select — it closes only when edit mode
-    // starts (handleEditModeChange) or the user collapses it manually.
+    // Explorer stays open on file select — it closes only on edit-mode start or manual collapse.
     try {
       await flushPendingSave();
       const content = await readFileContent(workspace.id, targetPath);
@@ -318,6 +319,12 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     manualSidebarHiddenRef, isLandscapeNavbarHiddenRef,
     navbarTurnedOffReasonRef, setIsLandscapeNavbarHidden,
   });
+
+  // Smooth 60fps native sidebar dragging with auto-minimize on swipe-all-the-way
+  const { sidebarWidthAnim, isDraggingSidebar, resizerPanHandlers } = useSidebarResizer(130, handleToggleCollapse);
+  useKeyboardShortcuts({ enabled: keyboardMouseMode, onSwitchTab: safeSetBottomTab });
+
+  const backNav = useSystemBackHandler({ onEditModeChange: handleEditModeChange, onCloseProject: handleBackToPicker, ideVisible: !!isActive });
 
   const { runningTaskCount, containerStyle, sidebarAnimStyle } = useIDELayoutStyles({
     runningTasks,
@@ -382,7 +389,8 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
                 onExitProject={handleBackToPicker}
                 onToggleSidebar={!isSidebarOpen ? handleShowSidebar : undefined}
                 onRunFile={handleRunActiveFile}
-                onEditModeChange={handleEditModeChange}
+                onEditModeChange={backNav.handleEditModeChange}
+                exitEditSignal={backNav.exitEditSignal}
                 onOpenSettings={handleOpenSettings}
                 recentFiles={recentFiles}
                 onSelectRecentFile={handleSelectFile}
@@ -445,8 +453,9 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
           compact={isLandscape}
           visibleTabs={visibleTabs}
           isLandscapeNavbarHidden={isLandscapeNavbarHidden}
-          onHideNavbar={isLandscape ? handleHideNavbar : undefined}
+          onHideNavbar={isLandscape || keyboardMouseMode ? handleHideNavbar : undefined}
           onShowNavbar={handleShowNavbar}
+          keyboardMouseMode={keyboardMouseMode}
         />
       )}
 
@@ -474,24 +483,10 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  workspace: {
-    flex: 1,
-    flexDirection: "row",
-  },
-  sidebarWrapper: {
-    height: "100%",
-  },
-  editorContainer: {
-    flex: 1,
-    position: "relative",
-  },
-  tabContent: {
-    flex: 1,
-  },
-  hiddenTab: {
-    display: "none",
-  },
+  container: { flex: 1 },
+  workspace: { flex: 1, flexDirection: "row" },
+  sidebarWrapper: { height: "100%" },
+  editorContainer: { flex: 1, position: "relative" },
+  tabContent: { flex: 1 },
+  hiddenTab: { display: "none" },
 });

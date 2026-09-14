@@ -14,6 +14,7 @@ import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
 import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
+import { useKeyboardMouseMode } from "../../context/KeyboardMouseContext";
 import { GitFileStatus } from "./types";
 import { GitFileItem } from "./GitFileItem";
 import { gitChangesListStyles as styles } from "./GitChangesList.styles";
@@ -51,6 +52,7 @@ export function GitChangesList({
   onPush,
 }: GitChangesListProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const { isLandscape } = useOrientation();
   const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(8);
   const [summary, setSummary] = useState("");
@@ -264,6 +266,7 @@ export function GitChangesList({
               onChangeText={setSummary}
               returnKeyType="next"
               blurOnSubmit={false}
+              showSoftInputOnFocus={!keyboardMouseMode}
               onFocus={handleInputFocus}
               onBlur={() => setInputFocused(false)}
               onSubmitEditing={() => descriptionRef.current?.focus()}
@@ -305,6 +308,7 @@ export function GitChangesList({
             onChangeText={setDescription}
             multiline
             scrollEnabled
+            showSoftInputOnFocus={!keyboardMouseMode}
             textAlignVertical="top"
             returnKeyType="default"
             blurOnSubmit={false}

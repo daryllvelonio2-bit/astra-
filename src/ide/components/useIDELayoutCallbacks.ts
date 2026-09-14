@@ -125,7 +125,9 @@ export function useIDELayoutCallbacks(p: CallbacksParams) {
 
   const handleEditModeChange = useCallback((editing: boolean) => {
     if (editing) {
-      setIsSidebarOpen(false);
+      if (manualSidebarHiddenRef.current !== false) {
+        setIsSidebarOpen(false);
+      }
     } else if (manualSidebarHiddenRef.current) {
       setIsSidebarOpen(false);
       if (isLandscapeNavbarHiddenRef.current && navbarTurnedOffReasonRef.current === "auto") {

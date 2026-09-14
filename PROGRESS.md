@@ -4,6 +4,139 @@
 - **Current Phase:** Debug Server (RUNNING — Metro in dedicated Foot terminal per Rule 10)
 - **Last Updated:** September 15, 2026
 
+### [2026-09-15] - Keyboard & Mouse Mode: Default Navigation Hidden & Tab Shortcuts (Ctrl+E/T/B/G)
+- **User Directive:** "when in keyboard and mouse mode, the navigation should be hidden by default in all parts, include the terminal strip (esc,enter,tab,ztrl etc etc) should be hidden, it can be open by combinations, for editor tab, open with ctrl+e, for terminal open with ctrl+t,browser, ctrl+b,github for ctrl+g"
+- **Changes Implemented:**
+  - `IDEBottomBar.tsx` (349 lines):
+    - Added `canOfferHide` logic: when `keyboardMouseMode` is active, bottom bar is hidden by default across all tabs (editor, terminal, browser, git, agents, desktop, vscode) instead of only landscape editor.
+    - Preserved collapsed chevron indicator so users can still toggle the bar manually if needed.
+  - `IDELayout.tsx` (492 lines):
+    - Enabled `canOfferHide` whenever `keyboardMouseMode` is enabled.
+    - Integrated `useKeyboardShortcuts({ enabled: keyboardMouseMode, onSwitchTab: safeSetBottomTab })`.
+  - `TerminalView.tsx` (256 lines):
+    - Added conditional rendering to hide `ExtraKeysBar` (containing ESC, ENTER, TAB, CTRL, ALT, etc.) when `keyboardMouseMode` is true (`!keyboardMouseMode && <ExtraKeysBar ... />`).
+  - `useKeyboardShortcuts.ts` (68 lines) [NEW]:
+    - Modular hook listening for hardware keyboard shortcut events (`onHardwareShortcut`) via `DeviceEventEmitter` as well as DOM `keydown` capturing.
+    - Maps `Ctrl+E` -> `editor`, `Ctrl+T` -> `terminal`, `Ctrl+B` -> `browser`, `Ctrl+G` -> `git`.
+  - `MainActivity.kt` (93 lines):
+    - Added `dispatchKeyEvent(event: KeyEvent?)` to intercept hardware keyboard events at the Android activity level before native focus consumption.
+    - Intercepts `KEYCODE_E`, `KEYCODE_T`, `KEYCODE_B`, `KEYCODE_G` with `isCtrlPressed` / `isMetaPressed`, emits `onHardwareShortcut`, and consumes the event (`return true`) to prevent unwanted character insertion into active inputs or terminals.
+  - `useTerminalInput.ts` (391 lines):
+    - Added fallback shortcut handling in terminal `handleKeyPress` and `diffNativeText` handlers (`handlePipeInput` and `handleXtermInput`) for ASCII control characters (`\x05` = Ctrl+E, `\x14` = Ctrl+T, `\x02` = Ctrl+B, `\x07` = Ctrl+G) and modifier events, ensuring shortcuts are never passed as raw terminal control signals.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - Strict line limit verified across all modified files (Rule 5):
+    - `IDELayout.tsx`: 492 lines (<= 500)
+    - `IDEBottomBar.tsx`: 349 lines (<= 500)
+    - `TerminalView.tsx`: 256 lines (<= 500)
+    - `useTerminalInput.ts`: 391 lines (<= 500)
+    - `useKeyboardShortcuts.ts`: 68 lines (<= 500)
+    - `MainActivity.kt`: 93 lines (<= 500)
+
+### [2026-09-15] - File Explorer Opening While in Edit Mode Fix
+- **User Directive:** "fix bug in which, i cant open explorer in edit mode"
+- **Root Cause:**
+  - In `EditorView.tsx`, the `onEditModeChange` effect lacked a dependency array (`useEffect(() => { onEditModeChange?.(isEditing); ... })`), causing it to execute on every render.
+  - Whenever the user tapped the menu button in edit mode to open the explorer (`handleShowSidebar`), `IDELayout` re-rendered, triggering this dependency-free effect in `EditorView`. It immediately reinvoked `handleEditModeChange(true)`, which called `setIsSidebarOpen(false)` and instantly slammed the sidebar shut before it could even display.
+- **Changes Implemented:**
+  - `EditorView.tsx` (491 lines): Added explicit dependency arrays `[isEditing, onEditModeChange]` and `[exitEditSignal, isEditing]`, ensuring `onEditModeChange` only fires when edit mode actually transitions, not on every render.
+  - `useIDELayoutCallbacks.ts` (152 lines): Updated `handleEditModeChange` so that explicitly opened sidebars (`manualSidebarHiddenRef.current === false`) are never auto-collapsed upon edit mode syncs.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - File size limits strictly observed (`EditorView.tsx` is 491 lines, `useIDELayoutCallbacks.ts` is 152 lines, both well below 500 lines limit per Rule 5).
+
+### [2026-09-15] - Editor Mode Preservation Across Files & Workflows
+- **User Directive:** "fix bug when i am on editing mode, when opening other files, the editing mode gets turned off, it should automatically turn on no matter what action it is as long as it is not intended to"
+- **Root Cause:**
+  - `EditorView.tsx` previously executed `setIsEditing(false)` in its `useEffect([fileName])` hook, forcibly resetting the editor to read-only view mode whenever the user opened a file from the explorer, recent tabs, or elsewhere.
+- **Changes Implemented:**
+  - `EditorView.tsx` (498 lines): Removed `setIsEditing(false)` from the `[fileName]` effect. Added `isEditingRef` to smoothly preserve active editing mode and auto-focus the new file's text input on file switch without dropping the user into view mode. Exit from edit mode remains strictly intentional via system Back gesture/key or explicit toggle.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - File size strictly observed (`EditorView.tsx` is 498 lines, strictly adhering to the 500-line limit per Rule 5).
+
+### [2026-09-15] - Editor Tab Bar: Removed "Done" Button When Editing
+- **User Directive:** "remove done button when editing"
+- **Changes Implemented:**
+  - `EditorTabBar.tsx` (409 lines): Removed the `[✓ Done]` button and unused styles (`doneEditBtn`, `doneEditText`) from the editor quick toolbar. Made `onDoneEdit` prop optional. Exiting edit mode remains fully supported via system Back gesture/hardware key, keyboard dismiss, or file switching.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - File size limit strictly observed (`EditorTabBar.tsx` is 409 lines, well below 500 lines limit per Rule 5).
+
+### [2026-09-15] - File Explorer Swipe-to-Minimize Sensitivity Calibration
+- **User Directive:** "its too hard, reduce it"
+- **Changes Implemented:**
+  - `useSidebarResizer.ts` (111 lines):
+    - Softened resistance factor from `0.35` to `0.65`, reducing the physical drag distance required to enter the collapse zone.
+    - Raised collapse threshold from `50px` to `65px` so the sidebar triggers minimization earlier upon swiping left past the `90px` boundary (~38px swipe past minimum instead of ~115px).
+    - Reduced flick velocity requirement from `vx < -0.8` to `vx < -0.45` (and raised flick window from `<= 75px` to `<= 85px`), enabling an intuitive, natural leftward swipe to minimize without stiff friction.
+    - Lowered initial gesture drag threshold to `Math.abs(dx) > 5` for a more immediate, responsive touch feel while still rejecting purely vertical scrolling.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - File size strictly observed (`useSidebarResizer.ts` is 111 lines, well below 500 lines limit per Rule 5).
+
+### [2026-09-15] - File Explorer Swipe-to-Resize Auto-Minimize with Accidental-Collapse Protection
+- **User Directive:** "for the minimize function, instead of the button, i have a swip to resize right, if the user swipes all the way the explorer minimizes automatically, make it less sensitive so it wont minimize all the way in accident"
+- **Changes Implemented:**
+  - `useSidebarResizer.ts` (118 lines):
+    - Added `onCollapse` callback integration (`useSidebarResizer(initialWidth, onCollapse)`).
+    - Made gesture recognition less sensitive: requires deliberate horizontal movement (`Math.abs(dx) > 8` and `|dx| > |dy|`) to prevent accidental triggers from finger resting or vertical scrolling.
+    - Added elastic resistance (factor `0.35`) below `MIN_WIDTH` (90px) into the collapse zone so resizing narrower feels firm and requires a deliberate, intentional swipe of ~115px left past the minimum boundary to reach the collapse threshold (`<= 50px`).
+    - Added auto-minimize trigger: when released at `<= 50px` (or decisive fast leftward flick `vx < -0.8` while `<= 75px`), sidebar smoothly animates out to 0 and triggers `onCollapse` (`handleToggleCollapse`).
+    - Added accidental-collapse snap-back: if the user releases without reaching the collapse zone (e.g. while simply resizing to a narrow width), `Animated.spring` snaps the sidebar safely back to `MIN_WIDTH` (90px) rather than collapsing by accident.
+    - Restores `sidebarWidthAnim` value to the user's last chosen comfortable width upon collapse completion, so reopening the sidebar later displays it at proper width instead of 0.
+  - `IDELayout.tsx` (488 lines):
+    - Connected `useSidebarResizer(130, handleToggleCollapse)` right after `useIDELayoutCallbacks`, keeping hook ordering stable and file line count under 500 lines limit (Rule 5).
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - All touched files strictly under 500-line limit (Rule 5).
+
+### [2026-09-15] - Keyboard & Mouse Mode Full Application Optimization
+- **User Directive:** "my app needs optimization, i have a peature keyboard and mouse mode,in the ide code editing, its working, but when create a file, renaming, and all other doesnt work only coding ide and terminal works"
+- **Root Cause:**
+  - `keyboardMouseMode` was isolated only to `EditorEditRow` and `TerminalView`.
+  - In `FileActionModal` (New File and Rename), `TextInput`s did not have `showSoftInputOnFocus={!keyboardMouseMode}` so focusing them popped up the on-screen soft keyboard.
+  - In `FileActionModal`, `onSubmitEditing` was completely absent on Rename and New File inputs, meaning physical keyboard `Enter` never submitted the form.
+  - In `FileExplorer`, mouse right-clicks did not open options menu because `onContextMenu` was missing, forcing mouse users to click tiny touch-centric icons.
+  - In all other modals/inputs across the app (`CreateProjectModal`, `CloneRepoModal`, `DirectoryPickerModal`, `ProjectPicker`, `ApiKeyManager`, `WebBrowserNavBar`, `ExtensionMarketplaceModal`, `GitBranchModal`, `GitRemoteModal`, `GitTokenTab`, `GitChangesList`, `AstraChatScreen`), `showSoftInputOnFocus` defaulted to true and there was no global suppression listener.
+- **Changes Implemented:**
+  - `KeyboardMouseContext.tsx` (77 lines): Created global context provider and `useKeyboardMouseMode()` hook with proactive auto-dismissal (`Keyboard.dismiss()`) on any keyboard show attempt while mode is active.
+  - `App.tsx` (172 lines): Wrapped application tree with `<KeyboardMouseProvider>`.
+  - `FileActionModal.tsx` (222 lines):
+    - Added `showSoftInputOnFocus={!keyboardMouseMode}` to Rename and New File inputs.
+    - Added `onSubmitEditing={onRenameSubmit}` and `onSubmitEditing={onAddSubmit}` with `returnKeyType="done"`.
+    - Added `onKeyPress` handling for `Escape` key to cancel/close.
+    - Zeroed bottom padding (`keyboardMouseMode ? 0 : keyboardOffset`) so the modal doesn't jump vertically.
+  - `FileExplorer.tsx` (399 lines):
+    - Added `showSoftInputOnFocus={!keyboardMouseMode}`, `returnKeyType="done"`, and `Escape` key cancel to inline create input.
+    - Added `onContextMenu` handler to folder header and file row to open options menu (`onLongPressNode`) on mouse right-click.
+    - Added `onContextMenu` on scroll view to trigger inline file creation on blank background right-click.
+  - `TerminalView.tsx` (254 lines) & `useEditorConfig.ts` (52 lines): Refactored to consume `useKeyboardMouseMode()` from context, eliminating redundant listeners.
+  - Remaining Modals & Inputs (`CreateProjectModal`, `CloneRepoModal`, `DirectoryPickerModal`, `ProjectPicker`, `ApiKeyManager`, `WebBrowserNavBar`, `ExtensionMarketplaceModal`, `GitBranchModal`, `GitRemoteModal`, `GitTokenTab`, `GitChangesList`, `AstraChatScreen`):
+    - Added `useKeyboardMouseMode()` and `showSoftInputOnFocus={!keyboardMouseMode}`.
+    - Added hardware `Enter` submit handling in chat, branch creation, folder creation, and project creation.
+  - `IDELayout.tsx` (487 lines) & `EditorView.tsx` (495 lines): Compacted styles to maintain strict adherence to Rule 5 (<500 lines).
+- **Verification:**
+  - `npx tsc --noEmit` exited 0 with 0 errors.
+  - All touched files verified under 500 lines limit per Rule 5.
+- **User Directive:** "remove add button and minimize button inside the explorer"
+- **Changes Implemented:**
+  - `FileExplorer.tsx` (401 lines): Removed `headerActions` containing the `+` (add / toggle inline create) and `chevron-back` (minimize / collapse) buttons from the explorer header. Marked `onToggleCollapse` unused in component arguments while retaining it as optional in `FileExplorerProps` for backwards compatibility. Explorer header now cleanly displays the project title with zero bloatware.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - File size limit strictly observed (FileExplorer.tsx is 401 lines, well below 500 lines limit per Rule 5).
+
+### [2026-09-15] - Browser Tab Debloating: Removed "Start Web Server" Feature
+- **User Directive:** "in browser tab, there is too much bloat, first remove the feature(start web server)"
+- **Changes Implemented:**
+  - `WebBrowserPreview.tsx` (250 lines): Removed `handleStartQuickServer`, `isStartingServer` state, `currentPort` derivation, and unused native PRoot terminal imports (`PRootService`, `startTerminalSession`, `writeTerminalInput`).
+  - `WebBrowserEmptyView.tsx` (106 lines): Removed the "Start Web Server (:8080)" button, `startBtn` styles, and unused `ActivityIndicator`. Updated prompt to clean, direct text: `"Type a URL or port above to preview."`
+  - `WebBrowserErrorView.tsx` (185 lines): Removed the "Start Web Server" button, keeping only the essential "Retry" and "Open Externally" actions. Removed unused `isStartingServer` and `currentPort` props.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - All files strictly under 500 line limit (Rule 5).
+  - Browser tab UI is clean, minimal, and devoid of bloatware (Rule 1).
+
 ### [2026-09-15] - Terminal Leaked Text Fix (Quiet Environment Synchronization)
 - **User Directive:** "fix terminal showing leaked texts, export colorfgbg=\"0;default;15\" Colorterm truecolor term _program=AstraIDE"
 - **Root Cause:**
@@ -3503,3 +3636,8 @@
 ### [2026-09-15] - Keyboard reveal scrolls minimally instead of centering (fix)
 - `useEditorCursorScroll.ensureCursorVisible`: removed the center-on-cursor jump (`cursorY - visibleH / 2`); now nudges just enough to reveal the cursor with an 8px margin above the keyboard edge, and leaves the scroll untouched while the cursor is on screen. Old 48px trigger band gone with it.
 - Verified: `tsc` 0 errors, `useEditorCursorScroll.ts` 77 lines.
+
+### [2026-09-15] - System back button: exit edit mode or confirm close (feature)
+- New `useSystemBackHandler.ts` (48 lines): back in edit mode bumps an exit signal (edit mode off, app stays open); otherwise shows a "Close project?" confirm (Stay / Close project) instead of killing the app. Gated by `ideVisible` since the IDE stays mounted behind the picker.
+- `IDELayout`: wires the hook, passes `exitEditSignal` + tracked `onEditModeChange` to the editor. `EditorView`: watches the signal and runs its normal done-editing path. `App`: passes `isActive={currentScreen === "editor"}`.
+- Verified: `tsc` 0 errors, files ≤500 lines (`IDELayout` 500, `EditorView` 499).

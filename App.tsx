@@ -6,6 +6,7 @@ import { ProjectPicker } from "./src/ide/components/ProjectPicker";
 import { IDELayout } from "./src/ide/components/IDELayout";
 import { PRootService } from "./src/ide/services/prootService";
 import { ThemeProvider } from "./src/theme/themeContext";
+import { KeyboardMouseProvider } from "./src/ide/context/KeyboardMouseContext";
 import { ideActionService } from "./src/ide/services/ideActionService";
 import { StartupWizard } from "./src/onboarding/StartupWizard";
 import { AppBootScreen } from "./src/onboarding/AppBootScreen";
@@ -132,26 +133,29 @@ export default function App() {
               onAnimationEnd={() => setBootVisible(false)}
             />
           )}
-          {hasCompletedStartup === false ? (
-            <StartupWizard onComplete={() => setHasCompletedStartup(true)} />
-          ) : (
-            <>
-              {currentScreen === "picker" && (
-                <ProjectPicker
-                  onOpenWorkspace={handleOpenWorkspace}
-                  onRerunStartup={() => setHasCompletedStartup(false)}
-                />
-              )}
-              {visited.has("editor") && (
-                <View style={[styles.screen, currentScreen !== "editor" && styles.hidden]}>
-                  <IDELayout
-                    workspaceId={activeWorkspaceId || undefined}
-                    onBackToPicker={() => showScreen("picker")}
+          <KeyboardMouseProvider>
+            {hasCompletedStartup === false ? (
+              <StartupWizard onComplete={() => setHasCompletedStartup(true)} />
+            ) : (
+              <>
+                {currentScreen === "picker" && (
+                  <ProjectPicker
+                    onOpenWorkspace={handleOpenWorkspace}
+                    onRerunStartup={() => setHasCompletedStartup(false)}
                   />
-                </View>
-              )}
-            </>
-          )}
+                )}
+                {visited.has("editor") && (
+                  <View style={[styles.screen, currentScreen !== "editor" && styles.hidden]}>
+                    <IDELayout
+                      workspaceId={activeWorkspaceId || undefined}
+                      onBackToPicker={() => showScreen("picker")}
+                      isActive={currentScreen === "editor"}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+          </KeyboardMouseProvider>
         </ThemeProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

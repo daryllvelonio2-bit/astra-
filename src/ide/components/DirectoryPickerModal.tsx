@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
 import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
+import { useKeyboardMouseMode } from '../context/KeyboardMouseContext';
 import {
   getDefaultPickerBase,
   getPickerTitle,
@@ -41,6 +42,7 @@ export function DirectoryPickerModal({
   onSelectDirectory,
 }: DirectoryPickerModalProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const defaultBase = getDefaultPickerBase();
   const pickerTitle = getPickerTitle();
   const [currentPath, setCurrentPath] = useState<string>(initialPath || defaultBase);
@@ -158,6 +160,7 @@ export function DirectoryPickerModal({
                 value={typedPath}
                 onChangeText={setTypedPath}
                 autoFocus
+                showSoftInputOnFocus={!keyboardMouseMode}
                 onSubmitEditing={() => loadDirectory(typedPath)}
                 autoCapitalize="none"
               />
@@ -195,6 +198,9 @@ export function DirectoryPickerModal({
                 value={newFolderName}
                 onChangeText={setNewFolderName}
                 autoFocus
+                showSoftInputOnFocus={!keyboardMouseMode}
+                onSubmitEditing={handleCreateFolder}
+                returnKeyType="done"
               />
               <TouchableOpacity style={[styles.newFolderActionBtn, { backgroundColor: theme.accent }]} onPress={handleCreateFolder}>
                 <Text style={[styles.newFolderActionText, { color: theme.sendButtonIcon }]}>Create</Text>

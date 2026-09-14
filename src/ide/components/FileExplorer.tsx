@@ -7,6 +7,7 @@ import { getFileIcon, sortNodes } from "./fileExplorerUtils";
 import { subscribeIconTheme } from "../services/extensions/iconThemeService";
 import { styles } from "./fileExplorerStyles";
 import { useTheme } from "../../theme/themeContext";
+import { useKeyboardMouseMode } from "../context/KeyboardMouseContext";
 
 interface FileExplorerProps {
   projectName?: string;
@@ -28,7 +29,7 @@ function FileExplorerInner({
   files,
   onSelectFile,
   activeFileId,
-  onToggleCollapse,
+  onToggleCollapse: _onToggleCollapse,
   onLongPressNode,
   onQuickAddFile,
   onCreateFile,
@@ -38,6 +39,7 @@ function FileExplorerInner({
   isDraggingSidebar,
 }: FileExplorerProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const touchCoordsRef = useRef({ x: 50, y: 100 });
   const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>({});
   const expandedFoldersRef = useRef<Record<string, boolean>>({});
@@ -139,6 +141,14 @@ function FileExplorerInner({
               onLongPress={() => {
                 startDrag(node, touchCoordsRef.current.x, touchCoordsRef.current.y);
               }}
+              {...({
+                onContextMenu: (e: any) => {
+                  e.preventDefault?.();
+                  const pageX = e.nativeEvent?.pageX ?? touchCoordsRef.current.x;
+                  const pageY = e.nativeEvent?.pageY ?? touchCoordsRef.current.y;
+                  onLongPressNode?.(node, { x: pageX, y: pageY });
+                },
+              } as any)}
               activeOpacity={0.7}
               delayLongPress={350}
             >
@@ -206,6 +216,14 @@ function FileExplorerInner({
             onLongPress={() => {
               startDrag(node, touchCoordsRef.current.x, touchCoordsRef.current.y);
             }}
+            {...({
+              onContextMenu: (e: any) => {
+                e.preventDefault?.();
+                const pageX = e.nativeEvent?.pageX ?? touchCoordsRef.current.x;
+                const pageY = e.nativeEvent?.pageY ?? touchCoordsRef.current.y;
+                onLongPressNode?.(node, { x: pageX, y: pageY });
+              },
+            } as any)}
             activeOpacity={0.7}
             delayLongPress={350}
           >
@@ -247,36 +265,22 @@ function FileExplorerInner({
       {...wrapperPanResponder.panHandlers}
     >
       <View style={styles.headerContainer}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.header, { color: theme.textSecondary }]} numberOfLines={1}>
-            {projectName ? projectName.toUpperCase() : "EXPLORER"}
-          </Text>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            onPress={() => {
-              setIsCreating(!isCreating);
-              setInlineName("");
-            }}
-            style={styles.iconBtn}
-          >
-            <Ionicons name={isCreating ? "close" : "add"} size={18} color={isCreating ? theme.accentRed : theme.textSecondary} />
-          </TouchableOpacity>
-          {onRefreshFiles && (
-            <TouchableOpacity onPress={onRefreshFiles} style={styles.iconBtn}>
-              <Ionicons name="refresh" size={14} color={theme.textSecondary} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={onToggleCollapse} style={styles.iconBtn}>
-            <Ionicons name="chevron-back" size={16} color={theme.textSecondary} />
-          </TouchableOpacity>
-        </View>
+        <Text style={[styles.header, { color: theme.textSecondary, flex: 1 }]} numberOfLines={1}>
+          {projectName ? projectName.toUpperCase() : "EXPLORER"}
+        </Text>
       </View>
 
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={true}
         scrollEnabled={!draggingNode}
+        {...({
+          onContextMenu: (e: any) => {
+            e.preventDefault?.();
+            setIsCreating(true);
+            setInlineName("");
+          },
+        } as any)}
       >
         {isCreating && (
           <View style={[styles.inlineCreateRow, { backgroundColor: theme.bgInput, borderColor: theme.accent }]}>
@@ -295,8 +299,15 @@ function FileExplorerInner({
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
+              showSoftInputOnFocus={!keyboardMouseMode}
               onSubmitEditing={handleInlineSubmit}
               returnKeyType="done"
+              onKeyPress={(e) => {
+                if (e.nativeEvent.key === "Escape") {
+                  setIsCreating(false);
+                  setInlineName("");
+                }
+              }}
             />
             <TouchableOpacity onPress={handleInlineSubmit} style={styles.inlineBtn}>
               <Ionicons name="checkmark" size={14} color={theme.accentGreen} />

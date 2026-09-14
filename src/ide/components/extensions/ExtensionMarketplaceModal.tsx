@@ -15,6 +15,7 @@ import {
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
+import { useKeyboardMouseMode } from "../../context/KeyboardMouseContext";
 import { searchMarketplace } from "../../services/extensions/extensionMarketplaceService";
 import {
   loadExtensionRegistry,
@@ -40,6 +41,7 @@ export type TabType = "marketplace" | "installed" | "themes";
 
 export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketplaceModalProps) {
   const { theme, themeMode, setTheme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(8);
 
   const [activeTab, setActiveTab] = useState<TabType>("marketplace");
@@ -184,6 +186,7 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
                   value={searchQuery}
                   onChangeText={handleSearchChange}
                   autoCapitalize="none"
+                  showSoftInputOnFocus={!keyboardMouseMode}
                 />
                 {loading && <ActivityIndicator size="small" color={theme.accent} />}
               </View>

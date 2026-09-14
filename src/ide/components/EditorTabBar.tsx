@@ -14,7 +14,7 @@ interface EditorTabBarProps {
   activeFilePath?: string;
   isEditing: boolean;
   onToggleEdit: () => void;
-  onDoneEdit: () => void;
+  onDoneEdit?: () => void;
   onRunFile?: () => void;
   onExitProject?: () => void;
   onToggleSidebar?: () => void;
@@ -37,7 +37,7 @@ function EditorTabBarInner({
   activeFilePath,
   isEditing,
   onToggleEdit,
-  onDoneEdit,
+  onDoneEdit: _onDoneEdit,
   onRunFile,
   onExitProject,
   onToggleSidebar,
@@ -189,13 +189,6 @@ function EditorTabBarInner({
 
       {/* Quick Toolbar (file actions only when a file is open) */}
       <View style={[styles.tabActions, styles.noShrink]}>
-        {fileName && isEditing && (
-          <TouchableOpacity style={[styles.doneEditBtn, { backgroundColor: `${theme.accentGreen}15`, borderColor: theme.accentGreen }]} onPress={onDoneEdit}>
-            <Ionicons name="checkmark-outline" size={14} color={theme.accentGreen} />
-            <Text style={[styles.doneEditText, { color: theme.accentGreen }]}>Done</Text>
-          </TouchableOpacity>
-        )}
-
         {fileName && onRunFile && (
           <TouchableOpacity style={styles.actionIconBtn} onPress={onRunFile}>
             <Ionicons name="play" size={16} color={theme.accentGreen} />
@@ -368,20 +361,6 @@ const styles = StyleSheet.create({
   problemBadgeText: {
     fontSize: 10.5,
     fontWeight: "700",
-  },
-  doneEditBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    borderWidth: 1,
-    marginRight: 4,
-  },
-  doneEditText: {
-    fontSize: 11,
-    fontWeight: "600",
   },
   tabActions: {
     flexDirection: "row",

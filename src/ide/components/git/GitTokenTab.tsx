@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
 import { useTheme } from "../../../theme/themeContext";
+import { useKeyboardMouseMode } from "../../context/KeyboardMouseContext";
 
 interface GitTokenTabProps {
   username: string;
@@ -24,6 +25,7 @@ export function GitTokenTab({
   onSave,
 }: GitTokenTabProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
 
   return (
     <View style={styles.container}>
@@ -47,6 +49,7 @@ export function GitTokenTab({
           value={username}
           onChangeText={onChangeUsername}
           autoCapitalize="none"
+          showSoftInputOnFocus={!keyboardMouseMode}
         />
       </View>
 
@@ -60,6 +63,7 @@ export function GitTokenTab({
           onChangeText={onChangeEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          showSoftInputOnFocus={!keyboardMouseMode}
         />
       </View>
 
@@ -73,6 +77,7 @@ export function GitTokenTab({
           onChangeText={onChangeToken}
           autoCapitalize="none"
           secureTextEntry
+          showSoftInputOnFocus={!keyboardMouseMode}
         />
       </View>
 

@@ -44,6 +44,7 @@ interface EditorViewProps {
   onToggleSidebar?: () => void;
   onRunFile?: (content: string, fileName: string) => void;
   onEditModeChange?: (isEditing: boolean) => void;
+  exitEditSignal?: number;
   onOpenSettings?: () => void;
   recentFiles?: RecentFileItem[];
   onSelectRecentFile?: (file: RecentFileItem) => void;
@@ -54,18 +55,9 @@ const LINE_HEIGHT = 20;
 const SCROLL_THRESHOLD = 10;
 
 function EditorViewInner({
-  fileName,
-  activeFilePath,
-  content,
-  onChangeContent,
-  onExitProject,
-  onToggleSidebar,
-  onRunFile,
-  onEditModeChange,
-  onOpenSettings,
-  recentFiles,
-  onSelectRecentFile,
-  onCloseRecentFile,
+  fileName, activeFilePath, content, onChangeContent, onExitProject, onToggleSidebar,
+  onRunFile, onEditModeChange, exitEditSignal = 0, onOpenSettings, recentFiles,
+  onSelectRecentFile, onCloseRecentFile,
 }: EditorViewProps) {
   const { theme } = useTheme();
   const { editorSettings, keyboardMouseMode, keyboardMouseModeRef } = useEditorConfig();
@@ -78,10 +70,17 @@ function EditorViewInner({
 
   const [isEditing, setIsEditing] = useState(false);
   const [startIndex, setStartIndex] = useState(0);
+  const lastExitSignalRef = useRef(exitEditSignal);
 
   useEffect(() => {
     onEditModeChange?.(isEditing);
   }, [isEditing, onEditModeChange]);
+
+  useEffect(() => {
+    if (exitEditSignal === lastExitSignalRef.current) return;
+    lastExitSignalRef.current = exitEditSignal;
+    if (isEditing) handleDoneEditing();
+  }, [exitEditSignal, isEditing]);
   const [showProblems, setShowProblems] = useState(false);
   const textInputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -99,18 +98,18 @@ function EditorViewInner({
     startIndexRef.current = startIndex;
   }, [startIndex]);
 
-  // Reset sliding window when switching files
+  const isEditingRef = useRef(isEditing);
+  isEditingRef.current = isEditing;
+
+  // Reset sliding window when switching files, preserving editing mode
   useEffect(() => {
     setStartIndex(0);
-    setIsEditing(false);
     setShowProblems(false);
-  }, [fileName]);
-
-  useEffect(() => {
-    if (isKeyboardVisible && keyboardMouseModeRef.current) {
-      Keyboard.dismiss();
+    if (isEditingRef.current) {
+      const timer = setTimeout(() => textInputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
     }
-  }, [isKeyboardVisible, keyboardMouseModeRef]);
+  }, [fileName]);
 
   const rawLines = useMemo(() => (content || "").split("\n"), [content]);
   const totalLines = Math.max(rawLines.length, 1);
@@ -319,10 +318,8 @@ function EditorViewInner({
     }
   }, [isEditing, handleDoneEditing, totalLines, visibleCodeChunk, enterEditModeAtOffset]);
 
-  const handleRunFileStable = useMemo(() =>
-    onRunFile
-      ? () => { onRunFile(contentRef.current, fileName || ""); }
-      : undefined,
+  const handleRunFileStable = useMemo(
+    () => (onRunFile ? () => onRunFile(contentRef.current, fileName || "") : undefined),
     [onRunFile, fileName]
   );
 
@@ -463,7 +460,7 @@ function EditorViewInner({
         />
       )}
 
-      {/* Status bar: Bracket match and line diagnostics */}
+      {/* Status bar + problems panel (tap-to-jump) */}
       <EditorStatusBar
         isEditing={isEditing}
         matchStatus={assists.matchStatus}
@@ -473,8 +470,6 @@ function EditorViewInner({
         onShowProblems={handleShowProblems}
         theme={theme}
       />
-
-      {/* Problems: error/warning list with tap-to-jump */}
       {showProblems && (
         <ProblemsPanel
           diagnostics={assists.diagnostics}

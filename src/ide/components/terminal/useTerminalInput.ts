@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { TextInput } from "react-native";
+import { TextInput, DeviceEventEmitter } from "react-native";
 import { diffNativeText } from "./terminalBuffer";
 import { ideActionService } from "../../services/ideActionService";
 
@@ -14,6 +14,13 @@ interface UseTerminalInputOptions {
   setIsAltActive: (active: boolean | ((prev: boolean) => boolean)) => void;
   activeSessionId: string;
 }
+
+const ASCII_SHORTCUTS: Record<string, string> = {
+  "\x05": "Ctrl+E",
+  "\x14": "Ctrl+T",
+  "\x02": "Ctrl+B",
+  "\x07": "Ctrl+G",
+};
 
 export function useTerminalInput({
   isXterm,
@@ -122,6 +129,12 @@ export function useTerminalInput({
         return;
       }
 
+      if (ASCII_SHORTCUTS[added]) {
+        DeviceEventEmitter.emit("onHardwareShortcut", ASCII_SHORTCUTS[added]);
+        resetCatcher();
+        return;
+      }
+
       if (added.length === 1 && (isCtrlActive || isAltActive)) {
         if (removed > 0) setEchoInput(echo);
         if (isCtrlActive && added.toUpperCase() === "C") setEchoInput("");
@@ -152,6 +165,12 @@ export function useTerminalInput({
   const handleXtermInput = useCallback(
     (text: string) => {
       const { removed, added } = diffNativeText(lastNativeRef.current, text);
+
+      if (ASCII_SHORTCUTS[added]) {
+        DeviceEventEmitter.emit("onHardwareShortcut", ASCII_SHORTCUTS[added]);
+        resetCatcher();
+        return;
+      }
 
       if (removed > 0) {
         sendInput("\x7f".repeat(Math.min(removed, 256)));
@@ -298,7 +317,18 @@ export function useTerminalInput({
 
   const handleKeyPress = useCallback(
     (e: any) => {
-      const key = e.nativeEvent.key;
+      const key = e.nativeEvent?.key;
+      const isCtrl = e.nativeEvent?.ctrlKey || e.nativeEvent?.metaKey;
+      if (isCtrl) {
+        const lower = (key || "").toLowerCase();
+        if (lower === "e") { DeviceEventEmitter.emit("onHardwareShortcut", "Ctrl+E"); return; }
+        if (lower === "t") { DeviceEventEmitter.emit("onHardwareShortcut", "Ctrl+T"); return; }
+        if (lower === "b") { DeviceEventEmitter.emit("onHardwareShortcut", "Ctrl+B"); return; }
+        if (lower === "g") { DeviceEventEmitter.emit("onHardwareShortcut", "Ctrl+G"); return; }
+      } else if (key && ASCII_SHORTCUTS[key]) {
+        DeviceEventEmitter.emit("onHardwareShortcut", ASCII_SHORTCUTS[key]);
+        return;
+      }
       if (isXterm) {
         if (key === "ArrowUp") sendInput("\x1b[A");
         else if (key === "ArrowDown") sendInput("\x1b[B");

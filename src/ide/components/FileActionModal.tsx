@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-nativ
 import { FileNode } from "../types";
 import { useTheme } from "../../theme/themeContext";
 import { useAccurateKeyboard } from "../../theme/useAccurateKeyboard";
+import { useKeyboardMouseMode } from "../context/KeyboardMouseContext";
 
 interface FileActionModalProps {
   modalMode: "none" | "options" | "rename" | "add";
@@ -34,6 +35,7 @@ export function FileActionModal({
   onBackToOptions,
 }: FileActionModalProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const { keyboardOffset } = useAccurateKeyboard(16);
   if (modalMode === "none") return null;
 
@@ -43,7 +45,7 @@ export function FileActionModal({
     <View
       style={[
         styles.modalOverlay,
-        isInputMode && [styles.inputOverlay, { paddingBottom: keyboardOffset }],
+        isInputMode && [styles.inputOverlay, { paddingBottom: keyboardMouseMode ? 0 : keyboardOffset }],
       ]}
     >
       <TouchableOpacity
@@ -87,6 +89,14 @@ export function FileActionModal({
               placeholderTextColor={theme.textMuted}
               autoFocus
               autoCapitalize="none"
+              showSoftInputOnFocus={!keyboardMouseMode}
+              onSubmitEditing={onRenameSubmit}
+              returnKeyType="done"
+              onKeyPress={(e) => {
+                if (e.nativeEvent.key === "Escape") {
+                  onClose();
+                }
+              }}
             />
             <View style={styles.modalBtnRow}>
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onBackToOptions}>
@@ -110,6 +120,14 @@ export function FileActionModal({
               placeholderTextColor={theme.textMuted}
               autoFocus
               autoCapitalize="none"
+              showSoftInputOnFocus={!keyboardMouseMode}
+              onSubmitEditing={onAddSubmit}
+              returnKeyType="done"
+              onKeyPress={(e) => {
+                if (e.nativeEvent.key === "Escape") {
+                  onClose();
+                }
+              }}
             />
             <View style={styles.modalBtnRow}>
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.bgTertiary }]} onPress={onClose}>

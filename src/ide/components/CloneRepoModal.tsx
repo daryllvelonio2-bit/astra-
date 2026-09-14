@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
 import { useAccurateKeyboard } from '../../theme/useAccurateKeyboard';
+import { useKeyboardMouseMode } from '../context/KeyboardMouseContext';
 import { cloneRepoModalStyles as styles } from './CloneRepoModal.styles';
 import { DirectoryPickerModal } from './DirectoryPickerModal';
 import { GitTokenTab } from './git/GitTokenTab';
@@ -41,6 +42,7 @@ const stripScheme = (p: string) => (p || '').replace(/^file:\/\//, '');
 
 export function CloneRepoModal({ visible, onClose, onCloned }: CloneRepoModalProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const [repoUrl, setRepoUrl] = useState('');
   const [useSsh, setUseSsh] = useState(false);
   const [folderName, setFolderName] = useState('');
@@ -260,6 +262,7 @@ export function CloneRepoModal({ visible, onClose, onCloned }: CloneRepoModalPro
               onChangeText={handleUrlChange}
               autoCapitalize="none"
               autoCorrect={false}
+              showSoftInputOnFocus={!keyboardMouseMode}
               returnKeyType="next"
             />
 
@@ -311,6 +314,7 @@ export function CloneRepoModal({ visible, onClose, onCloned }: CloneRepoModalPro
               onChangeText={(v) => { setFolderName(v); setFolderTouched(true); }}
               autoCapitalize="none"
               autoCorrect={false}
+              showSoftInputOnFocus={!keyboardMouseMode}
               returnKeyType="done"
             />
 

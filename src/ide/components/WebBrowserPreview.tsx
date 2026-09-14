@@ -3,8 +3,6 @@ import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 import * as WebBrowser from "expo-web-browser";
 import { runningTasksService, RunningTask } from "../../ai/services/runningTasksService";
-import { PRootService } from "../services/prootService";
-import { startTerminalSession, writeTerminalInput } from "../../../modules/linux-runner/src";
 import { WebBrowserNavBar } from "./browser/WebBrowserNavBar";
 import { WebBrowserErrorView } from "./browser/WebBrowserErrorView";
 import { WebBrowserEmptyView } from "./browser/WebBrowserEmptyView";
@@ -30,7 +28,6 @@ export function WebBrowserPreview({
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
-  const [isStartingServer, setIsStartingServer] = useState(false);
 
   const webViewRef = useRef<WebView>(null);
 
@@ -120,42 +117,6 @@ export function WebBrowserPreview({
     }
   };
 
-  const currentPort = (() => {
-    try {
-      const match = url.match(/:(\d+)/);
-      return match ? match[1] : "8080";
-    } catch (_) {
-      return "8080";
-    }
-  })();
-
-  const handleStartQuickServer = async () => {
-    if (isStartingServer) return;
-    setIsStartingServer(true);
-    try {
-      const port = currentPort || "8080";
-      // Ensure persistent server session is active inside PRoot
-      await startTerminalSession("server-session", workspaceId);
-      const serverCmd = `pkill -f "http.server ${port}" 2>/dev/null; if [ -d dist ]; then python3 -m http.server ${port} -d dist & else python3 -m http.server ${port} & fi\n`;
-      writeTerminalInput("server-session", serverCmd);
-
-      // Register task in tracker
-      runningTasksService.addTask({
-        command: `python3 -m http.server ${port}`,
-        port: parseInt(port, 10),
-        url: `http://127.0.0.1:${port}`,
-        workspaceId,
-      });
-
-      setTimeout(() => {
-        setIsStartingServer(false);
-        handleReload();
-      }, 1500);
-    } catch (_) {
-      setIsStartingServer(false);
-    }
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
       {/* Landscape: fullscreen content only — no nav bar, port chips, or loading bar. */}
@@ -188,20 +149,14 @@ export function WebBrowserPreview({
         {!url ? (
           <WebBrowserEmptyView
             runningTasks={runningTasks}
-            isStartingServer={isStartingServer}
-            currentPort={currentPort}
             onNavigate={handleNavigate}
-            onStartServer={handleStartQuickServer}
           />
         ) : hasError ? (
           <WebBrowserErrorView
             url={url}
             errorMessage={errorMessage}
-            currentPort={currentPort}
             runningTasks={runningTasks}
-            isStartingServer={isStartingServer}
             onNavigate={handleNavigate}
-            onStartServer={handleStartQuickServer}
             onReload={handleReload}
             onOpenExternal={handleOpenExternal}
           />
@@ -229,11 +184,8 @@ export function WebBrowserPreview({
               <WebBrowserErrorView
                 url={url}
                 errorMessage={errorDesc || "net::ERR_CONNECTION_REFUSED"}
-                currentPort={currentPort}
                 runningTasks={runningTasks}
-                isStartingServer={isStartingServer}
                 onNavigate={handleNavigate}
-                onStartServer={handleStartQuickServer}
                 onReload={handleReload}
                 onOpenExternal={handleOpenExternal}
               />

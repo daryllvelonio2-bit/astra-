@@ -12,6 +12,7 @@ import {
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
+import { useKeyboardMouseMode } from "../../context/KeyboardMouseContext";
 
 interface GitRemoteModalProps {
   visible: boolean;
@@ -27,6 +28,7 @@ export function GitRemoteModal({
   onSaveRemote,
 }: GitRemoteModalProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(12);
   const [remoteInput, setRemoteInput] = useState("");
   const [protocol, setProtocol] = useState<"https" | "ssh">("https");
@@ -172,6 +174,9 @@ export function GitRemoteModal({
                 onChangeText={setRemoteInput}
                 autoCapitalize="none"
                 autoCorrect={false}
+                showSoftInputOnFocus={!keyboardMouseMode}
+                onSubmitEditing={handleSave}
+                returnKeyType="done"
               />
             </View>
 

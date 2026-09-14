@@ -10,6 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { maskApiKey, normalizeApiKeys } from "../services/configService";
 import { ThemeColors } from "../../theme/themeContext";
+import { useKeyboardMouseMode } from "../context/KeyboardMouseContext";
 
 interface ApiKeyManagerProps {
   apiKeys: string[];
@@ -18,6 +19,7 @@ interface ApiKeyManagerProps {
 }
 
 export function ApiKeyManager({ apiKeys, onChangeKeys, theme }: ApiKeyManagerProps) {
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const [newKeyInput, setNewKeyInput] = useState("");
   const [revealedIndices, setRevealedIndices] = useState<Set<number>>(new Set());
 
@@ -88,6 +90,7 @@ export function ApiKeyManager({ apiKeys, onChangeKeys, theme }: ApiKeyManagerPro
           onChangeText={setNewKeyInput}
           autoCapitalize="none"
           autoCorrect={false}
+          showSoftInputOnFocus={!keyboardMouseMode}
           onSubmitEditing={handleAddKey}
           returnKeyType="done"
         />

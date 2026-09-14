@@ -1,23 +1,17 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { RunningTask } from "../../../ai/services/runningTasksService";
 import { useTheme } from "../../../theme/themeContext";
 
 interface WebBrowserEmptyViewProps {
   runningTasks: RunningTask[];
-  isStartingServer: boolean;
-  currentPort: string;
   onNavigate: (targetUrl: string) => void;
-  onStartServer: () => void;
 }
 
 export function WebBrowserEmptyView({
   runningTasks,
-  isStartingServer,
-  currentPort,
   onNavigate,
-  onStartServer,
 }: WebBrowserEmptyViewProps) {
   const { theme } = useTheme();
 
@@ -26,7 +20,7 @@ export function WebBrowserEmptyView({
       <Ionicons name="globe-outline" size={48} color={theme.textMuted} />
       <Text style={[styles.title, { color: theme.textPrimary }]}>Browser is empty</Text>
       <Text style={[styles.subtext, { color: theme.textSecondary }]}>
-        Type a URL or port above, or start a server below.
+        Type a URL or port above to preview.
       </Text>
 
       {runningTasks.length > 0 && (
@@ -55,22 +49,6 @@ export function WebBrowserEmptyView({
           })}
         </View>
       )}
-
-      <TouchableOpacity
-        style={[styles.startBtn, { backgroundColor: theme.accentGreen }]}
-        onPress={onStartServer}
-        disabled={isStartingServer}
-        activeOpacity={0.8}
-      >
-        {isStartingServer ? (
-          <ActivityIndicator size="small" color={theme.sendButtonIcon} style={{ marginRight: 6 }} />
-        ) : (
-          <Ionicons name="play" size={14} color={theme.sendButtonIcon} style={{ marginRight: 6 }} />
-        )}
-        <Text style={[styles.startBtnText, { color: theme.sendButtonIcon }]}>
-          {isStartingServer ? "Starting Server..." : `Start Web Server (:${currentPort || "8080"})`}
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -124,16 +102,5 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-  },
-  startBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  startBtnText: {
-    fontSize: 12.5,
-    fontWeight: "600",
   },
 });

@@ -13,6 +13,7 @@ import {
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useAccurateKeyboard } from "../../../theme/useAccurateKeyboard";
+import { useKeyboardMouseMode } from "../../context/KeyboardMouseContext";
 import { GitBranch } from "./types";
 
 interface GitBranchModalProps {
@@ -35,6 +36,7 @@ export function GitBranchModal({
   onCreateBranch,
 }: GitBranchModalProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
   const { isKeyboardVisible, keyboardOffset } = useAccurateKeyboard(12);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -78,6 +80,7 @@ export function GitBranchModal({
               onChangeText={setSearch}
               autoCapitalize="none"
               autoCorrect={false}
+              showSoftInputOnFocus={!keyboardMouseMode}
             />
           </View>
 
@@ -150,6 +153,9 @@ export function GitBranchModal({
                   onChangeText={setNewBranchName}
                   autoCapitalize="none"
                   autoFocus
+                  showSoftInputOnFocus={!keyboardMouseMode}
+                  onSubmitEditing={handleCreate}
+                  returnKeyType="done"
                 />
                 <TouchableOpacity
                   style={[styles.createActionBtn, { backgroundColor: theme.accent }]}

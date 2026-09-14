@@ -2,6 +2,7 @@ import React from "react";
 import { View, TextInput, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
+import { useKeyboardMouseMode } from "../../context/KeyboardMouseContext";
 
 interface WebBrowserNavBarProps {
   url: string;
@@ -35,6 +36,7 @@ export function WebBrowserNavBar({
   onOpenExternal,
 }: WebBrowserNavBarProps) {
   const { theme } = useTheme();
+  const { keyboardMouseMode } = useKeyboardMouseMode();
 
   return (
     <View style={[styles.navBar, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}>
@@ -81,6 +83,7 @@ export function WebBrowserNavBar({
           onSubmitEditing={onSubmit}
           autoCapitalize="none"
           autoCorrect={false}
+          showSoftInputOnFocus={!keyboardMouseMode}
           keyboardType="url"
           returnKeyType="go"
           placeholder="http://127.0.0.1:8000"

@@ -3,9 +3,9 @@ import {
   EditorSettings,
   DEFAULT_EDITOR_SETTINGS,
   loadEditorSettings,
-  loadKeyboardMouseMode,
   subscribeConfigChanges,
 } from "../../services/configService";
+import { useKeyboardMouseMode } from "../../context/KeyboardMouseContext";
 
 export interface EditorConfigState {
   editorSettings: EditorSettings;
@@ -18,18 +18,15 @@ export interface EditorConfigState {
  */
 export function useEditorConfig() {
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
-  const [keyboardMouseMode, setKeyboardMouseMode] = useState(false);
-  const keyboardMouseModeRef = useRef(false);
+  const { keyboardMouseMode } = useKeyboardMouseMode();
+  const keyboardMouseModeRef = useRef(keyboardMouseMode);
+  keyboardMouseModeRef.current = keyboardMouseMode;
   const editorSettingsRef = useRef(DEFAULT_EDITOR_SETTINGS);
 
   useEffect(() => {
     loadEditorSettings().then((s) => {
       editorSettingsRef.current = s;
       setEditorSettings(s);
-    });
-    loadKeyboardMouseMode().then((val) => {
-      keyboardMouseModeRef.current = val;
-      setKeyboardMouseMode(val);
     });
 
     const unsub = subscribeConfigChanges((cfg) => {
@@ -40,10 +37,6 @@ export function useEditorConfig() {
         };
         editorSettingsRef.current = merged;
         setEditorSettings(merged);
-      }
-      if (cfg.keyboardMouseMode !== undefined) {
-        keyboardMouseModeRef.current = !!cfg.keyboardMouseMode;
-        setKeyboardMouseMode(!!cfg.keyboardMouseMode);
       }
     });
 

@@ -23,7 +23,7 @@ import {
   sameGrid,
   TerminalGrid,
 } from "./terminal/terminalGeometry";
-import { loadKeyboardMouseMode, subscribeConfigChanges } from "../services/configService";
+import { useKeyboardMouseMode } from "../context/KeyboardMouseContext";
 import { useTheme } from "../../theme/themeContext";
 import { useOrientation } from "../../theme/useOrientation";
 
@@ -69,32 +69,7 @@ export function TerminalView({ workspaceId, visible = true }: TerminalViewProps)
   const isXterm = PTY_XTERM_ENABLED && !isTaskTab;
   const xtermRef = useRef<XtermViewHandle>(null);
 
-  const [keyboardMouseMode, setKeyboardMouseMode] = useState(false);
-  const keyboardMouseModeRef = useRef(false);
-  keyboardMouseModeRef.current = keyboardMouseMode;
-
-  useEffect(() => {
-    loadKeyboardMouseMode().then((val) => {
-      keyboardMouseModeRef.current = val;
-      setKeyboardMouseMode(val);
-    });
-    const unsub = subscribeConfigChanges((cfg) => {
-      if (cfg.keyboardMouseMode !== undefined) {
-        keyboardMouseModeRef.current = !!cfg.keyboardMouseMode;
-        setKeyboardMouseMode(!!cfg.keyboardMouseMode);
-      }
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const sub = Keyboard.addListener("keyboardDidShow", () => {
-      if (keyboardMouseModeRef.current) {
-        Keyboard.dismiss();
-      }
-    });
-    return () => sub.remove();
-  }, []);
+  const { keyboardMouseMode } = useKeyboardMouseMode();
 
   const keyboardPad = useTerminalKeyboardPad(windowHeight);
   const viewportSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -154,7 +129,7 @@ export function TerminalView({ workspaceId, visible = true }: TerminalViewProps)
   }, [isCtrlActive, isAltActive, setIsCtrlActive, setIsAltActive]);
 
   return (
-    <View style={[styles.container, { backgroundColor: appTheme.bgPrimary, paddingBottom: keyboardPad }]}>
+    <View style={[styles.container, { backgroundColor: appTheme.bgPrimary, paddingBottom: keyboardMouseMode ? 0 : keyboardPad }]}>
       {/* Terminal Header Bar */}
       <TerminalHeader
         sessions={sessions}
@@ -223,17 +198,19 @@ export function TerminalView({ workspaceId, visible = true }: TerminalViewProps)
       </ScrollView>
       )}
 
-      {/* Termux-style extra keys row (hidden for read-only task tabs) */}
-      <ExtraKeysBar
-        ctrlActive={isCtrlActive}
-        altActive={isAltActive}
-        onToggleCtrl={() => setIsCtrlActive((v) => !v)}
-        onToggleAlt={() => setIsAltActive((v) => !v)}
-        onPrintable={handleExtraPrintable}
-        onRaw={handleExtraRaw}
-        onEnter={handleExtraEnter}
-        disabled={isTaskTab}
-      />
+      {/* Termux-style extra keys row (hidden for read-only task tabs or in keyboard & mouse mode) */}
+      {!keyboardMouseMode && (
+        <ExtraKeysBar
+          ctrlActive={isCtrlActive}
+          altActive={isAltActive}
+          onToggleCtrl={() => setIsCtrlActive((v) => !v)}
+          onToggleAlt={() => setIsAltActive((v) => !v)}
+          onPrintable={handleExtraPrintable}
+          onRaw={handleExtraRaw}
+          onEnter={handleExtraEnter}
+          disabled={isTaskTab}
+        />
+      )}
 
       {/* Toast Feedback Notification */}
       {toastMessage && (
