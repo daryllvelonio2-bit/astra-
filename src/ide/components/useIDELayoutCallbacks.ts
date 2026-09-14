@@ -24,6 +24,33 @@ interface CallbacksParams {
   setIsLandscapeNavbarHidden: (hidden: boolean) => void;
 }
 
+const MAX_LIVE_TABS = 5;
+// Pinned: editor (keep-alive), terminal (shells die on unmount), agents
+// (input draft). Others reconstruct on revisit — no user data lost.
+const PINNED_TABS: ToggleableBottomTab[] = ["editor", "terminal", "agents"];
+
+/** Add a tab to the visited set, evicting oldest unpinned tab past the cap. */
+export function addVisitedTab(
+  prev: Set<ToggleableBottomTab>,
+  tab: ToggleableBottomTab
+): Set<ToggleableBottomTab> {
+  if (prev.has(tab)) return prev;
+  const next = new Set(prev);
+  next.add(tab);
+  while (next.size > MAX_LIVE_TABS) {
+    let evicted = false;
+    for (const t of next) {
+      if (t !== tab && !PINNED_TABS.includes(t)) {
+        next.delete(t);
+        evicted = true;
+        break;
+      }
+    }
+    if (!evicted) break;
+  }
+  return next;
+}
+
 /**
  * Stable IDE callbacks so memoized children don't re-render per parent tick.
  * No behavior change — same state transitions, stable references.

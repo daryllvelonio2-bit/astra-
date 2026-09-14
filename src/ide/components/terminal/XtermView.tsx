@@ -37,6 +37,8 @@ interface XtermViewProps {
   banner?: string;
   /** WebView tapped: the soft keyboard lives on the RN catcher — raise it. */
   onRequestKeyboard?: () => void;
+  /** Hidden tab: buffer incoming bytes, skip bridge flush until visible. */
+  visible?: boolean;
 }
 
 interface GlueMessage {
@@ -66,6 +68,7 @@ export const XtermView = memo(
       banner,
       onRemoteResize,
       onRequestKeyboard,
+      visible = true,
     },
     ref
   ) {
@@ -89,6 +92,9 @@ export const XtermView = memo(
   resizeRef.current = onRemoteResize;
   const keyboardRef = useRef(onRequestKeyboard);
   keyboardRef.current = onRequestKeyboard;
+  // Hidden tab: skip bridge writes (queue keeps latest per MAX_QUEUE cap).
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
 
   const activeBg = theme?.background || background || "#0d1117";
   const activeFg = theme?.foreground || foreground || "#f0f6fc";
@@ -178,10 +184,18 @@ export const XtermView = memo(
     queueRef.current = [];
     healedRef.current = false;
     paintFitRef.current = undefined;
+    // New PTY starts at default 80x24: force the next resize through even
+    // if the grid matches the previous session (dedupe would skip it).
+    lastFitRef.current = null;
 
     const dataSub = addTerminalDataListener(sessionId, (chunk: string) => {
       if (!readyRef.current) return;
       enqueue(utf8ToB64(chunk));
+      if (!visibleRef.current) return;
+      // Adaptive flush: interactive typing (short queue) paints immediately;
+      // floods batch into the 80ms safety net instead of one bridge call
+      // per chunk. Keeps WRITE_SLICE/MAX_QUEUE semantics unchanged.
+      if (queueRef.current.length > 4) return;
       // Paint immediately: the 80ms interval below is only a safety net.
       // Gating every update on a timer added up to ~1s of visible lag when
       // the JS thread was busy (measured on-device).
@@ -190,7 +204,7 @@ export const XtermView = memo(
 
     const exitSub = addTerminalExitListener(sessionId, (code: number) => {
       enqueue(utf8ToB64(`\r\n[Process completed: exit ${code}]\r\n`));
-      flushQueue();
+      if (visibleRef.current) flushQueue();
     });
 
     // Tab switch onto an already-loaded page: paint before latching ready.
@@ -204,13 +218,20 @@ export const XtermView = memo(
       });
     }
 
-    const flusher = setInterval(flushQueue, 80);
+    const flusher = setInterval(() => {
+      if (visibleRef.current) flushQueue();
+    }, 80);
     return () => {
       clearInterval(flusher);
       dataSub.remove();
       exitSub.remove();
     };
   }, [sessionId]);
+
+  // Tab switch back: paint everything buffered while hidden.
+  useEffect(() => {
+    if (visible && readyRef.current) flushQueue();
+  }, [visible]);
 
   // Font zoom follows the terminal fontSize setting.
   useEffect(() => {
@@ -260,11 +281,9 @@ export const XtermView = memo(
       typeof msg.cols === "number" &&
       typeof msg.rows === "number"
     ) {
-      if (__DEV__) {
-        console.log(
-          `[xterm-grid] cols=${msg.cols} rows=${msg.rows} vw=${(msg as any).vw} vh=${(msg as any).vh}`
-        );
-      }
+      // Dedupe: same grid as last measurement needs no TIOCSWINSZ/SIGWINCH.
+      const last = lastFitRef.current;
+      if (last && last.c === msg.cols && last.r === msg.rows) return;
       resizeTerminalSession(sessionRef.current, msg.cols, msg.rows);
       resizeRef.current?.(msg.cols, msg.rows);
       lastFitRef.current = { c: msg.cols, r: msg.rows };

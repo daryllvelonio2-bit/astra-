@@ -29,14 +29,18 @@ class RunningTasksServiceImpl {
   private triggerListeners: Set<TriggerListener> = new Set();
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private verifying = false;
+  // Coalesces output-flood notifies into one per ~150ms (appendOutput can
+  // fire per log chunk; subscribers re-render per notify).
+  private notifyTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    // Periodically verify if processes are still running in PRoot
+    // Periodically verify if processes are still running in PRoot.
+    // 8s cadence: each poll spawns 2 PRoot commands + per-task HTTP probes.
     this.pollInterval = setInterval(() => {
       if (this.tasks.size > 0) {
         this.verifyProcesses();
       }
-    }, 5000);
+    }, 8000);
   }
 
   /**
@@ -215,11 +219,21 @@ class RunningTasksServiceImpl {
     if (targetTask) {
       const cleanText = text.endsWith("\n") || text.endsWith("\r") ? text : `${text}\r\n`;
       targetTask.output = (targetTask.output || "") + cleanText;
-      if (targetTask.output.length > 50000) {
+      // Hysteresis trim: copy only when well past the cap, not per chunk.
+      if (targetTask.output.length > 60000) {
         targetTask.output = targetTask.output.slice(-40000);
       }
-      this.notify();
+      this.scheduleNotify();
     }
+  }
+
+  /** Trailing-edge notify for high-frequency output appends. */
+  private scheduleNotify() {
+    if (this.notifyTimer) return;
+    this.notifyTimer = setTimeout(() => {
+      this.notifyTimer = null;
+      this.notify();
+    }, 150);
   }
 
   /**

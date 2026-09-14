@@ -300,7 +300,9 @@ function getTs(): any | null {
 
 function analyzeTsFamily(content: string, fileName: string, ext: string): CodeDiagnostic[] | null {
   const ts = getTs();
-  if (!ts) return null;
+  // Explicit shape check: Metro maps "typescript" to an empty shim (see
+  // metro.config.js), so require() succeeds but yields {}. Same fallback.
+  if (!ts || typeof ts.transpileModule !== "function") return null;
   try {
     const isJsx = ext === "tsx" || ext === "jsx";
     const scriptKind = ext === "tsx" ? ts.ScriptKind.TSX : ext === "jsx" ? ts.ScriptKind.JSX

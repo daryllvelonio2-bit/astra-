@@ -24,8 +24,7 @@ import {
   buildViewerUrl,
 } from "../services/desktopService";
 import { DesktopSetupCard, DesktopPhase } from "./DesktopSetupCard";
-
-const MAX_LOG_LINES = 200;
+import { useBatchedLog } from "./useBatchedLog";
 
 /**
  * XFCE desktop tab: Xvnc + startxfce4 + websockify run in the Alpine guest
@@ -47,7 +46,8 @@ export function DesktopView({
   const geometry = fitDesktopGeometry(winW, winH);
 
   const [phase, setPhase] = useState<DesktopPhase>("checking");
-  const [log, setLog] = useState<string[]>([]);
+  // Batched provision/start log: one setState per ~100ms under line floods.
+  const { log, pushLog, clearLog } = useBatchedLog();
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [startedGeometry, setStartedGeometry] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState("");
@@ -56,15 +56,6 @@ export function DesktopView({
   const webViewRef = useRef<WebView>(null);
   const mountedRef = useRef(true);
   const prevLandscapeRef = useRef(isLandscape);
-
-  const pushLog = useCallback((line: string) => {
-    setLog((prev) => {
-      const next = [...prev, line];
-      return next.length > MAX_LOG_LINES
-        ? next.slice(next.length - MAX_LOG_LINES)
-        : next;
-    });
-  }, []);
 
   const refreshState = useCallback(async () => {
     const provisioned = await isDesktopProvisioned();
@@ -94,7 +85,7 @@ export function DesktopView({
   }, [refreshState]);
 
   const handleInstall = useCallback(async () => {
-    setLog([]);
+    clearLog();
     setPhase("installing");
     pushLog("Installing desktop stack (Xvnc + XFCE + noVNC, ~1GB)…");
     const ok = await provisionDesktop(pushLog);

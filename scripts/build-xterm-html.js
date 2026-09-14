@@ -169,6 +169,8 @@ const withLibs = html
 const out = `// GENERATED — do not hand-edit. Regenerate with: node scripts/build-xterm-html.js
 // Inlines xterm.js + fit addon + css into one offline page; colors/fonts are
 // token-replaced at runtime by buildXtermHtml().
+// Speed: the ~300KB page literal evaluates on first terminal use, not app
+// start (this module loads with the IDE shell). Cached after first build.
 export interface XtermHtmlOptions {
   background: string;
   foreground: string;
@@ -177,7 +179,12 @@ export interface XtermHtmlOptions {
   theme?: Record<string, string>;
 }
 
-const BLOB = ${JSON.stringify(withLibs)};
+let blobCache: string | null = null;
+function getBlob(): string {
+  if (blobCache !== null) return blobCache;
+  blobCache = ${JSON.stringify(withLibs)};
+  return blobCache;
+}
 
 export function buildXtermHtml(o: XtermHtmlOptions): string {
   const themeObj = o.theme || {
@@ -185,7 +192,7 @@ export function buildXtermHtml(o: XtermHtmlOptions): string {
     foreground: o.foreground,
     cursor: o.cursor,
   };
-  return BLOB.replaceAll("__BG__", () => o.background)
+  return getBlob().replaceAll("__BG__", () => o.background)
     .replaceAll("__FG__", () => o.foreground)
     .replaceAll("__CURSOR__", () => o.cursor)
     .replaceAll("__FONT__", () => String(o.fontSize))

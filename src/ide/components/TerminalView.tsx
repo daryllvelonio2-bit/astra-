@@ -29,9 +29,11 @@ import { useOrientation } from "../../theme/useOrientation";
 
 interface TerminalViewProps {
   workspaceId?: string;
+  /** Hidden tab: pause xterm bridge flush until visible. Sessions keep running. */
+  visible?: boolean;
 }
 
-export function TerminalView({ workspaceId }: TerminalViewProps) {
+export function TerminalView({ workspaceId, visible = true }: TerminalViewProps) {
   const {
     sessions,
     activeSessionId,
@@ -195,6 +197,7 @@ export function TerminalView({ workspaceId }: TerminalViewProps) {
           cursor={theme.cursor}
           banner={getBannerTitle(workspaceId, theme.id !== "light")}
           onRequestKeyboard={handleFocusTerminal}
+          visible={visible}
         />
       ) : (
       <ScrollView

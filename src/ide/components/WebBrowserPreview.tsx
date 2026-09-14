@@ -29,16 +29,18 @@ export function WebBrowserPreview({
   const [canGoForward, setCanGoForward] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
   const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
   const [isStartingServer, setIsStartingServer] = useState(false);
 
   const webViewRef = useRef<WebView>(null);
 
+  // Reload without remount: preserves back/forward history (key-remounts
+  // destroyed it). If the page isn't mounted (error/empty view), clearing
+  // the error remounts fresh — no reload needed.
   const handleReload = () => {
     setHasError(false);
     setErrorMessage("");
-    setReloadKey((k) => k + 1);
+    setTimeout(() => webViewRef.current?.reload(), 50);
   };
 
   // Sync when initialUrl prop changes
@@ -50,16 +52,21 @@ export function WebBrowserPreview({
         setInputUrl(normalized);
         setHasError(false);
         setErrorMessage("");
-        setReloadKey((k) => k + 1);
       }
     }
   }, [initialUrl]);
 
   // Subscribe to live background servers: auto-load only into an empty tab,
   // never hijack a page the user already opened.
+  // Speed: signature-guarded so terminal output floods don't re-render this tab.
+  const tasksSigRef = useRef("");
   useEffect(() => {
     const unsub = runningTasksService.subscribe((tasks) => {
-      setRunningTasks(tasks);
+      const sig = tasks.map((t) => `${t.id}|${t.url || ""}|${t.port || ""}|${t.status}`).join(";");
+      if (sig !== tasksSigRef.current) {
+        tasksSigRef.current = sig;
+        setRunningTasks(tasks);
+      }
       if (tasks.length > 0 && !url) {
         const activeTask = tasks.find((t) => t.url || t.port) || tasks[0];
         let taskUrl = activeTask.url || (activeTask.port ? `http://127.0.0.1:${activeTask.port}` : undefined);
@@ -68,7 +75,6 @@ export function WebBrowserPreview({
           setUrl(taskUrl);
           setInputUrl(taskUrl);
           setHasError(false);
-          setReloadKey((k) => k + 1);
         }
       }
     });
@@ -95,9 +101,15 @@ export function WebBrowserPreview({
     }
     setHasError(false);
     setErrorMessage("");
+    if (finalUrl === url) {
+      // Same URL resubmit: source is unchanged so the page won't navigate —
+      // reload explicitly (previously forced via remount).
+      setInputUrl(finalUrl);
+      webViewRef.current?.reload();
+      return;
+    }
     setUrl(finalUrl);
     setInputUrl(finalUrl);
-    setReloadKey((k) => k + 1);
   };
 
   const handleOpenExternal = async () => {
@@ -195,7 +207,6 @@ export function WebBrowserPreview({
           />
         ) : (
           <WebView
-            key={reloadKey}
             ref={webViewRef}
             source={{ uri: url }}
             style={[styles.webview, { backgroundColor: theme.bgPrimary }]}

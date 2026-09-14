@@ -24,8 +24,7 @@ import {
 } from "../services/vscodeService";
 import { VSCodeInstallCard } from "./VSCodeInstallCard";
 import { INJECTED_KEYBOARD_GUARD } from "../services/vscodeKeyboardScript";
-
-const MAX_LOG_LINES = 200;
+import { useBatchedLog } from "./useBatchedLog";
 
 type VSCodePhase = "checking" | "not-installed" | "installing" | "stopped" | "starting" | "running" | "error";
 
@@ -39,7 +38,8 @@ export function VSCodeView({
   const { theme } = useTheme();
   const [phase, setPhase] = useState<VSCodePhase>("checking");
   const [progress, setProgress] = useState<VSCodeProvisionProgress | null>(null);
-  const [log, setLog] = useState<string[]>([]);
+  // Batched install/start log: one setState per ~100ms under line floods.
+  const { log, pushLog, clearLog } = useBatchedLog();
   const [statusNote, setStatusNote] = useState("");
   const mountedRef = useRef(true);
   const webViewRef = useRef<WebView>(null);
@@ -76,13 +76,6 @@ export function VSCodeView({
       };
     }
   }, [visible, phase, injectGuard]);
-
-  const pushLog = useCallback((line: string) => {
-    setLog((prev) => {
-      const next = [...prev, line];
-      return next.length > MAX_LOG_LINES ? next.slice(next.length - MAX_LOG_LINES) : next;
-    });
-  }, []);
 
   const handleStart = useCallback(async () => {
     setPhase("starting");
@@ -133,7 +126,7 @@ export function VSCodeView({
   }, [visible, refreshState]);
 
   const handleInstall = useCallback(async () => {
-    setLog([]);
+    clearLog();
     setProgress({ stage: "Preparing environment…", percent: 5 });
     setPhase("installing");
     pushLog("Starting VS Code installation…");

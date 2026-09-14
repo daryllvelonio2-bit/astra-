@@ -27,8 +27,9 @@ import { useIdeActionBridge } from "./useIdeActionBridge";
 import { SettingsModal } from "./SettingsModal";
 import { resolveChatPathToRelative } from "../services/chatFileLinkService";
 import { useRecentFiles } from "./editor/useRecentFiles";
-import { useIDELayoutCallbacks } from "./useIDELayoutCallbacks";
+import { useIDELayoutCallbacks, addVisitedTab } from "./useIDELayoutCallbacks";
 import { useIDELayoutStyles } from "./useIDELayoutStyles";
+import { monacoLangForFile } from "../services/monaco/monacoLanguageMap";
 import {
   BottomTabVisibility, DEFAULT_BOTTOM_TABS, firstVisibleTab, loadAstraEnabled,
   loadBottomTabs, loadDefaultEditorUi, normalizeBottomTabs, subscribeConfigChanges, ToggleableBottomTab,
@@ -57,29 +58,7 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   const visibleTabsRef = useRef<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
 
   useEffect(() => {
-    setVisitedTabs((prev) => {
-      if (prev.has(bottomTab)) return prev;
-      const next = new Set(prev);
-      next.add(bottomTab);
-      // Speed: cap live tabs so hidden WebViews don't pile up (each keeps
-      // JS + intervals alive). Pinned: editor (keep-alive), terminal (shells
-      // die on unmount), agents (input draft). Others (browser/git/desktop/
-      // vscode) reconstruct on revisit — no user data lost.
-      const MAX_LIVE_TABS = 5;
-      const PINNED: ToggleableBottomTab[] = ["editor", "terminal", "agents"];
-      while (next.size > MAX_LIVE_TABS) {
-        let evicted = false;
-        for (const tab of next) {
-          if (tab !== bottomTab && !PINNED.includes(tab)) {
-            next.delete(tab);
-            evicted = true;
-            break;
-          }
-        }
-        if (!evicted) break;
-      }
-      return next;
-    });
+    setVisitedTabs((prev) => addVisitedTab(prev, bottomTab));
   }, [bottomTab]);
 
   useEffect(() => {
@@ -408,13 +387,15 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
                 onSelectRecentFile={handleSelectFile}
                 onCloseRecentFile={removeRecentFile}
               />
-              <MonacoEngineHost />
+              {/* Lazy engine: plaintext never uses Monaco (service returns null),
+                  so skip the 3.9M WebView until a highlightable file opens. */}
+              {monacoLangForFile(activeFile?.name) !== "plaintext" && <MonacoEngineHost />}
             </View>
           )}
 
           {visitedTabs.has("terminal") && (
             <View style={[styles.tabContent, bottomTab !== "terminal" && styles.hiddenTab]}>
-              <TerminalView key={workspace?.id || "none"} workspaceId={workspace?.id} />
+              <TerminalView key={workspace?.id || "none"} workspaceId={workspace?.id} visible={bottomTab === "terminal"} />
             </View>
           )}
           {visitedTabs.has("browser") && (

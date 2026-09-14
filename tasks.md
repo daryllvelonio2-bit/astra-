@@ -20,31 +20,33 @@ Goal: cut startup, navigation, editor typing, chat streaming, terminal flood, fi
 - [x] `EditorView`: verified already memoized (`rawLines`/`offsets`/`chunk`) + `useEditorAssists` debounced; caps kept (800/1500/250). No change needed.
 - [ ] `FileExplorer.tsx:387`: full `renderNode` virtualization + drag throttle → Phase 2 (measurement path left untouched for stability).
 
-## Phase 2 — Lists + mount policy (biggest snappiness gain)
-- [ ] Virtualize unbounded lists: chat, file tree, `GitDiffViewer:449`, `ProblemsPanel`, diff/history. Use `FlatList` + `keyExtractor` (already) + add `getItemLayout`, `windowSize`, `maxToRenderPerBatch`, `removeClippedSubviews` (copy `ProjectPicker:411` tuning). No `ScrollView+.map` for unbounded data.
-- [ ] `IDELayout.tsx`: evict `visitedTabs` (LRU, keep max 2-3 WebViews live); suspend hidden WebView intervals (`XtermView` flush 80ms, `VSCodeView` guard 600/2000ms, `DesktopView` logs).
-- [ ] Lazy-mount `DesktopView:379` / `VSCodeView:306` / `WebBrowserPreview:287` on first visit only; keep editor mounted (current keep-alive is correct).
+## Phase 2 — Lists + mount policy (biggest snappiness gain) — DONE 2026-09-14
+- [x] Tuned all untuned `FlatList`s (ProjectPicker pattern: `initialNumToRender` 8-12, `maxToRenderPerBatch` 10, `windowSize` 5, `removeClippedSubviews` on Android): `GitChangesList`, `GitHistoryList`, `GitCommitFilesList`, `ChatSessionsModal`, `GitBranchModal` (+persist taps), `ExtensionMarketplaceModal` (both lists), `ExtensionThemesTab`, `DirectoryPickerModal`.
+- [x] Chat windowing tightened: renderLimit 100→60, page +10→+20 (`useChatSession`, `AstraChatScreen`). Full chat→`FlatList` rewrite deferred (scroll/keyboard/load-older behavior risk; current `ScrollView` + 60-cap + memo rows is stable).
+- [x] `IDELayout`: `visitedTabs` LRU cap max 5 live (`addVisitedTab` in `useIDELayoutCallbacks.ts`). Pinned editor/terminal/agents (terminal kills shells on unmount, agents holds draft); browser/git/desktop/vscode evict oldest-first, reconstruct on revisit.
+- [x] Hidden WebView suspend: `XtermView`/`TerminalView` new `visible` prop (buffer while hidden, flush on return; 80ms interval gated); `VSCodeView`/`DesktopView` already gated (verified); `WebBrowserPreview` task subscription signature-guarded.
+- [ ] File tree / `GitDiffViewer` full virtualization deferred (drag-measure + nested-scroll rewrite risk; revisit with dedicated testing).
 
-## Phase 3 — WebView bridges
-- [ ] `XtermView:331`: adaptive flush (batch more than 80ms when flooding), keep `WRITE_SLICE=65536` / `MAX_QUEUE=512` drop-front, remove `__DEV__` grid logs, dedupe resize (already clamps cols>=20/rows>=10 — keep).
-- [ ] `monacoEngineService.ts:148` + `MonacoEngineHost:44`: lazy-init hidden tokenizer, cache tokens per file+hash, debounce full-source `injectJavaScript(JSON(src))` (~300ms, cancel prior), keep `MAX_CODE_CHARS=400k` / `REQUEST_TIMEOUT_MS=8000` fallbacks.
-- [ ] `VSCodeView` / `WebBrowserPreview` / `DesktopView`: avoid `key={url/reloadKey}` full remount; use `reload()` / `goBack()`; unsubscribe `runningTasksService` when hidden; ring buffer for logs (no `[...prev,line].slice(-200)` copy per line).
-- [ ] Guard all `onMessage JSON.parse` with try/catch.
+## Phase 3 — WebView bridges — DONE 2026-09-14
+- [x] `XtermView`: adaptive flush (interactive = immediate, flood queue>4 → 80ms batch; keeps `WRITE_SLICE`/`MAX_QUEUE`); `__DEV__` grid-spam log removed; resize deduped vs last grid (forced through on session switch so new PTY always gets `TIOCSWINSZ`); hidden-tab buffering from Phase 2 kept.
+- [x] Monaco: service pending cap 3 (oldest surplus resolves null → regex fallback; newest always runs; 400k/8s guards kept); hook layer already had 800ms debounce + LRU-30 + stale-drop (verified, untouched); `IDELayout` lazy-mounts `MonacoEngineHost` only for non-plaintext files (plaintext service path returns null anyway).
+- [x] `WebBrowserPreview`: `key={reloadKey}` remount removed (was destroying back/forward history + full page rebuild per nav); navigations flow via `source` change, reloads via `ref.reload()`, same-URL resubmit reloads explicitly. Fixes back button after in-app navigation.
+- [x] Logs: shared `useBatchedLog.ts` (100ms batch, 200-line cap) wired into `VSCodeView` + `DesktopView` (diagnose fan-out + provision floods no longer re-render per line).
+- [x] JSON guards: audited all WebView `onMessage` parsers — `XtermView`, `VSCodeView`, monaco service already guarded; `DesktopView`/`WebBrowserPreview` have no message bridge. Nothing to add.
 
-## Phase 4 — FS / services / PRoot (fewer spawns, fewer writes)
-- [ ] `workspaceService:462`: cache tree + incremental refresh (tighten `useWorkspaceAutoRefresh`), batch `readDirEntries` (fewer per-dir bridge calls), throttle `onProgress` callbacks.
-- [ ] Registries (`workspace registry`, `configService:375`, `conversationService:227`, avatar cache): write only on change, debounce saves (settings autosave, per-message session save → batch ~1s), no wholesale `JSON.parse/stringify` on UI thread per event.
-- [ ] `gitService:481`: batch `rev-parse + status --porcelain -b + rev-list --count` into fewer PRoot calls; cache status 2-3s; debounce explorer refresh after file side-effects.
-- [ ] `runningTasksService:451`: poll 5s → 8-10s when idle, skip `ps/netstat` + `fetch 1200ms` probes when zero tasks, `notify()` only on shallow-change, avoid `output.slice(-40000)` full copy per append.
-- [ ] `nativeFs.ts:175`: keep sync-native-first + `fsRace 3s`, add small stat/dir cache with TTL.
-- [ ] Native (`LinuxRunnerModule.kt`, `ProcessExecutor`, `ProotSessionConfig`, `EnvironmentManager`): skip `ensureSystemConfigs` rewrite (resolv/hosts/shims/launcher) when marker fresh (~30s TTL); cache DNS (`getprop` + `LinkProperties`); avoid `mkdirs` per call; one persistent shell for frequent `command -v` / `rev-parse` probes instead of one PRoot process per call. Respect invariant: daemons only from supervisor PTY (`desktop-svc`, `vscode-svc`), never `executeCommand` (see `architecture.md`).
+## Phase 4 — FS / services / PRoot (fewer spawns, fewer writes) — DONE 2026-09-14
+- [x] `workspaceService`: left as-is (scan already yields every 12 dirs + 45s cap + debounced refresh; per-dir bridge calls are inherent to tree builds).
+- [x] Conversations: `updateSessionMessages` throttled to 1 save/sec/session (leading when idle, trailing latest; `conversationService.ts`). Worst case a kill loses <1s of stream tail.
+- [x] `nativeFs`: investigated, no change — native calls are already sync-instant with expo as raced fallback; a cache would add staleness for ~zero gain.
+- [x] `gitService`: status is now 1 spawn (dropped separate `rev-parse` probe; exit code infers repo) + 2s cache (`gitStatusCache.ts`); all 12 mutators invalidate; remote/credential ops split to `gitRemoteService.ts` (re-exported, callers untouched).
+- [x] `runningTasksService`: poll 5s→8s (already skipped when empty); output trim hysteresis (copy only past 60k, cut to 40k); output notifies coalesced to 150ms trailing.
+- [x] Native (Kotlin, +27 lines): `ensureSystemConfigs` refreshes at most every 30s (idempotent body; TTL set only on success so failures retry next call); DNS `getprop`+`LinkProperties` cached 30s (public fallbacks always present). Daemon invariant untouched — config only, never starts servers.
 
-## Phase 5 — Bundle + startup (faster cold start)
-- [ ] Metro (`metro.config.js:19`): keep `typescript@5.3.3 (23M)` out of bundle (lazy-require already, but still bundled) — use bracket-scan fallback / native LSP only; add `blockList` guard against accidental `monaco-editor (101M)` imports.
-- [ ] `monacoEngineHtml.json (4.0M)`: stop `import …json` (Metro inlines + `replaceAll` copy + WebView copy = 3x RAM); load via `expo-asset` / `FileSystem` at runtime, cache built HTML, rebuild only on theme change.
-- [ ] `xtermHtml.generated.ts (296K)`: same — build once, cache, rebuild only on theme/font change.
-- [ ] Boot (`App.tsx`, `AppBootScreen:177`): parallelize `loadHasCompletedStartup + loadAstraEnabled + PRootService.ensureReady`; paint picker ASAP, don't block on sandbox; shorten 15s fallback; defer `ToolchainProvisioner` apk stages to background after first frame.
-- [ ] Remove/unused deps check (`@expo/ngrok`, `jszip`, `monaco-editor` in `package.json` vs offline esbuild page); enable Hermes bytecode + preload only needed fonts/assets.
+## Phase 5 — Bundle + startup (faster cold start) — DONE 2026-09-14
+- [x] Metro: `typescript` (23M) mapped to empty shim — `getTs()` fallback to bracket scan verified + explicit `transpileModule` shape check added; vendor guard `blockList` fails loudly on direct `monaco-editor(-core)`/`xterm`/`@xterm` imports (all ship via offline blobs only). Config load-tested with node.
+- [x] Blobs lazy-eval (same bytes, deferred cost): monaco 4MB JSON `import` → lazy `require` on first build; xterm 296K `BLOB` const → cached getter. Both build scripts updated so regeneration preserves the pattern.
+- [x] Boot (`App.tsx`): settings/config/sandbox now concurrent (were serial); splash waits only on local settings+config — sandbox warms detached (all consumers `ensureReady` internally); fallback 15s→10s; unmount cancels pending state writes.
+- [x] Deps audit (verify-only, no `package.json` moves — zero bundle impact either way, moves risk install flows): `jszip` used by vsixExtractor (keep); `@expo/ngrok` tunnel-only, never imported (keep, harmless); `monaco-editor(-core)`/`xterm*` node-build-only (guarded); Hermes is SDK 54 default (no `jsEngine` override); no custom font preloads to trim.
 
 ## Exit gates (every phase)
 - `tsc` clean, no file >500 lines, no hardcoded theme colors, boot/list/type/stream manually verified snappier with zero feature loss. Update `PROGRESS.md` after each phase.

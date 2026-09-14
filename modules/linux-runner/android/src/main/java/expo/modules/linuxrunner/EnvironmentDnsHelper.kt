@@ -4,7 +4,24 @@ import android.content.Context
 import android.os.Build
 
 object EnvironmentDnsHelper {
+    // Speed: getprop spawn + LinkProperties lookup run per PRoot call via
+    // ensureSystemConfigs. Cache 30s; resolv.conf always keeps public
+    // fallbacks (8.8.8.8/1.1.1.1/...) so a network switch degrades
+    // gracefully inside the window instead of failing DNS outright.
+    private const val DNS_CACHE_TTL_MS = 30_000L
+    @Volatile private var cachedDns: List<String>? = null
+    @Volatile private var cachedDnsAt: Long = 0L
+
     fun getActiveDnsServers(context: Context): List<String> {
+        val now = System.currentTimeMillis()
+        cachedDns?.let { if (now - cachedDnsAt < DNS_CACHE_TTL_MS) return it }
+        val fresh = queryDnsServers(context)
+        cachedDns = fresh
+        cachedDnsAt = now
+        return fresh
+    }
+
+    private fun queryDnsServers(context: Context): List<String> {
         val dnsList = mutableListOf<String>()
 
         // 1. Try reading getprop properties containing dns

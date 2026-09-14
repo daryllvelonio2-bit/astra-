@@ -17,6 +17,10 @@ interface Pending {
 
 const MAX_CODE_CHARS = 400_000;
 const REQUEST_TIMEOUT_MS = 8000;
+// Cap in-flight engine round-trips: rapid file switches could otherwise pile
+// up pendings (each with an 8s timer). Oldest surplus resolves null so the
+// caller falls back to regex; the newest request always runs.
+const MAX_PENDING = 3;
 
 let ref: WebViewRef = null;
 let ready = false;
@@ -91,6 +95,16 @@ export function requestMonacoTokens(
   const src = code.length > MAX_CODE_CHARS ? code.slice(0, MAX_CODE_CHARS) : code;
   const id = `m${nextId++}`;
   return new Promise((resolve) => {
+    while (pending.size >= MAX_PENDING) {
+      const oldest = pending.keys().next();
+      if (oldest.done) break;
+      const p = pending.get(oldest.value);
+      pending.delete(oldest.value);
+      if (p) {
+        clearTimeout(p.timer);
+        p.resolve(null);
+      }
+    }
     const timer = setTimeout(() => {
       pending.delete(id);
       resolve(null);

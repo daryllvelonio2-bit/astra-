@@ -3403,3 +3403,32 @@
 - Rows: `AgentMessageItem` step filters memoized, `StepCard` port regex memoized + stable toggles, midnight bubble shadow removed, `StepCard` dead `isMidnight` removed.
 - Terminal/editor/theme: `AnsiRenderer` memoized (palettes/parse/font, 60k-char + 1500-span caps); `getTokenColors` cached by theme identity; `CodeSyntaxHighlighter` memoized.
 - Verified: `tsc` 0 errors, zero files >500 lines, no hardcoded theme colors added, no features removed. Deferred to Phase 2: chat/file virtualization, `MarkdownMessageView` deep memo, `FileExplorer` drag-measure throttle.
+
+### [2026-09-14] - Phase 2 lists + mount policy (speed + stability)
+- Lists: tuned 9 `FlatList`s with ProjectPicker values (8-12/10/5 + android `removeClippedSubviews`): git changes/history/commit-files, chat sessions, branches, marketplace x2, themes, directory picker.
+- Chat windowing: 100→60 initial, +20/page. Full chat→`FlatList` rewrite skipped (scroll/keyboard risk).
+- Mount cap: `visitedTabs` LRU max 5 (`addVisitedTab`); pinned editor/terminal/agents (unmount kills shells/draft); browser/git/desktop/vscode evict + reconstruct.
+- Hidden suspend: `XtermView`/`TerminalView` `visible` prop (buffer while hidden, flush on return, 80ms gated); `VSCodeView`/`DesktopView` already gated (verified); `WebBrowserPreview` signature-guarded.
+- Verified: `tsc` 0 errors, zero files >500 lines, no features removed. Deferred: file-tree/`GitDiffViewer` virtualization (rewrite risk).
+
+### [2026-09-14] - Phase 3 WebView bridges (speed + stability, no visual change)
+- Terminal: adaptive flush (immediate when idle, 80ms batch when queue>4); `__DEV__` grid log removed; resize deduped (forced on session switch for correct `TIOCSWINSZ`).
+- Monaco: service pending cap 3 (surplus → regex fallback); hook's 800ms debounce + LRU-30 verified already optimal; engine host lazy-mounted for non-plaintext only.
+- Browser: `key` remount removed — navigations via `source`, reloads via `ref.reload()`; also fixes back/forward history (remounts were destroying it).
+- Logs: new `useBatchedLog.ts` (100ms batch, 200 cap) in VS Code + Desktop views.
+- Guards: all `onMessage JSON.parse` already guarded (verified); Desktop/Browser have no message bridge.
+- Verified: `tsc` 0 errors, zero files >500 lines, no features removed.
+
+### [2026-09-14] - Phase 4 FS/services/PRoot (fewer spawns, fewer writes)
+- Tasks: poll 5s→8s, output trim hysteresis (60k/40k), notifies coalesced 150ms trailing.
+- Git: status 1 spawn (no separate `rev-parse`) + 2s cache; 12 mutators invalidate; remote ops → `gitRemoteService.ts` (re-exported).
+- Conversations: session saves throttled 1/sec (leading + trailing); `nativeFs`/`workspaceService` investigated, no change (already optimal).
+- Native (+27 lines): `ensureSystemConfigs` 30s TTL (success-gated), DNS cache 30s; daemon invariant intact.
+- Verified: `tsc` 0 errors, zero files >500 lines. Kotlin diff minimal; needs `assembleDebug` on next device build to confirm native compile.
+
+### [2026-09-14] - Phase 5 bundle + startup (all phases complete)
+- Metro: `typescript` → empty shim (bracket-scan fallback verified + shape check); vendor `blockList` guard for monaco/xterm direct imports. Config load-tested.
+- Blobs: monaco 4MB + xterm 296K evaluate lazily on first use (same bytes, deferred cost); build scripts updated to preserve pattern.
+- Boot: concurrent settings/config/sandbox; splash waits on local reads only; fallback 15s→10s; unmount-safe.
+- Deps: audit-only (jszip used; ngrok tunnel-only; editor libs node-build-only; Hermes default; no font trims).
+- Verified: `tsc` 0 errors, zero files >500 lines, no features removed. Full plan (Phases 0-5) done.

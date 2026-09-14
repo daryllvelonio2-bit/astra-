@@ -5,6 +5,15 @@ import { getFileInfo, readFileText, writeFileText, makeDir, deletePath } from ".
 const CONVERSATIONS_DIR = `${FileSystem.documentDirectory}conversations/`;
 const WORKSPACES_DIR = `${FileSystem.documentDirectory}workspaces/`;
 
+// Throttle for updateSessionMessages (see below): at most one disk save
+// per second per session while streaming.
+const SESSION_SAVE_THROTTLE_MS = 1000;
+const lastSessionSaveAt = new Map<string, number>();
+const pendingSessionSaves = new Map<
+  string,
+  { workspaceId: string; sessionId: string; messages: AgentChatMessage[] }
+>();
+
 function getSafeWorkspaceId(workspaceId: string): string {
   return (workspaceId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
 }
@@ -171,6 +180,40 @@ export async function appendMessageToSession(
 }
 
 export async function updateSessionMessages(
+  workspaceId: string,
+  sessionId: string,
+  messages: AgentChatMessage[]
+): Promise<void> {
+  // Speed: fired per chat state change (~10/s while streaming, each a file
+  // read + JSON parse + stringify + write). Throttle to one save per second
+  // per session: leading save when idle, trailing save with latest messages.
+  // Worst case a kill loses <1s of stream tail (already interrupted anyway).
+  const key = `${workspaceId}::${sessionId}`;
+  const now = Date.now();
+  const entry = pendingSessionSaves.get(key);
+  if (entry) {
+    entry.messages = messages;
+    entry.workspaceId = workspaceId;
+    entry.sessionId = sessionId;
+    return;
+  }
+  const lastAt = lastSessionSaveAt.get(key) || 0;
+  if (now - lastAt >= SESSION_SAVE_THROTTLE_MS) {
+    lastSessionSaveAt.set(key, now);
+    await writeSessionMessages(workspaceId, sessionId, messages);
+    return;
+  }
+  pendingSessionSaves.set(key, { workspaceId, sessionId, messages });
+  setTimeout(() => {
+    const p = pendingSessionSaves.get(key);
+    pendingSessionSaves.delete(key);
+    if (!p) return;
+    lastSessionSaveAt.set(key, Date.now());
+    void writeSessionMessages(p.workspaceId, p.sessionId, p.messages);
+  }, SESSION_SAVE_THROTTLE_MS);
+}
+
+async function writeSessionMessages(
   workspaceId: string,
   sessionId: string,
   messages: AgentChatMessage[]

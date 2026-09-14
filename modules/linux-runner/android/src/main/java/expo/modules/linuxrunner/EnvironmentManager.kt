@@ -228,7 +228,16 @@ object EnvironmentManager {
         }
     }
 
+    // Speed: initialize() runs per PRoot call; the config body below is
+    // idempotent (~15 file writes + getprop + asset scans), so refresh at
+    // most every 30s. Daemon invariant untouched: this never starts servers,
+    // only refreshes static guest config.
+    private const val SYSTEM_CONFIG_TTL_MS = 30_000L
+    @Volatile private var lastSystemConfigAt: Long = 0L
+
     fun ensureSystemConfigs(context: Context, alpineDir: File) {
+        val now = System.currentTimeMillis()
+        if (now - lastSystemConfigAt < SYSTEM_CONFIG_TTL_MS) return
         try {
             // Configure DNS resolv.conf dynamically from Android network
             val etcDir = File(alpineDir, "etc")
@@ -361,6 +370,7 @@ fi
 
             // Ensure Astra CLI is bundled and executable inside Alpine rootfs
             EnvironmentAstraHelper.ensureAstraCli(context, alpineDir, ::openDecompressedStream, ::extractTarStream)
+            lastSystemConfigAt = System.currentTimeMillis()
         } catch (e: Exception) {
             Log.w(TAG, "Could not configure profile/dns: ${e.message}")
         }

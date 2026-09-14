@@ -37,22 +37,38 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Phase labels pace the 3s wave (1s each) so every stage gets screen
-    // time; dismissal still waits for real readiness below.
+    // Speed: settings, config, and sandbox warm concurrently (were serial:
+    // startup → sandbox → done). Splash still waits for real readiness.
+    // Phase labels pace the wave so every stage gets screen time.
+    let cancelled = false;
     setBootPhase("Loading settings…");
-    loadHasCompletedStartup()
+    const settingsReady = loadHasCompletedStartup()
       .then((completed) => {
+        if (cancelled) return;
         setHasCompletedStartup(completed);
         setBootPhase("Preparing sandbox…");
-        return PRootService.ensureReady().catch(() => {});
       })
+      .catch(() => {});
+    const configReady = loadAstraEnabled()
+      .then((v) => {
+        if (!cancelled) setAstraEnabled(v);
+      })
+      .catch(() => {});
+    // Sandbox warms detached: every consumer (terminal, agent, git, VS Code)
+    // awaits ensureReady internally, so the picker is usable instantly while
+    // first-install provisioning finishes in the background. Splash waits
+    // only for local settings + config (both fast file reads).
+    const sandboxReady = PRootService.ensureReady()
+      .catch(() => {})
       .then(() => {
-        setBootPhase("Readying workspace…");
-        setBootDone(true);
+        if (!cancelled) setBootPhase("Readying workspace…");
       });
+    void sandboxReady;
+    Promise.allSettled([settingsReady, configReady]).then(() => {
+      if (!cancelled) setBootDone(true);
+    });
     // Safety: never trap the user on the splash if init hangs
-    const bootFallback = setTimeout(() => setBootDone(true), 15000);
-    loadAstraEnabled().then(setAstraEnabled);
+    const bootFallback = setTimeout(() => setBootDone(true), 10000);
 
     const unsubSwitchWs = ideActionService.subscribe("SWITCH_WORKSPACE", ({ workspaceId }) => {
       if (workspaceId) {
@@ -64,6 +80,7 @@ export default function App() {
     });
 
     return () => {
+      cancelled = true;
       clearTimeout(bootFallback);
       unsubSwitchWs();
       unsubConfig();

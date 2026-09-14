@@ -1,5 +1,21 @@
 import { executeCommand } from "../../../modules/linux-runner/src";
 import { GitBranch, GitCommit, GitCommitFile, GitFileStatus, GitRepoStatus } from "../components/git/types";
+import {
+  getCachedGitStatus,
+  setCachedGitStatus,
+  invalidateGitStatusCache,
+} from "./gitStatusCache";
+
+// Remote/credential ops live in gitRemoteService (one feature = one file);
+// re-exported here so existing callers keep importing from gitService.
+export {
+  configureGitCredentials,
+  getSshPublicKey,
+  generateSshKey,
+  getGitRemoteUrl,
+  setGitRemoteUrl,
+} from "./gitRemoteService";
+export { invalidateGitStatusCache };
 
 function formatRelativeTime(epochSeconds: number): string {
   const diff = Math.max(0, Math.floor(Date.now() / 1000 - epochSeconds));
@@ -22,27 +38,35 @@ export async function checkIsGitRepo(workspaceId?: string): Promise<boolean> {
 export async function initGitRepo(workspaceId?: string): Promise<boolean> {
   try {
     const res = await executeCommand("git init && git branch -M main", workspaceId);
+    invalidateGitStatusCache(workspaceId);
     return res.exitCode === 0;
   } catch (_) {
+    invalidateGitStatusCache(workspaceId);
     return false;
   }
 }
 
 export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus> {
-  const isRepo = await checkIsGitRepo(workspaceId);
-  if (!isRepo) {
-    return {
-      isRepo: false,
-      currentBranch: "none",
-      detached: false,
-      ahead: 0,
-      behind: 0,
-      files: [],
-    };
-  }
+  const cached = getCachedGitStatus(workspaceId);
+  if (cached) return cached;
+  const store = (status: GitRepoStatus): GitRepoStatus =>
+    setCachedGitStatus(status, workspaceId);
 
+  // Single spawn: `git status` exit code already tells repo vs non-repo,
+  // so the separate `rev-parse --is-inside-work-tree` probe is skipped.
   try {
     const res = await executeCommand("git status --porcelain=v1 -b", workspaceId);
+    const combined = `${res.stdout || ""}\n${(res as any).stderr || ""}`;
+    if (res.exitCode !== 0 && /not a git repository|not a git repo/i.test(combined)) {
+      return store({
+        isRepo: false,
+        currentBranch: "none",
+        detached: false,
+        ahead: 0,
+        behind: 0,
+        files: [],
+      });
+    }
     const lines = (res.stdout || "").split(/\r?\n/).filter(Boolean);
 
     let currentBranch = "main";
@@ -127,7 +151,7 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
       });
     }
 
-    return {
+    return store({
       isRepo: true,
       currentBranch,
       upstreamBranch,
@@ -135,16 +159,16 @@ export async function getGitStatus(workspaceId?: string): Promise<GitRepoStatus>
       ahead,
       behind,
       files,
-    };
+    });
   } catch (_) {
-    return {
+    return store({
       isRepo: true,
       currentBranch: "main",
       detached: false,
       ahead: 0,
       behind: 0,
       files: [],
-    };
+    });
   }
 }
 
@@ -192,8 +216,10 @@ export async function stageGitFile(
   filePath: string
 ): Promise<boolean> {
   try {
-    return (await executeCommand(`git add -- "${filePath}"`, workspaceId)).exitCode === 0;
-  } catch (_) { return false; }
+    const ok = (await executeCommand(`git add -- "${filePath}"`, workspaceId)).exitCode === 0;
+    invalidateGitStatusCache(workspaceId);
+    return ok;
+  } catch (_) { invalidateGitStatusCache(workspaceId); return false; }
 }
 
 export async function unstageGitFile(
@@ -201,20 +227,26 @@ export async function unstageGitFile(
   filePath: string
 ): Promise<boolean> {
   try {
-    return (await executeCommand(`git restore --staged -- "${filePath}" 2>/dev/null || git reset HEAD -- "${filePath}" 2>/dev/null`, workspaceId)).exitCode === 0;
-  } catch (_) { return false; }
+    const ok = (await executeCommand(`git restore --staged -- "${filePath}" 2>/dev/null || git reset HEAD -- "${filePath}" 2>/dev/null`, workspaceId)).exitCode === 0;
+    invalidateGitStatusCache(workspaceId);
+    return ok;
+  } catch (_) { invalidateGitStatusCache(workspaceId); return false; }
 }
 
 export async function stageAllGitFiles(workspaceId?: string): Promise<boolean> {
   try {
-    return (await executeCommand("git add -A", workspaceId)).exitCode === 0;
-  } catch (_) { return false; }
+    const ok = (await executeCommand("git add -A", workspaceId)).exitCode === 0;
+    invalidateGitStatusCache(workspaceId);
+    return ok;
+  } catch (_) { invalidateGitStatusCache(workspaceId); return false; }
 }
 
 export async function unstageAllGitFiles(workspaceId?: string): Promise<boolean> {
   try {
-    return (await executeCommand("git restore --staged . 2>/dev/null || git reset HEAD . 2>/dev/null", workspaceId)).exitCode === 0;
-  } catch (_) { return false; }
+    const ok = (await executeCommand("git restore --staged . 2>/dev/null || git reset HEAD . 2>/dev/null", workspaceId)).exitCode === 0;
+    invalidateGitStatusCache(workspaceId);
+    return ok;
+  } catch (_) { invalidateGitStatusCache(workspaceId); return false; }
 }
 
 export async function commitGitChanges(
@@ -231,9 +263,11 @@ export async function commitGitChanges(
       `git commit -m "${cleanSummary}"${descArg}`,
       workspaceId
     );
+    invalidateGitStatusCache(workspaceId);
     if (res.exitCode === 0) return { success: true };
     return { success: false, error: res.stdout || "Commit failed" };
   } catch (e: any) {
+    invalidateGitStatusCache(workspaceId);
     return { success: false, error: e?.message || "Commit failed" };
   }
 }
@@ -351,8 +385,10 @@ export async function switchGitBranch(
     const local = branchName.replace(/^origin\//, "").trim();
     if (!local) return { success: false, error: "Invalid branch name" };
     const res = await executeCommand(`git checkout "${local}"`, workspaceId);
+    invalidateGitStatusCache(workspaceId);
     return res.exitCode === 0 ? { success: true } : { success: false, error: res.stdout || "Branch switch failed" };
   } catch (e: any) {
+    invalidateGitStatusCache(workspaceId);
     return { success: false, error: e?.message || "Branch switch failed" };
   }
 }
@@ -363,8 +399,10 @@ export async function createGitBranch(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await executeCommand(`git checkout -b "${branchName}"`, workspaceId);
+    invalidateGitStatusCache(workspaceId);
     return res.exitCode === 0 ? { success: true } : { success: false, error: res.stdout || "Failed to create branch" };
   } catch (e: any) {
+    invalidateGitStatusCache(workspaceId);
     return { success: false, error: e?.message || "Failed to create branch" };
   }
 }
@@ -372,8 +410,10 @@ export async function createGitBranch(
 export async function fetchGitRemote(workspaceId?: string): Promise<{ success: boolean; message: string }> {
   try {
     const res = await executeCommand("git fetch --all --prune", workspaceId);
+    invalidateGitStatusCache(workspaceId);
     return { success: res.exitCode === 0, message: res.stdout || (res.exitCode === 0 ? "Fetched from remote" : "Fetch failed") };
   } catch (e: any) {
+    invalidateGitStatusCache(workspaceId);
     return { success: false, message: e?.message || "Fetch failed" };
   }
 }
@@ -381,8 +421,10 @@ export async function fetchGitRemote(workspaceId?: string): Promise<{ success: b
 export async function pullGitRemote(workspaceId?: string): Promise<{ success: boolean; message: string }> {
   try {
     const res = await executeCommand("git pull", workspaceId);
+    invalidateGitStatusCache(workspaceId);
     return { success: res.exitCode === 0, message: res.stdout || (res.exitCode === 0 ? "Pulled latest changes" : "Pull failed") };
   } catch (e: any) {
+    invalidateGitStatusCache(workspaceId);
     return { success: false, message: e?.message || "Pull failed" };
   }
 }
@@ -393,89 +435,16 @@ export async function pushGitRemote(
 ): Promise<{ success: boolean; message: string }> {
   try {
     let res = await executeCommand("git push", workspaceId);
-    if (res.exitCode === 0) return { success: true, message: "Pushed commits to remote" };
+    if (res.exitCode === 0) {
+      invalidateGitStatusCache(workspaceId);
+      return { success: true, message: "Pushed commits to remote" };
+    }
     const branch = branchName || "main";
     res = await executeCommand(`git push -u origin "${branch}"`, workspaceId);
+    invalidateGitStatusCache(workspaceId);
     return { success: res.exitCode === 0, message: res.exitCode === 0 ? "Pushed commits to remote" : (res.stdout || "Push failed") };
   } catch (e: any) {
+    invalidateGitStatusCache(workspaceId);
     return { success: false, message: e?.message || "Push failed" };
-  }
-}
-
-export async function configureGitCredentials(token: string, username: string, email: string): Promise<boolean> {
-  try {
-    const cmds = [
-      `git config --global user.name "${username}"`,
-      `git config --global user.email "${email}"`,
-      `git config --global credential.helper store`,
-      `echo "https://${encodeURIComponent(username)}:${encodeURIComponent(token)}@github.com" > ~/.git-credentials`,
-      `chmod 600 ~/.git-credentials`,
-    ];
-    return (await executeCommand(cmds.join(" && "))).exitCode === 0;
-  } catch (_) {
-    return false;
-  }
-}
-
-export async function getSshPublicKey(): Promise<string | null> {
-  try {
-    const res = await executeCommand("cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub 2>/dev/null");
-    return (res.stdout || "").trim() || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-export async function generateSshKey(email?: string): Promise<{ success: boolean; publicKey?: string; error?: string }> {
-  try {
-    const comment = email?.trim() || "astra-git";
-    const setupCmds = [
-      "mkdir -p ~/.ssh",
-      "chmod 700 ~/.ssh",
-      `ssh-keygen -t ed25519 -C "${comment}" -f ~/.ssh/id_ed25519 -N "" -q`,
-      "chmod 600 ~/.ssh/id_ed25519",
-      "chmod 644 ~/.ssh/id_ed25519.pub",
-      `printf "Host github.com\\n  StrictHostKeyChecking accept-new\\n  IdentityFile ~/.ssh/id_ed25519\\n" > ~/.ssh/config`,
-      "chmod 600 ~/.ssh/config",
-    ];
-    const res = await executeCommand(setupCmds.join(" && "));
-    if (res.exitCode !== 0) return { success: false, error: res.stdout || "Failed to generate SSH key" };
-    const pub = await getSshPublicKey();
-    return { success: !!pub, publicKey: pub || undefined };
-  } catch (e: any) {
-    return { success: false, error: e?.message || "Failed to generate SSH key" };
-  }
-}
-
-export async function getGitRemoteUrl(workspaceId?: string): Promise<string | null> {
-  try {
-    const res = await executeCommand("git remote get-url origin", workspaceId);
-    if (res.exitCode !== 0) return null;
-    const url = (res.stdout || "").trim();
-    if (!url || url.toLowerCase().startsWith("error") || url.toLowerCase().startsWith("fatal")) return null;
-    return url;
-  } catch (_) {
-    return null;
-  }
-}
-
-export async function setGitRemoteUrl(
-  workspaceId: string | undefined,
-  url: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const cleanUrl = url.trim();
-    if (!cleanUrl) {
-      const removeRes = await executeCommand("git remote remove origin", workspaceId);
-      return { success: removeRes.exitCode === 0, error: removeRes.exitCode === 0 ? undefined : removeRes.stdout };
-    }
-    const cmd = `(git remote remove origin 2>/dev/null || true) && git remote add origin "${cleanUrl}"`;
-    const res = await executeCommand(cmd, workspaceId);
-    if (res.exitCode === 0) return { success: true };
-    const setRes = await executeCommand(`git remote set-url origin "${cleanUrl}"`, workspaceId);
-    if (setRes.exitCode === 0) return { success: true };
-    return { success: false, error: res.stdout || setRes.stdout || "Failed to set remote URL" };
-  } catch (e: any) {
-    return { success: false, error: e?.message || "Failed to set remote URL" };
   }
 }
