@@ -106,6 +106,11 @@ object ProotSessionConfig {
             "EXPO_NO_TELEMETRY" to "1",
             "EXPO_USE_LOCAL_CLI" to "1",
             "TERM" to "xterm-256color",
+            "COLORTERM" to "truecolor",
+            "TERM_PROGRAM" to "AstraIDE",
+            // Dark default; JS live-exports the light value on theme switch
+            // so lipgloss/bubbletea TUIs (opencode) pick readable colors.
+            "COLORFGBG" to "15;default;0",
             "LANG" to "C.UTF-8",
             "LC_ALL" to "C.UTF-8",
             "ENV" to "/root/.profile",

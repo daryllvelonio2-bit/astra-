@@ -22,6 +22,7 @@ import { executeCode } from "../runner";
 import { runningTasksService } from "../services/runningTasksService";
 import { reconcileStaleMessages } from "./sessionReconcile";
 import { ideActionService } from "../../ide/services/ideActionService";
+import { useDeltaBatch } from "./useDeltaBatch";
 
 export interface UseChatSessionProps {
   workspaceId?: string;
@@ -37,7 +38,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
 }: UseChatSessionProps) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
-  const [renderLimit, setRenderLimit] = useState(100);
+  const [renderLimit, setRenderLimit] = useState(60);
   const [input, setInputState] = useState("");
   // Synchronous mirror: state lags a render, so a fast type+send tap could
   // read stale (even empty) input and silently drop the send. The ref never lags.
@@ -78,6 +79,11 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
       scrollRef.current?.scrollToEnd({ animated: false });
     }, 100);
   };
+  // Speed: batch fast text deltas into one setState per ~100ms (see hook).
+  const { queueDelta, consumePending, clearDelta } = useDeltaBatch(
+    setMessages,
+    throttleScrollToEnd
+  );
 
   useEffect(() => {
     isAgentWorkingRef.current = agentStatus !== "idle";
@@ -119,7 +125,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
       setCurrentSession(active);
       currentSessionRef.current = active;
       setMessages(reconcileStaleMessages(active.messages || []));
-      setRenderLimit(100);
+      setRenderLimit(60);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 80);
     }
     init();
@@ -226,9 +232,9 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
       const userMsg: AgentChatMessage = { id: `user-${Date.now()}`, role: "user", text: query, timestamp: Date.now() };
       const assistantMsgId = `asst-${Date.now()}`;
       const assistantMsg: AgentChatMessage = { id: assistantMsgId, role: "assistant", text: "", status: "thinking", steps: [], timestamp: Date.now() };
-      const updatedHistory = [...messages, userMsg];
+      const updatedHistory = [...messagesRef.current, userMsg];
       setMessages([...updatedHistory, assistantMsg]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 80);
 
       try {
         let currentWs = workspace;
@@ -275,8 +281,8 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
             }
           },
           onTextDelta: (delta) => {
-            setMessages((prev) => prev.map((msg) => msg.id === assistantMsgId ? { ...msg, text: msg.text + delta } : msg));
-            throttleScrollToEnd();
+            // Batch: accumulate and flush at most once per 100ms.
+            queueDelta(assistantMsgId, delta);
           },
           onStep: (step) => {
             setMessages((prev) =>
@@ -303,13 +309,17 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
           },
         });
 
+        // Flush any batched deltas synchronously so final text is complete.
+        const pendingChunk = consumePending(assistantMsgId);
+
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id !== assistantMsgId) return msg;
+            const streamedText = pendingChunk ? msg.text + pendingChunk : msg.text;
             const rawReply =
-              msg.text && msg.text.trim().length > 0 && response.reply === "✅ Astra CLI task completed."
-                ? msg.text
-                : response.reply || msg.text;
+              streamedText && streamedText.trim().length > 0 && response.reply === "✅ Astra CLI task completed."
+                ? streamedText
+                : response.reply || streamedText;
             // Never persist a machine JSON dump as message text.
             const cleaned = isMachineJsonDump(rawReply) ? sanitizeAgentText(rawReply) : rawReply;
             const finalReply = cleaned.trim().length > 0 ? cleaned : "✅ Completed.";
@@ -327,6 +337,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
           if (onRefreshWorkspace) onRefreshWorkspace();
         }
       } catch (err: any) {
+        clearDelta();
         setMessages((prev) =>
           prev.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: `**Error:** ${err.message || "Unexpected error"}`, status: "error" } : msg))
         );
@@ -335,18 +346,19 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
           clearTimeout(scrollThrottleTimerRef.current);
           scrollThrottleTimerRef.current = null;
         }
+        clearDelta();
         stopTimer();
         setAgentStatus("idle");
         runningTasksService.verifyProcesses();
-        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 100);
       }
     },
-    [agentStatus, messages, selectedCognitiveMode, selectedEffort, workspace, activeFileName, activeFileContent, startTimer, stopTimer, onRefreshWorkspace]
+    [agentStatus, selectedCognitiveMode, selectedEffort, workspace, activeFileName, activeFileContent, startTimer, stopTimer, onRefreshWorkspace, queueDelta, consumePending, clearDelta]
   );
 
   const handleSelectSession = useCallback((session: ConversationSession) => {
     shouldScrollToEndRef.current = true;
-    setRenderLimit(100);
+    setRenderLimit(60);
     currentSessionRef.current = session;
     setCurrentSession(session);
     setMessages(reconcileStaleMessages(session.messages || []));
@@ -357,7 +369,7 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
   const handleCreateNewChat = useCallback(async () => {
     if (!workspace) return;
     shouldScrollToEndRef.current = true;
-    setRenderLimit(100);
+    setRenderLimit(60);
     const newSession = await createSession(workspace.id, "Astra AI");
     currentSessionRef.current = newSession;
     setCurrentSession(newSession);

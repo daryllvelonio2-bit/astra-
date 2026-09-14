@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { TextInput } from "react-native";
 import { useEditorAssists } from "../useEditorAssists";
 import { spliceWindowChunk } from "../editorCursorUtils";
@@ -38,6 +38,9 @@ export function useEditorTextPipeline({
   const chunkRef = useRef(visibleCodeChunk);
   const selectionMirrorRef = useRef(assists.selection);
   const lockSelectionUntilRef = useRef<number>(0);
+  const [controlledSelection, setControlledSelection] = useState<
+    { start: number; end: number } | undefined
+  >(undefined);
 
   useEffect(() => {
     contentRef.current = content;
@@ -47,6 +50,7 @@ export function useEditorTextPipeline({
 
   useEffect(() => {
     assists.setSelection({ start: 0, end: 0 });
+    setControlledSelection(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileName]);
 
@@ -56,6 +60,7 @@ export function useEditorTextPipeline({
       lockSelectionUntilRef.current = Date.now() + 500;
       selectionMirrorRef.current = targetSel;
       assists.setSelectionSync(targetSel);
+      setControlledSelection(targetSel);
       setIsEditing(true);
       textInputRef.current?.focus();
     },
@@ -92,6 +97,7 @@ export function useEditorTextPipeline({
       // Fast path for large paste (delta > 200 chars): skip expensive assist diffs
       let chunk: string;
       let cursor: number;
+      let isAssistAltered = false;
       if (delta > 200) {
         chunk = newChunkText;
         cursor = newChunkText.length;
@@ -99,11 +105,15 @@ export function useEditorTextPipeline({
         const res = assists.assistEdit(chunkRef.current, newChunkText);
         chunk = res.chunk;
         cursor = res.cursor;
+        isAssistAltered = res.chunk !== newChunkText;
       }
       chunkRef.current = chunk;
       const sel = { start: cursor, end: cursor };
       selectionMirrorRef.current = sel;
       assists.setSelectionSync(sel);
+      // Only command native TextInput to move selection if assists altered the text
+      // Otherwise leave selection undefined to prevent IME cursor fights and dropped keystrokes
+      setControlledSelection(isAssistAltered ? sel : undefined);
       handleTextChangeInWindow(chunk);
     },
     [assists, handleTextChangeInWindow]
@@ -115,6 +125,7 @@ export function useEditorTextPipeline({
       const sel = { start: newCursor, end: newCursor };
       selectionMirrorRef.current = sel;
       assists.setSelectionSync(sel);
+      setControlledSelection(sel);
       handleTextChangeInWindow(newChunkText);
     },
     [assists, handleTextChangeInWindow]
@@ -128,6 +139,7 @@ export function useEditorTextPipeline({
       if (sel.start === cur.start && sel.end === cur.end) return;
       selectionMirrorRef.current = sel;
       assists.setSelection(sel);
+      setControlledSelection(undefined);
     },
     [assists]
   );
@@ -135,6 +147,7 @@ export function useEditorTextPipeline({
   return {
     contentRef,
     chunkRef,
+    controlledSelection,
     selectionMirrorRef,
     enterEditModeAtOffset,
     handleEditChange,

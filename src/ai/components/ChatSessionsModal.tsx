@@ -7,6 +7,7 @@ import {
   FlatList,
   StyleSheet,
   Alert,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ConversationSession } from "../agent/agentTypes";
@@ -73,6 +74,10 @@ export function ChatSessionsModal({
           <FlatList
             data={sessions}
             keyExtractor={(item) => item.id}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={Platform.OS === "android"}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => {
               const isActive = item.id === activeSessionId;

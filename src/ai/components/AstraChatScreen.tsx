@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -110,12 +110,34 @@ export function AstraChatScreen({
 
   useEffect(() => {
     if (isKeyboardVisible) {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 80);
     }
   }, [isKeyboardVisible, scrollRef]);
 
-  const visibleMessages = messages.slice(-renderLimit);
+  // Stable slice: 1Hz timer ticks re-render parent but keep same array ref
+  // when messages/renderLimit are unchanged, letting memo rows skip.
+  const visibleMessages = useMemo(() => messages.slice(-renderLimit), [messages, renderLimit]);
   const hiddenCount = Math.max(0, messages.length - renderLimit);
+
+  const handleScroll = useCallback(
+    ({ nativeEvent }: any) => {
+      if (!shouldScrollToEndRef.current && nativeEvent.contentOffset.y <= 5 && hiddenCount > 0) {
+        setRenderLimit((prev) => prev + 20);
+      }
+    },
+    [hiddenCount, setRenderLimit, shouldScrollToEndRef]
+  );
+
+  const handleContentSizeChange = useCallback(() => {
+    // Never animate during streaming — animated scrolls jank on Android.
+    if (shouldScrollToEndRef.current || agentStatus !== "idle") {
+      scrollRef.current?.scrollToEnd({ animated: false });
+    }
+  }, [agentStatus, scrollRef, shouldScrollToEndRef]);
+
+  const handleLoadOlder = useCallback(() => {
+    setRenderLimit((prev) => prev + 20);
+  }, [setRenderLimit]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgPrimary, paddingBottom: keyboardOffset }]}>
@@ -133,23 +155,13 @@ export function AstraChatScreen({
         style={[styles.chatScroll, { backgroundColor: theme.bgPrimary }]}
         contentContainerStyle={[styles.chatContent, messages.length === 0 && styles.emptyChatContent]}
         keyboardShouldPersistTaps="handled"
-        onScroll={({ nativeEvent }) => {
-          if (!shouldScrollToEndRef.current && nativeEvent.contentOffset.y <= 5 && hiddenCount > 0) {
-            setRenderLimit((prev) => prev + 10);
-          }
-        }}
-        onContentSizeChange={() => {
-          if (shouldScrollToEndRef.current) {
-            scrollRef.current?.scrollToEnd({ animated: false });
-          } else if (agentStatus !== "idle") {
-            scrollRef.current?.scrollToEnd({ animated: true });
-          }
-        }}
+        onScroll={handleScroll}
+        onContentSizeChange={handleContentSizeChange}
       >
         {hiddenCount > 0 && (
           <TouchableOpacity
             style={[styles.loadOlderBtn, { backgroundColor: theme.bgTertiary, borderColor: theme.border }]}
-            onPress={() => setRenderLimit((prev) => prev + 10)}
+            onPress={handleLoadOlder}
             activeOpacity={0.7}
           >
             <Ionicons name="time-outline" size={12} color={theme.accent} />

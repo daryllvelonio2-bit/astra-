@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Image,
   Alert,
+  Platform,
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
@@ -194,6 +195,11 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
             <FlatList
               data={items}
               keyExtractor={(item) => item.id}
+              initialNumToRender={8}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === "android"}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.listContent}
               renderItem={({ item }) => {
                 const isInstalled = !!installedMap[item.id];
@@ -261,6 +267,10 @@ export function ExtensionMarketplaceModal({ visible, onClose }: ExtensionMarketp
             <FlatList
               data={installedList}
               keyExtractor={(item) => item.id}
+              initialNumToRender={8}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === "android"}
               contentContainerStyle={styles.listContent}
               ListHeaderComponent={
                 installedList.length > 0 ? (

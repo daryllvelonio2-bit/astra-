@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import { Text, TextStyle, StyleSheet } from "react-native";
 import { TerminalTheme, themeToTerminalTheme } from "./terminalThemes";
 import { useTheme } from "../../../theme/themeContext";
@@ -191,14 +191,34 @@ export const AnsiRenderer = memo(function AnsiRenderer({
   // Empty buffer renders just the cursor — never a fake prompt (a hardcoded
   // prompt would freeze a stale directory on screen instead of the real one).
   const displayText = rawText || "";
-  const isLight = isLightTerminalTheme(theme);
-  const fgPalette = isLight ? ANSI_COLORS_LIGHT : ANSI_COLORS_DARK;
-  const bgPalette = isLight ? ANSI_BG_COLORS_LIGHT : ANSI_BG_COLORS_DARK;
-  const spans = parseAnsiToSpans(displayText, theme.foreground, fgPalette, bgPalette);
-  const dynamicFontSize = {
-    fontSize,
-    lineHeight: Math.round(fontSize * 1.45),
-  };
+  // Speed: palettes/parse memoized so parent ticks (timers, keyboard) with
+  // identical rawText don't rebuild objects + re-run regex.
+  const { spans, dynamicFontSize } = useMemo(() => {
+    const light = isLightTerminalTheme(theme);
+    const baseFg = light ? ANSI_COLORS_LIGHT : ANSI_COLORS_DARK;
+    const baseBg = light ? ANSI_BG_COLORS_LIGHT : ANSI_BG_COLORS_DARK;
+    const fgPalette: Record<number, string> = {
+      ...baseFg,
+      ...(theme.black ? { 30: theme.black } : {}),
+      ...(theme.white ? { 37: theme.white } : {}),
+      ...(theme.brightBlack ? { 90: theme.brightBlack } : {}),
+      ...(theme.brightWhite ? { 97: theme.brightWhite } : {}),
+    };
+    const bgPalette: Record<number, string> = { ...baseBg };
+    // Cap parse input: visible viewport only needs the tail; full flood
+    // re-parsed per chunk is O(n) jank. 60k chars preserves scroll context.
+    const capped = displayText.length > 60000 ? displayText.slice(-60000) : displayText;
+    let parsed = parseAnsiToSpans(capped, theme.foreground, fgPalette, bgPalette);
+    // Cap native <Text> count: thousands of spans stall the bridge.
+    if (parsed.length > 1500) parsed = parsed.slice(-1500);
+    return {
+      spans: parsed,
+      dynamicFontSize: {
+        fontSize,
+        lineHeight: Math.round(fontSize * 1.45),
+      },
+    };
+  }, [displayText, theme, fontSize]);
 
   return (
     <Text style={[styles.baseText, dynamicFontSize, { color: theme.foreground }]}>

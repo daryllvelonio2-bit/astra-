@@ -34,6 +34,11 @@ interface UseTerminalSessionProps {
 
 const getBanner = (workspaceId?: string, isDark: boolean = true) => getBannerTitle(workspaceId, isDark);
 
+// Lipgloss/bubbletea TUIs (opencode) pick dark vs light variants via
+// COLORFGBG. Native defaults to dark ("15;default;0"); JS live-exports the
+// light value when the global theme is light so black-on-black never happens.
+const colorFgBgForTheme = (isDark: boolean) => (isDark ? "15;default;0" : "0;default;15");
+
 // Shell spawn honoring the Phase 2 flag (PTY vs legacy pipe shell).
 async function startShellSession(sessionId: string, workspaceId?: string) {
   if (PTY_XTERM_ENABLED) {
@@ -77,6 +82,18 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
   // no-op for a running id, so these must be stopped when the workspace
   // changes — otherwise terminals keep the old workspace cwd and binds.
   const shellIdsRef = useRef<string[]>(["session-1"]);
+  // Last COLORFGBG pushed per shell session; avoids re-export spam.
+  const exportedFgBgRef = useRef<Record<string, string>>({});
+
+  const pushThemeEnv = useCallback((sessionId: string, isDark: boolean) => {
+    if (sessionId.startsWith("task-")) return;
+    const want = colorFgBgForTheme(isDark);
+    if (exportedFgBgRef.current[sessionId] === want) return;
+    exportedFgBgRef.current[sessionId] = want;
+    try {
+      writeTerminalInput(sessionId, `export COLORFGBG="${want}" COLORTERM=truecolor TERM_PROGRAM=AstraIDE\n`);
+    } catch (_) {}
+  }, []);
 
   const foldNativeHistory = useCallback((sessionId: string, hist: string) => {
     const cleanHist = hist.replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "");
@@ -111,6 +128,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       if (!mounted) return;
       setIsReady(true);
       await startShellSession("session-1", workspaceId);
+      pushThemeEnv("session-1", appTheme.isDark);
       const hist = await getSessionHistory("session-1");
       if (hist && mounted) {
         foldNativeHistory("session-1", hist);
@@ -126,7 +144,15 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       });
       shellIdsRef.current = ["session-1"];
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
+
+  // Live global theme → shell hint: when user flips Light/Dark, push the new
+  // COLORFGBG to the active shell so the next `opencode` launch adapts.
+  useEffect(() => {
+    if (!isReady) return;
+    pushThemeEnv(activeSessionId, appTheme.isDark);
+  }, [appTheme.isDark, activeSessionId, isReady, pushThemeEnv]);
 
   // Subscribe to native terminal streaming events for the active session.
   // Skipped for shell tabs in PTY mode: XtermView owns that stream (this
@@ -313,7 +339,8 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     setActiveSessionId(newId);
 
     await startShellSession(newId, workspaceId);
-  }, [sessions, workspaceId]);
+    pushThemeEnv(newId, appTheme.isDark);
+  }, [sessions, workspaceId, appTheme.isDark, pushThemeEnv]);
 
   const closeSession = useCallback(
     async (idToClose: string) => {
@@ -338,6 +365,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
         delete copy[idToClose];
         return copy;
       });
+      delete exportedFgBgRef.current[idToClose];
 
       if (activeSessionId === idToClose) {
         setActiveSessionId(remaining[0]?.id || "session-1");
@@ -366,9 +394,11 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     await stopTerminalSession(activeSessionId);
     setSessionOutputs((prev) => ({ ...prev, [activeSessionId]: getBanner(workspaceId) }));
     seenNativeLen.current[activeSessionId] = 0;
+    delete exportedFgBgRef.current[activeSessionId];
     await startShellSession(activeSessionId, workspaceId);
+    pushThemeEnv(activeSessionId, appTheme.isDark);
     showToast("Session restarted");
-  }, [activeSessionId, workspaceId, showToast]);
+  }, [activeSessionId, workspaceId, appTheme.isDark, pushThemeEnv, showToast]);
 
   const clearActiveSession = useCallback(() => {
     if (activeSessionId.startsWith("task-")) {

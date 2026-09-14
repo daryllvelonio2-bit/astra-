@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AstraLogo } from "./AstraLogo";
@@ -10,6 +10,7 @@ import { RawDumpView } from "./RawDumpView";
 import { Clipboard } from "../../ide/services/clipboardService";
 import { useTheme } from "../../theme/themeContext";
 import { ideActionService } from "../../ide/services/ideActionService";
+import { useAgentMessageData } from "./useAgentMessageData";
 
 interface AgentMessageItemProps {
   message: AgentChatMessage;
@@ -24,32 +25,33 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
 }: AgentMessageItemProps) {
   const { theme, isMidnight } = useTheme();
   const isUser = message.role === "user";
-  const [showThoughts, setShowThoughts] = useState(true);
-  const [showSteps, setShowSteps] = useState(true);
-  const [showAllHistory, setShowAllHistory] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState(false);
 
-  const steps = message.steps || [];
+  // Speed: step filtering + toggles memoized per steps change (see hook).
+  const {
+    steps, thoughtSteps, toolSteps, totalToolSteps, visibleToolSteps, hiddenCount,
+    showThoughts, showSteps, showAllHistory, setShowSteps,
+    handleToggleThoughts, handleToggleSteps, handleShowAllHistory, handleHideOlderHistory,
+  } = useAgentMessageData(message);
   const isExecuting =
     message.status === "thinking" ||
     message.status === "executing_tool" ||
     message.status === "verifying";
 
-  // Separate thoughts from actionable tool steps
-  const thoughtSteps = steps.filter((s) => s.type === "thought" && s.content?.trim());
-  const toolSteps = steps.filter(
-    (s) =>
-      s.type !== "thought" &&
-      s.toolName !== "update_topic" &&
-      s.toolName !== "set_topic" &&
-      !s.content?.startsWith("## Topic:")
-  );
+  // Auto-close the Actions section when everything is done. Fires only on
+  // the transition into a terminal status so a manual reopen afterwards
+  // stays open for inspection. Covers done/error plus idle (stopped or
+  // reloaded history) when actions exist.
+  const isTerminal = message.status === "done" || message.status === "error" || message.status === "idle";
+  const prevTerminalRef = useRef(false);
+  useEffect(() => {
+    if (isTerminal && !prevTerminalRef.current && totalToolSteps > 0) {
+      setShowSteps(false);
+    }
+    prevTerminalRef.current = isTerminal;
+  }, [isTerminal, totalToolSteps]);
 
-  const totalToolSteps = toolSteps.length;
-  const visibleToolSteps = showAllHistory || totalToolSteps <= 3 ? toolSteps : toolSteps.slice(-3);
-  const hiddenCount = totalToolSteps > 3 && !showAllHistory ? totalToolSteps - 3 : 0;
-
-  const handleCopyMessage = async () => {
+  const handleCopyMessage = useCallback(async () => {
     try {
       const ok = await Clipboard.setStringAsync(message.text || "");
       if (ok) {
@@ -57,7 +59,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
         setTimeout(() => setCopiedMsg(false), 2000);
       }
     } catch (_) {}
-  };
+  }, [message.text]);
 
   const renderFormattedText = (text: string) => {
     const isActive = isExecuting || message.status === "error";
@@ -216,11 +218,6 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
             backgroundColor: theme.bubbleAssistant,
             borderColor: isMidnight ? theme.borderLight : theme.bubbleAssistantBorder,
           },
-          isMidnight && {
-            shadowColor: theme.accentCyan,
-            shadowOpacity: 0.15,
-            shadowRadius: 8,
-          },
         ]}
       >
         {/* Streamlined Thought Process (No boxes / step wrapper) */}
@@ -228,7 +225,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
           <View style={[styles.thoughtsWrapper, { borderBottomColor: theme.border }]}>
             <TouchableOpacity
               style={styles.thoughtsHeader}
-              onPress={() => setShowThoughts(!showThoughts)}
+              onPress={handleToggleThoughts}
               activeOpacity={0.7}
             >
               <View style={styles.thoughtsHeaderLeft}>
@@ -260,7 +257,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
           <View style={[styles.stepsSection, { backgroundColor: theme.bgPrimary, borderColor: theme.border }]}>
             <TouchableOpacity
               style={[styles.stepsSummaryHeader, { backgroundColor: theme.bgSecondary }]}
-              onPress={() => setShowSteps(!showSteps)}
+              onPress={handleToggleSteps}
               activeOpacity={0.7}
             >
               <View style={styles.stepsSummaryLeft}>
@@ -277,7 +274,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
                 {hiddenCount > 0 && (
                   <TouchableOpacity
                     style={[styles.olderStepsBadge, { backgroundColor: theme.bgTertiary }]}
-                    onPress={() => setShowAllHistory(true)}
+                    onPress={handleShowAllHistory}
                     activeOpacity={0.7}
                   >
                     <Ionicons name="time-outline" size={11} color={theme.accent} />
@@ -303,7 +300,7 @@ export const AgentMessageItem = React.memo(function AgentMessageItem({
                 {showAllHistory && totalToolSteps > 3 && (
                   <TouchableOpacity
                     style={[styles.olderStepsBadge, { backgroundColor: theme.bgTertiary }]}
-                    onPress={() => setShowAllHistory(false)}
+                    onPress={handleHideOlderHistory}
                     activeOpacity={0.7}
                   >
                     <Ionicons name="chevron-up" size={11} color={theme.accent} />
@@ -372,8 +369,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
   },
-  astraAuthorName: {
-  },
   astraBadgeIcon: {
     width: 16,
     height: 16,
@@ -422,7 +417,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   messageText: { fontSize: 12.5, lineHeight: 18 },
-  userText: { },
   assistantText: { },
   thinkingCard: {
     borderRadius: 6,
@@ -430,8 +424,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginVertical: 2,
     gap: 4,
-  },
-  thinkingCardError: {
   },
   thinkingHeader: {
     flexDirection: "row",

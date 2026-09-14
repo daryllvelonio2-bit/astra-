@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, StyleSheet, StatusBar, Alert, Animated, Keyboard, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FileExplorer } from "./FileExplorer";
@@ -27,6 +27,8 @@ import { useIdeActionBridge } from "./useIdeActionBridge";
 import { SettingsModal } from "./SettingsModal";
 import { resolveChatPathToRelative } from "../services/chatFileLinkService";
 import { useRecentFiles } from "./editor/useRecentFiles";
+import { useIDELayoutCallbacks } from "./useIDELayoutCallbacks";
+import { useIDELayoutStyles } from "./useIDELayoutStyles";
 import {
   BottomTabVisibility, DEFAULT_BOTTOM_TABS, firstVisibleTab, loadAstraEnabled,
   loadBottomTabs, loadDefaultEditorUi, normalizeBottomTabs, subscribeConfigChanges, ToggleableBottomTab,
@@ -55,7 +57,29 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   const visibleTabsRef = useRef<BottomTabVisibility>({ ...DEFAULT_BOTTOM_TABS });
 
   useEffect(() => {
-    setVisitedTabs((prev) => (prev.has(bottomTab) ? prev : new Set(prev).add(bottomTab)));
+    setVisitedTabs((prev) => {
+      if (prev.has(bottomTab)) return prev;
+      const next = new Set(prev);
+      next.add(bottomTab);
+      // Speed: cap live tabs so hidden WebViews don't pile up (each keeps
+      // JS + intervals alive). Pinned: editor (keep-alive), terminal (shells
+      // die on unmount), agents (input draft). Others (browser/git/desktop/
+      // vscode) reconstruct on revisit — no user data lost.
+      const MAX_LIVE_TABS = 5;
+      const PINNED: ToggleableBottomTab[] = ["editor", "terminal", "agents"];
+      while (next.size > MAX_LIVE_TABS) {
+        let evicted = false;
+        for (const tab of next) {
+          if (tab !== bottomTab && !PINNED.includes(tab)) {
+            next.delete(tab);
+            evicted = true;
+            break;
+          }
+        }
+        if (!evicted) break;
+      }
+      return next;
+    });
   }, [bottomTab]);
 
   useEffect(() => {
@@ -114,6 +138,12 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   const [loadSeq, setLoadSeq] = useState(0);
   const lastLoadStatusRef = useRef(0);
   const prevLoadedWsIdRef = useRef<string | null>(null);
+  // Speed: stable ref so content-change callback never recreates per keystroke.
+  const activeFileRef = useRef<FileNode | null>(null);
+  useEffect(() => {
+    activeFileRef.current = activeFile;
+  }, [activeFile]);
+  const runningTasksSigRef = useRef("");
 
   // Landscape mode: auto-hide navbar & park file sidebar on rotate
   useEffect(() => {
@@ -130,10 +160,18 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
   }, [desktopFullscreen, isLandscape]);
 
   useEffect(() => {
-    const unsubTasks = runningTasksService.subscribe(setRunningTasks);
-    const unsubTrigger = runningTasksService.subscribeTrigger(() => safeSetBottomTab("terminal"));
-    return () => { unsubTasks(); unsubTrigger(); };
-  }, [safeSetBottomTab]);
+    const unsubTasks = runningTasksService.subscribe((currentTasks) => {
+      const sig = currentTasks.map((t) => `${t.id}|${t.status}`).join(";");
+      if (sig !== runningTasksSigRef.current) {
+        runningTasksSigRef.current = sig;
+        setRunningTasks(currentTasks);
+      }
+    });
+    // Never auto-switch tabs on background task registration — the user
+    // stays where they are (e.g. chat). Tasks surface via RunningTasksBar
+    // badge; explicit taps navigate.
+    return () => { unsubTasks(); };
+  }, []);
 
   // Open a raw agent/chat file path inside the given workspace, normalizing
   // PRoot (/workspace, /workspaces/<id>) and file:// prefixes to relative paths.
@@ -165,6 +203,8 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     setBrowserUrl(targetUrl);
     safeSetBottomTab("browser");
   }, [safeSetBottomTab]);
+
+  const onOpenTerminal = useCallback(() => safeSetBottomTab("terminal"), [safeSetBottomTab]);
 
   const { consumePendingActions } = useIdeActionBridge({
     workspace,
@@ -227,18 +267,18 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
 
   const { scheduleSave, flush: flushPendingSave } = useDebouncedFileSave(workspace?.id);
 
-  const handleBackToPicker = () => {
+  const handleBackToPicker = useCallback(() => {
     flushPendingSave();
     onBackToPicker?.();
-  };
+  }, [flushPendingSave, onBackToPicker]);
 
-  const refreshWorkspace = async () => {
+  const refreshWorkspace = useCallback(async () => {
     if (!workspace) return;
     try {
       const updated = await loadWorkspace(workspace.id);
       setWorkspace(updated);
     } catch (e) {}
-  };
+  }, [workspace]);
 
   const handleSelectFile = useCallback(async (file: any) => {
     if (!file || file.type === "folder" || !workspace) return;
@@ -263,29 +303,15 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     } catch (_) {}
   }, [workspace, isLandscape, safeSetBottomTab, flushPendingSave, recordRecentFile]);
 
-  const handleContentChange = (newContent: string) => {
-    if (!activeFile) return;
-    setActiveFile((prev) => (prev ? { ...prev, content: newContent } : null));
-    scheduleSave(activeFile.path || activeFile.name, newContent);
-    recordRecentFile(activeFile, true);
-  };
-
-  const handleEditModeChange = useCallback((editing: boolean) => {
-    if (editing) {
-      setIsSidebarOpen(false);
-    } else {
-      if (manualSidebarHiddenRef.current) {
-        setIsSidebarOpen(false);
-        if (isLandscapeNavbarHiddenRef.current && navbarTurnedOffReasonRef.current === "auto") {
-          setIsLandscapeNavbarHidden(false);
-          isLandscapeNavbarHiddenRef.current = false;
-          navbarTurnedOffReasonRef.current = null;
-        }
-      } else {
-        setIsSidebarOpen(true);
-      }
-    }
-  }, []);
+  const handleContentChange = useCallback((newContent: string) => {
+    const current = activeFileRef.current;
+    if (!current) return;
+    const targetPath = current.path || current.name;
+    const targetId = current.id;
+    setActiveFile((prev) => (prev && prev.id === targetId ? { ...prev, content: newContent } : prev));
+    scheduleSave(targetPath, newContent);
+    recordRecentFile(current, true);
+  }, [scheduleSave, recordRecentFile]);
 
   const {
     selectedNode, modalMode, setModalMode, modalInput, setModalInput, menuPosition,
@@ -293,8 +319,35 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     handleMoveNode, handleRunActiveFile,
   } = useWorkspaceFileActions({
     workspace, setWorkspace, activeFile, setActiveFile, refreshWorkspace,
-    onOpenTerminal: () => safeSetBottomTab("terminal"),
+    onOpenTerminal,
     onOpenPreview: handleOpenInBrowser,
+  });
+
+  // Speed: stable callbacks so memoized children don't re-render per parent tick.
+  const {
+    handleToggleCollapse, handleQuickAddFile, handleShowSidebar,
+    handleOpenSettings, handleCloseSettings, handleOpenMarketplace,
+    handleCloseMarketplace, handleNavigateToEditor,
+    handleHideNavbar, handleShowNavbar, handleRetryLoad,
+    handleCloseFileModal, handleSelectRename, handleSelectAdd,
+    handleAddSubmit, handleBackToOptions, handleEditModeChange,
+  } = useIDELayoutCallbacks({
+    safeSetBottomTab, setIsSidebarOpen, setModalInput, setModalMode,
+    setSettingsModalVisible, setMarketplaceVisible, setLoadError,
+    setLoadStatus, setLoadSeq, selectedNode, modalInput, handleCreateNode,
+    manualSidebarHiddenRef, isLandscapeNavbarHiddenRef,
+    navbarTurnedOffReasonRef, setIsLandscapeNavbarHidden,
+  });
+
+  const { runningTaskCount, containerStyle, sidebarAnimStyle } = useIDELayoutStyles({
+    runningTasks,
+    bgPrimary: theme.bgPrimary,
+    desktopFullscreen,
+    isLandscape,
+    insetTop: insets.top,
+    insetLeft: insets.left,
+    insetRight: insets.right,
+    sidebarWidthAnim,
   });
 
   if (!workspace) {
@@ -304,23 +357,13 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
         statusText={loadError ? `Couldn't open workspace: ${loadError}` : loadStatus}
         isError={!!loadError}
         onBack={handleBackToPicker}
-        onRetry={() => { setLoadError(null); setLoadStatus("Retrying…"); setLoadSeq((s) => s + 1); }}
+        onRetry={handleRetryLoad}
       />
     );
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: theme.bgPrimary,
-          paddingTop: (desktopFullscreen || isLandscape) ? 0 : insets.top,
-          paddingLeft: (desktopFullscreen || isLandscape) ? 0 : insets.left,
-          paddingRight: (desktopFullscreen || isLandscape) ? 0 : insets.right,
-        },
-      ]}
-    >
+    <View style={containerStyle}>
       <StatusBar
         barStyle={theme.isDark ? "light-content" : "dark-content"}
         backgroundColor={theme.bgSecondary}
@@ -330,23 +373,17 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
       {/* Main Workspace Area */}
       <View style={styles.workspace}>
         {isSidebarOpen && bottomTab === "editor" && (
-          <Animated.View style={[styles.sidebarWrapper, { width: sidebarWidthAnim }]}>
+          <Animated.View style={sidebarAnimStyle}>
             <FileExplorer
               projectName={workspace.name}
               files={workspace.root.children || []}
               onSelectFile={handleSelectFile}
               activeFileId={activeFile?.id}
-              onToggleCollapse={() => {
-                manualSidebarHiddenRef.current = true;
-                setIsSidebarOpen(false);
-              }}
+              onToggleCollapse={handleToggleCollapse}
               onRefreshFiles={refreshWorkspace}
               onLongPressNode={handleLongPressNode}
               onCreateFile={handleCreateNode}
-              onQuickAddFile={() => {
-                setModalInput("");
-                setModalMode("add");
-              }}
+              onQuickAddFile={handleQuickAddFile}
               onMoveNode={handleMoveNode}
               resizerPanHandlers={resizerPanHandlers}
               isDraggingSidebar={isDraggingSidebar}
@@ -363,13 +400,10 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
                 content={activeFile?.content || ""}
                 onChangeContent={handleContentChange}
                 onExitProject={handleBackToPicker}
-                onToggleSidebar={!isSidebarOpen ? () => {
-                  manualSidebarHiddenRef.current = false;
-                  setIsSidebarOpen(true);
-                } : undefined}
+                onToggleSidebar={!isSidebarOpen ? handleShowSidebar : undefined}
                 onRunFile={handleRunActiveFile}
                 onEditModeChange={handleEditModeChange}
-                onOpenSettings={() => setSettingsModalVisible(true)}
+                onOpenSettings={handleOpenSettings}
                 recentFiles={recentFiles}
                 onSelectRecentFile={handleSelectFile}
                 onCloseRecentFile={removeRecentFile}
@@ -410,9 +444,9 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
                 workspace={workspace}
                 astraEnabled={astraEnabled}
                 onNavigateToWorkspaces={handleBackToPicker}
-                onNavigateToEditor={() => safeSetBottomTab("editor")}
-                onOpenSettings={() => setSettingsModalVisible(true)}
-                onOpenMarketplace={() => setMarketplaceVisible(true)}
+                onNavigateToEditor={handleNavigateToEditor}
+                onOpenSettings={handleOpenSettings}
+                onOpenMarketplace={handleOpenMarketplace}
                 visible={bottomTab === "agents"}
               />
             </View>
@@ -425,20 +459,12 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
         <IDEBottomBar
           bottomTab={bottomTab}
           onChangeTab={safeSetBottomTab}
-          runningTaskCount={runningTasks.filter((t) => t.status === "running").length}
+          runningTaskCount={runningTaskCount}
           compact={isLandscape}
           visibleTabs={visibleTabs}
           isLandscapeNavbarHidden={isLandscapeNavbarHidden}
-          onHideNavbar={() => {
-            setIsLandscapeNavbarHidden(true);
-            isLandscapeNavbarHiddenRef.current = true;
-            navbarTurnedOffReasonRef.current = "manual";
-          }}
-          onShowNavbar={() => {
-            setIsLandscapeNavbarHidden(false);
-            isLandscapeNavbarHiddenRef.current = false;
-            navbarTurnedOffReasonRef.current = null;
-          }}
+          onHideNavbar={handleHideNavbar}
+          onShowNavbar={handleShowNavbar}
         />
       )}
 
@@ -446,21 +472,21 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
       {modalMode !== "none" && (
         <FileActionModal
           modalMode={modalMode} selectedNode={selectedNode} menuPosition={menuPosition}
-          modalInput={modalInput} onChangeInput={setModalInput} onClose={() => setModalMode("none")}
-          onSelectRename={() => { setModalInput(selectedNode?.name || ""); setModalMode("rename"); }}
-          onSelectAdd={() => { setModalInput(""); setModalMode("add"); }}
+          modalInput={modalInput} onChangeInput={setModalInput} onClose={handleCloseFileModal}
+          onSelectRename={handleSelectRename}
+          onSelectAdd={handleSelectAdd}
           onDeleteConfirm={confirmAndDeleteNode} onRenameSubmit={handleRenameSubmit}
-          onAddSubmit={() => { setModalMode("none"); handleCreateNode(modalInput); setModalInput(""); }}
-          onBackToOptions={() => setModalMode("options")}
+          onAddSubmit={handleAddSubmit}
+          onBackToOptions={handleBackToOptions}
         />
       )}
 
       {/* Settings & Marketplace Modals */}
       <SettingsModal
-        visible={isSettingsModalVisible} onClose={() => setSettingsModalVisible(false)}
+        visible={isSettingsModalVisible} onClose={handleCloseSettings}
         workspaceId={workspace?.id} onSyncWorkspace={refreshWorkspace}
       />
-      <ExtensionMarketplaceModal visible={isMarketplaceVisible} onClose={() => setMarketplaceVisible(false)} />
+      <ExtensionMarketplaceModal visible={isMarketplaceVisible} onClose={handleCloseMarketplace} />
     </View>
   );
 }

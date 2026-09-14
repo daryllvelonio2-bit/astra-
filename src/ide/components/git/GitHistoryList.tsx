@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, FlatList, StyleSheet, Image } from "react-native";
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Image, Platform } from "react-native";
 import { Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
 import { useOrientation } from "../../../theme/useOrientation";
@@ -59,6 +59,10 @@ export function GitHistoryList({
     <FlatList
       data={commits}
       keyExtractor={(item) => item.hash}
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews={Platform.OS === "android"}
       style={styles.container}
       contentContainerStyle={commits.length === 0 ? styles.emptyContainer : undefined}
       renderItem={({ item }) => {

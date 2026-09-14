@@ -96,7 +96,7 @@ export function useWorkspaceFileActions({
     }
 
     try {
-      const newNode = await createFileInWorkspace(workspace.id, targetPath, isFolder ? "" : "// New file\n");
+      const newNode = await createFileInWorkspace(workspace.id, targetPath, "");
       if (!isFolder) setActiveFile(newNode);
       await refreshWorkspace();
     } catch (_) {}

@@ -242,43 +242,40 @@ export interface TokenizedLine {
 
 
 export const TOKEN_COLORS_DARK: Record<TokenType, string> = {
-  keyword: "#c678dd",   // Vibrant Purple
-  string: "#98c379",    // Mint Green
-  comment: "#5c6370",   // Slate Italic
-  function: "#61afef",  // Sky Blue
-  jsx_tag: "#e06c75",   // Coral Red
-  number: "#d19a66",    // Warm Orange
-  property: "#e5c07b",  // Golden Sand
-  boolean: "#d19a66",   // Warm Orange
-  operator: "#abb2bf",  // Silver
-  plain: "#abb2bf",     // Default Text
+  keyword: "#c678dd", string: "#98c379", comment: "#5c6370", function: "#61afef",
+  jsx_tag: "#e06c75", number: "#d19a66", property: "#e5c07b", boolean: "#d19a66",
+  operator: "#abb2bf", plain: "#abb2bf",
 };
 
 // Light-mode palette tuned for readability on near-white backgrounds.
 // Keeps the same hues, darkened for WCAG-friendly contrast.
 export const TOKEN_COLORS_LIGHT: Record<TokenType, string> = {
-  keyword: "#7c3aed",   // Deep Purple
-  string: "#15803d",    // Forest Green
-  comment: "#94a3b8",   // Slate
-  function: "#1d4ed8",  // Royal Blue
-  jsx_tag: "#be123c",   // Crimson
-  number: "#b45309",    // Burnt Orange
-  property: "#92400e",  // Saddle Brown
-  boolean: "#b45309",   // Burnt Orange
-  operator: "#475569",  // Slate Gray
-  plain: "#0f172a",     // Near-black
+  keyword: "#7c3aed", string: "#15803d", comment: "#94a3b8", function: "#1d4ed8",
+  jsx_tag: "#be123c", number: "#b45309", property: "#92400e", boolean: "#b45309",
+  operator: "#475569", plain: "#0f172a",
 };
 
 export function getTokenColors(
   themeOrIsDark: boolean | { isDark?: boolean; tokenColors?: Partial<Record<TokenType, string>> }
 ): Record<TokenType, string> {
   const isDark = typeof themeOrIsDark === "boolean" ? themeOrIsDark : (themeOrIsDark?.isDark ?? true);
-  const base = isDark ? { ...TOKEN_COLORS_DARK } : { ...TOKEN_COLORS_LIGHT };
-  if (typeof themeOrIsDark === "object" && themeOrIsDark?.tokenColors) {
-    return { ...base, ...themeOrIsDark.tokenColors };
+  const custom = typeof themeOrIsDark === "object" ? themeOrIsDark?.tokenColors : undefined;
+  // Speed: called per render per editor row — cache by theme identity.
+  // No behavior change: same output object reused while theme is unchanged.
+  if (custom === lastTokenCustom && isDark === lastTokenIsDark && lastTokenResult) {
+    return lastTokenResult;
   }
-  return base;
+  const base = isDark ? { ...TOKEN_COLORS_DARK } : { ...TOKEN_COLORS_LIGHT };
+  const result = custom ? { ...base, ...custom } : base;
+  lastTokenCustom = custom;
+  lastTokenIsDark = isDark;
+  lastTokenResult = result;
+  return result;
 }
+
+let lastTokenCustom: Partial<Record<TokenType, string>> | undefined;
+let lastTokenIsDark = true;
+let lastTokenResult: Record<TokenType, string> | null = null;
 
 const JS_KEYWORDS = new Set([
   "const", "let", "var", "function", "return", "import", "export", "default",
@@ -407,12 +404,19 @@ function pushTok(tokens: CodeToken[], text: string, type: TokenType) {
   }
 }
 
+const LINE_CACHE = new Map<string, CodeToken[]>();
+const MAX_LINE_CACHE_ENTRIES = 3000;
+
 function tokenizeLineFragment(
   line: string,
   grammar?: LanguageGrammar | null,
   regex: RegExp = TOKENIZER_REGEX_SLASH
 ): CodeToken[] {
   if (!line) return [{ text: "", type: "plain" }];
+
+  const cacheKey = (grammar?.id || "_") + ":" + line;
+  const cached = LINE_CACHE.get(cacheKey);
+  if (cached) return cached;
 
   const tokens: CodeToken[] = [];
   regex.lastIndex = 0;
@@ -475,5 +479,9 @@ function tokenizeLineFragment(
     pushTok(tokens, line.slice(lastIndex), "plain");
   }
 
+  if (LINE_CACHE.size >= MAX_LINE_CACHE_ENTRIES) {
+    LINE_CACHE.clear();
+  }
+  LINE_CACHE.set(cacheKey, tokens);
   return tokens;
 }

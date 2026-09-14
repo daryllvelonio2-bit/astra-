@@ -63,6 +63,7 @@ html, body {
     lineHeight: 1.25,
     scrollback: 5000,
     theme: __THEME_JSON__,
+    minimumContrastRatio: 7,
     convertEol: false
   });
   var fit = new FitAddon.FitAddon();

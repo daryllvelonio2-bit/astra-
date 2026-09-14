@@ -23,7 +23,7 @@ interface ContinuationSplitViewProps {
   keyboardMouseMode: boolean;
   textInputRef: React.RefObject<TextInput | null>;
   onEditChange: (text: string) => void;
-  selection: { start: number; end: number };
+  selection?: { start: number; end: number };
   onSelectionChange: (sel: { start: number; end: number }) => void;
   editGutterColor: (lineNum: number) => string;
   cursorLine?: number;

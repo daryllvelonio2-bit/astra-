@@ -2,18 +2,16 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { tokenizeCode, TokenizedLine } from "../../services/syntaxTokenizer";
 
 /**
- * Debounced tokenization hook for edit mode.
+ * Tokenization hook for editor view and edit modes.
  *
- * All React hooks are called unconditionally to strictly obey the Rules of Hooks.
- * - In view mode (isEditing=false): uses synchronous memoized tokenization.
- * - In edit mode (isEditing=true): debounces tokenization (150ms for typing, 300ms for large paste)
- *   so the JS thread remains completely responsive during rapid typing and huge pastes.
+ * Uses line-level cached tokenization (< 1ms per typing stroke) so that
+ * the tokenizedLines never lag behind what the user types.
+ * For large pastes, sets isPasting to true so EditorEditRow can fast-path
+ * raw text without incurring thousands of React text allocations.
  */
 
-const TYPING_DEBOUNCE_MS = 150;
-const PASTE_DEBOUNCE_MS = 300;
-/** Delta threshold to detect a paste vs normal typing. */
-const PASTE_CHAR_THRESHOLD = 20;
+const PASTE_DEBOUNCE_MS = 250;
+const PASTE_CHAR_THRESHOLD = 30;
 
 export function useDebouncedTokens(
   visibleCodeChunk: string,
@@ -21,26 +19,20 @@ export function useDebouncedTokens(
   startLineNumber: number,
   isEditing: boolean
 ): { tokenizedLines: TokenizedLine[]; isPasting: boolean } {
-  // Synchronous memoized tokens for view mode
+  // Synchronous memoized tokens (line-level cached, < 1ms)
   const syncTokens = useMemo(() => {
-    if (isEditing) return null;
     return tokenizeCode(visibleCodeChunk, fileName, startLineNumber);
-  }, [visibleCodeChunk, fileName, startLineNumber, isEditing]);
+  }, [visibleCodeChunk, fileName, startLineNumber]);
 
-  // Debounced tokens state for edit mode
-  const [asyncTokens, setAsyncTokens] = useState<TokenizedLine[]>(() =>
-    tokenizeCode(visibleCodeChunk, fileName, startLineNumber)
-  );
   const [isPasting, setIsPasting] = useState(false);
   const prevChunkLenRef = useRef(visibleCodeChunk.length);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pasteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Unconditional effect: handles debouncing when isEditing is true
   useEffect(() => {
     if (!isEditing) {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
+      if (pasteTimerRef.current) {
+        clearTimeout(pasteTimerRef.current);
+        pasteTimerRef.current = null;
       }
       setIsPasting(false);
       prevChunkLenRef.current = visibleCodeChunk.length;
@@ -53,33 +45,25 @@ export function useDebouncedTokens(
 
     if (isLargePaste) {
       setIsPasting(true);
+      if (pasteTimerRef.current) {
+        clearTimeout(pasteTimerRef.current);
+      }
+      pasteTimerRef.current = setTimeout(() => {
+        pasteTimerRef.current = null;
+        setIsPasting(false);
+      }, PASTE_DEBOUNCE_MS);
     }
-
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    const delay = isLargePaste ? PASTE_DEBOUNCE_MS : TYPING_DEBOUNCE_MS;
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = null;
-      const tokens = tokenizeCode(visibleCodeChunk, fileName, startLineNumber);
-      setAsyncTokens(tokens);
-      setIsPasting(false);
-    }, delay);
 
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
+      if (pasteTimerRef.current) {
+        clearTimeout(pasteTimerRef.current);
+        pasteTimerRef.current = null;
       }
     };
-  }, [visibleCodeChunk, fileName, startLineNumber, isEditing]);
-
-  // Return synchronous tokens in view mode, or debounced tokens in edit mode
-  const tokenizedLines = !isEditing && syncTokens ? syncTokens : asyncTokens;
+  }, [visibleCodeChunk, isEditing]);
 
   return {
-    tokenizedLines,
+    tokenizedLines: syncTokens,
     isPasting: isEditing && isPasting,
   };
 }

@@ -74,18 +74,16 @@ export function formatToolAction(
 }
 
 /**
- * Parses embedded [IDE_ACTION: ...] command tags from AI agent streams and executes them in the IDE.
+ * Parses embedded [IDE_ACTION: ...] command tags from AI agent streams.
+ *
+ * Background agent output must never steal focus, so navigation-bearing
+ * tags (OPEN_FILE / OPEN_BROWSER / SWITCH_TAB) are intentionally ignored
+ * here. The user stays in chat; explicit View/Preview taps navigate via
+ * userInitiated=true. SWITCH_WORKSPACE is still honored since it carries
+ * no tab switch.
  */
 export function parseAndExecuteIdeActions(text: string, workspaceId?: string): void {
   if (!text) return;
-  const fM = text.match(/\[IDE_ACTION:\s*OPEN_FILE\s+([^\]\n]+)\]/i);
-  if (fM) ideActionService.openFile(fM[1].trim(), undefined, workspaceId);
-
-  const bM = text.match(/\[IDE_ACTION:\s*OPEN_BROWSER\s+([^\]\n]+)\]/i);
-  if (bM) ideActionService.openBrowser(bM[1].trim());
-
-  const tM = text.match(/\[IDE_ACTION:\s*SWITCH_TAB\s+(editor|terminal|browser)\]/i);
-  if (tM) ideActionService.switchTab(tM[1].toLowerCase() as any);
 
   const wM = text.match(/\[IDE_ACTION:\s*SWITCH_WORKSPACE\s+([^\]\n]+)\]/i);
   if (wM) ideActionService.switchWorkspace(wM[1].trim());

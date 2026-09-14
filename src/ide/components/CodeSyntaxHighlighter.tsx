@@ -19,7 +19,7 @@ interface CodeSyntaxHighlighterProps {
 
 const FONT_FAMILY = Platform.OS === "ios" ? "Menlo" : "monospace";
 
-export function CodeSyntaxHighlighter({
+export const CodeSyntaxHighlighter = React.memo(function CodeSyntaxHighlighter({
   tokenizedLines,
   fontSize = 13,
   lineHeight = 20,
@@ -32,7 +32,8 @@ export function CodeSyntaxHighlighter({
 }: CodeSyntaxHighlighterProps) {
   const { theme: globalTheme } = useTheme();
   const theme = themeProp || globalTheme;
-  const tokenPalette = getTokenColors(theme);
+  // Speed: palette + guide color were rebuilt per render (every keystroke).
+  const tokenPalette = React.useMemo(() => getTokenColors(theme), [theme]);
   const indentStep = React.useMemo(() => detectIndentStep(tokenizedLines, 2), [tokenizedLines]);
   const lineGuides = React.useMemo(() => computeLineGuides(tokenizedLines, true, indentStep), [tokenizedLines, indentStep]);
   const guideColor = theme.editorIndentGuide || (theme.isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.09)");
@@ -54,7 +55,7 @@ export function CodeSyntaxHighlighter({
   return (
     <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
       {/* Pinned Line Number Gutter */}
-      <View style={[styles.gutter, { width: gutterWidth, borderColor: theme.border }]}>
+      <View style={[styles.gutter, { width: gutterWidth }]}>
         {tokenizedLines.map((line) => (
           <View
             key={`gutter-${line.lineNumber}`}
@@ -126,7 +127,7 @@ export function CodeSyntaxHighlighter({
       </ScrollView>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -135,7 +136,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   gutter: {
-    borderRightWidth: 1,
     alignItems: "center",
     paddingRight: 2,
   },

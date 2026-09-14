@@ -7,7 +7,7 @@ export interface UseEditorGesturesOptions {
 }
 
 export function useEditorGestures({
-  initialFontSize = 13,
+  initialFontSize = 14,
   onSaveFontSize,
 }: UseEditorGesturesOptions = {}) {
   const { width, height } = useWindowDimensions();
@@ -65,9 +65,9 @@ export function useEditorGestures({
   }, [isLandscape, showSplitToast]);
 
   const resetZoom = useCallback(() => {
-    setFontSize(13);
-    showZoomBadge("Zoom: 100% (13px)");
-    onSaveFontSize?.(13);
+    setFontSize(14);
+    showZoomBadge("Zoom: 100% (14px)");
+    onSaveFontSize?.(14);
   }, [showZoomBadge, onSaveFontSize]);
 
   const handleTouchStart = useCallback(
@@ -157,7 +157,7 @@ export function useEditorGestures({
     [fontSize, onSaveFontSize]
   );
 
-  const lineHeight = Math.round(fontSize * 1.54);
+  const lineHeight = Math.round(fontSize * 1.45);
   const charWidth = fontSize * 0.6;
 
   return {

@@ -1,7 +1,6 @@
 import { AgentStep } from "../agent/agentTypes";
 import { sanitizeAgentText, isMachineJsonDump } from "../components/sanitizeAgentText";
 import { runningTasksService } from "../services/runningTasksService";
-import { ideActionService } from "../../ide/services/ideActionService";
 import { formatToolAction, parseAndExecuteIdeActions } from "./astraFormatters";
 import { executeCommand } from "../../../modules/linux-runner/src";
 
@@ -207,13 +206,11 @@ export class AstraStreamParser {
         onLiveStatus?.({ status: "executing", detail, icon });
       }
 
-      const isFileModification = /write|edit|replace|create_file/i.test(toolName);
       const targetFilePath = args.file_path || args.TargetFile || args.path || args.file;
       if (targetFilePath) {
         this.modifiedFiles.push(targetFilePath);
-        if (isFileModification) {
-          ideActionService.openFile(targetFilePath, undefined, workspaceId);
-        }
+        // No auto-open: agent file writes stay in background so the user
+        // is never yanked out of chat. Explicit View taps navigate.
       }
 
       const cmd = args.command || args.cmd;
@@ -231,11 +228,9 @@ export class AstraStreamParser {
           if (!port && /vite/i.test(cmd)) port = 5173;
 
           const url = port ? (/expo/i.test(cmd) ? `exp://127.0.0.1:${port}` : `http://127.0.0.1:${port}`) : undefined;
-          const regTask = runningTasksService.addTask({ command: cmd, port, url, workspaceId });
-          runningTasksService.triggerTerminal(regTask.id);
-          if (url && !/expo/i.test(cmd)) {
-            ideActionService.openBrowser(url, port);
-          }
+          runningTasksService.addTask({ command: cmd, port, url, workspaceId });
+          // No auto-navigation: server registration surfaces via
+          // RunningTasksBar only. Explicit Preview taps navigate.
         }
       }
     } else if (event.type === "tool_result") {
@@ -247,10 +242,7 @@ export class AstraStreamParser {
         const regTask = runningTasksService.inspectAndRegisterFromText(output, workspaceId);
         if (regTask) {
           runningTasksService.appendOutput(regTask.id, output);
-          runningTasksService.triggerTerminal(regTask.id);
-          if (regTask.url && !regTask.url.startsWith("exp://")) {
-            ideActionService.openBrowser(regTask.url, regTask.port);
-          }
+          // No auto-navigation: task badge updates only.
         } else {
           runningTasksService.appendOutput("", output);
         }

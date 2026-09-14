@@ -161,6 +161,7 @@ export function EditorView({
 
   const {
     contentRef,
+    controlledSelection,
     enterEditModeAtOffset,
     handleEditChange,
     handleApplyCompletionChunk,
@@ -385,7 +386,7 @@ export function EditorView({
           keyboardMouseMode={keyboardMouseMode}
           textInputRef={textInputRef}
           onEditChange={handleEditChange}
-          selection={assists.selection}
+          selection={controlledSelection}
           onSelectionChange={handleSelectionChange}
           editGutterColor={editGutterColor}
           cursorLine={cursorFullLine}
@@ -428,7 +429,7 @@ export function EditorView({
             textInputRef={textInputRef}
             theme={theme}
             onEditChange={handleEditChange}
-            selection={assists.selection}
+            selection={controlledSelection}
             onSelectionChange={handleSelectionChange}
             showIndentGuides={editorSettings.showIndentGuides !== false}
             tabSize={editorSettings.tabSize}

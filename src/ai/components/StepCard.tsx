@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AgentStep } from "../agent/agentTypes";
@@ -14,9 +14,34 @@ interface StepCardProps {
 }
 
 export const StepCard = React.memo(function StepCard({ step, index, isCurrent }: StepCardProps) {
-  const { theme, isMidnight } = useTheme();
-  const [collapsed, setCollapsed] = useState(!isCurrent);
+  const { theme } = useTheme();
+  // Start collapsed when already done at mount (e.g. reloaded history);
+  // live steps start expanded only while they are the current running one.
+  const [collapsed, setCollapsed] = useState(() => !isCurrent || !!step.toolOutput);
   const [outputExpanded, setOutputExpanded] = useState(false);
+
+  // Auto-close this action when it finishes. Fires only on transitions
+  // (current → done, output first arrives, approval resolved) so a manual
+  // expand afterwards stays open for inspection.
+  const prevIsCurrentRef = useRef(isCurrent);
+  const prevHasOutputRef = useRef(!!step.toolOutput);
+  const prevApprovalRef = useRef(step.approvalStatus);
+  useEffect(() => {
+    const wasCurrent = prevIsCurrentRef.current;
+    const hadOutput = prevHasOutputRef.current;
+    const prevApproval = prevApprovalRef.current;
+    const hasOutput = !!step.toolOutput;
+    const approvalFinished =
+      (prevApproval === "pending" || prevApproval === "approved") &&
+      (step.approvalStatus === "rejected" || step.approvalStatus === "expired");
+    if ((wasCurrent && !isCurrent) || (!hadOutput && hasOutput) || approvalFinished) {
+      setCollapsed(true);
+      setOutputExpanded(false);
+    }
+    prevIsCurrentRef.current = isCurrent;
+    prevHasOutputRef.current = hasOutput;
+    prevApprovalRef.current = step.approvalStatus;
+  }, [isCurrent, step.toolOutput, step.approvalStatus]);
 
   // Skip internal metadata tools or topic initialization summaries
   if (
@@ -46,14 +71,20 @@ export const StepCard = React.memo(function StepCard({ step, index, isCurrent }:
   );
 
   const rawCmd = step.toolArgs?.command || step.toolArgs?.cmd || "";
-  let portMatch = (rawCmd + " " + (step.toolOutput || "")).match(/(?:--port|-p)\s+(\d{2,5})|:(\d{4,5})/i);
-  let detectedPort = portMatch ? parseInt(portMatch[1] || portMatch[2], 10) : undefined;
-  if (!detectedPort && /expo/i.test(rawCmd)) detectedPort = 8081;
-  if (!detectedPort && /artisan/i.test(rawCmd)) detectedPort = 8000;
-  if (!detectedPort && /vite/i.test(rawCmd)) detectedPort = 5173;
-  if (!detectedPort && /http\.server/i.test(rawCmd)) detectedPort = 8000;
+  // Speed: regex port scan was re-run on every parent tick — memoize per step content.
+  const detectedPort = useMemo(() => {
+    const portMatch = (rawCmd + " " + (step.toolOutput || "")).match(/(?:--port|-p)\s+(\d{2,5})|:(\d{4,5})/i);
+    let port = portMatch ? parseInt(portMatch[1] || portMatch[2], 10) : undefined;
+    if (!port && /expo/i.test(rawCmd)) port = 8081;
+    if (!port && /artisan/i.test(rawCmd)) port = 8000;
+    if (!port && /vite/i.test(rawCmd)) port = 5173;
+    if (!port && /http\.server/i.test(rawCmd)) port = 8000;
+    return port;
+  }, [rawCmd, step.toolOutput]);
 
   const detectedUrl = detectedPort ? `http://127.0.0.1:${detectedPort}` : undefined;
+  const handleToggleCollapsed = useCallback(() => setCollapsed((v) => !v), []);
+  const handleToggleOutput = useCallback(() => setOutputExpanded((v) => !v), []);
 
   let title = `Action ${index + 1}`;
   let iconName: any = "code-slash";
@@ -269,7 +300,7 @@ export const StepCard = React.memo(function StepCard({ step, index, isCurrent }:
             {step.toolOutput.length > 1500 && (
               <TouchableOpacity
                 style={[styles.olderStepsBadge, { backgroundColor: theme.bgTertiary }]}
-                onPress={() => setOutputExpanded((v) => !v)}
+                onPress={handleToggleOutput}
                 activeOpacity={0.7}
               >
                 <Ionicons name={outputExpanded ? "chevron-up" : "chevron-down"} size={11} color={theme.accent} />
@@ -343,7 +374,7 @@ export const StepCard = React.memo(function StepCard({ step, index, isCurrent }:
     >
       <TouchableOpacity
         style={[styles.stepHeader, { backgroundColor: theme.bgTertiary }]}
-        onPress={() => setCollapsed(!collapsed)}
+        onPress={handleToggleCollapsed}
         activeOpacity={0.7}
       >
         <View style={styles.stepHeaderLeft}>

@@ -154,7 +154,8 @@ class RunningTasksServiceImpl {
       if (changed) {
         this.notify();
       }
-      this.triggerTerminal(existingTask.id);
+      // No auto-navigation: background registration must never steal focus.
+      // The task surfaces via RunningTasksBar; explicit user taps navigate.
       return existingTask;
     }
 
@@ -182,7 +183,7 @@ class RunningTasksServiceImpl {
 
     this.tasks.set(id, task);
     this.notify();
-    this.triggerTerminal(id);
+    // No auto-navigation: background registration must never steal focus.
     return task;
   }
 

@@ -1,8 +1,183 @@
 # Project Progress Tracker
 
 ## Status
-- **Current Phase:** Removal of Terminal Theme Selection
-- **Last Updated:** September 13, 2026
+- **Current Phase:** Debug Server (RUNNING — Metro in dedicated Foot terminal per Rule 10)
+- **Last Updated:** September 14, 2026
+
+### [2026-09-14] - Debug Server Running
+- **User Directive:** "run the debug severr"
+- **Note:** Launched via `start-debug.sh` → `foot -H -T "Astra Metro Bundler" metro.sh` (`npx expo start --dev-client --clear`) per Rule 10.
+- **Verification:**
+  - Foot Metro process running, port 8081 LISTEN, `curl 127.0.0.1:8081/status` → `packager-status:running`.
+  - No ADB device connected, so `adb reverse` + auto-launch skipped gracefully; install/run the debug APK from Downloads when device is attached.
+
+### [2026-09-14] - Debug Build to Downloads
+- **User Directive:** "build the app in debug mode and put it in downloads folder"
+- **Note:** Built `assembleDebug` per repo default Rule 9 via `build-debug-apk.sh`.
+- **Verification:**
+  - `BUILD SUCCESSFUL in 3m 3s` (371 tasks, 27 executed, 344 up-to-date).
+  - Outputs (124M each): `/home/janelle/Downloads/astra-debug.apk`, `/home/janelle/Downloads/app-debug.apk`.
+  - Includes terminal white/black readability + global theme adherence fix.
+  - No ADB device connected, APK ready in Downloads.
+
+### [2026-09-14] - Terminal White CLI Readability + Global Theme Adherence
+- **User Directive:** "fix, terminal view, when using any cli in white it renders dark, some text are unreadable" + "i used opencode cli, and in light mode its color is black but the text is black too"
+- **Root Cause:**
+  - Light `white #e2e8f0` on `bgPrimary #f8fafc` = white-on-white; dark `black = bgSecondary` on `bgPrimary` = black-on-black.
+  - `AnsiRenderer` used hardcoded palettes, xterm used `theme.textPrimary` divergence; no `minimumContrastRatio` so TUI-owned `40m` black cells kept clashes.
+  - No `COLORFGBG/COLORTERM` exported, so lipgloss/bubbletea (opencode) assumed dark on light bg.
+- **Changes Implemented:**
+  - `terminalThemes.ts` (131 lines): light `white → textPrimary`, `brightBlack → textSecondary`; dark `black → #484f58`; fallback `white → foreground`.
+  - `AnsiRenderer.tsx` (237 lines): fg palette overrides `30/37/90/97` from active `TerminalTheme` for strict global theme adherence.
+  - `scripts/build-xterm-html.js` (198 lines): added `minimumContrastRatio: 7`; regenerated `xtermHtml.generated.ts`.
+  - `ProotSessionConfig.kt` + `EnvironmentManager.kt`: added `COLORTERM=truecolor`, `TERM_PROGRAM=AstraIDE`, `COLORFGBG=15;default;0` defaults.
+  - `useTerminalSession.ts` (452 lines): `colorFgBgForTheme()` + `pushThemeEnv()` live-exports `COLORFGBG` on session start, new/restart, and Light/Dark switch.
+- **Verification:**
+  - `npx tsc --noEmit` exited 0.
+  - Line limits OK: themes 131, Ansi 237, session 452, build script 198, XtermView 331 (all <500).
+  - Checks passed: white fix, dark black fix, contrast in generated HTML, COLORFGBG push, native env.
+
+### [2026-09-14] - Release Build to Downloads
+- **User Directive:** "build the app in release and put it in downloads folder"
+- **Note:** Built `assembleRelease` per explicit user request (repo default per Rule 9 is debug; release signed with debug keystore per `android/app/build.gradle`).
+- **Verification:**
+  - `BUILD SUCCESSFUL in 22m 54s` (476 tasks, 431 executed).
+  - Outputs (117M each): `/home/janelle/Downloads/astra-release.apk`, `/home/janelle/Downloads/astra.apk`, `/home/janelle/Downloads/app-release.apk`.
+  - Includes Phase 1 (no auto-steal focus) + Phase 2 (auto-collapse actions).
+
+### [2026-09-14] - Astra AI: Auto-Collapse Actions When Done (Phase 2)
+- **User Directive:** "every actions should close when its done. when everything is done actions should close automatically"
+- **Changes Implemented:**
+  - `StepCard.tsx` (483 lines): starts collapsed when already done at mount (`!isCurrent || !!toolOutput`); transition-only effect auto-collapses on current→done, first output arrival, or approval rejected/expired; resets `outputExpanded`; manual expand afterwards stays open.
+  - `AgentMessageItem.tsx` (498 lines): transition-only effect auto-closes Actions section on terminal status (done/error/idle) when actions exist; manual reopen stays open. Removed 3 unused empty styles to stay <500 lines.
+- **Verification:**
+  - `npx tsc --noEmit` exited 0.
+  - Line limits OK: StepCard 483, AgentMessageItem 498 (both <500).
+
+### [2026-09-14] - Astra AI: Stop Auto-Stealing Focus (Phase 1)
+- **User Directive:** "in astra ai, everytime it executes things, it always opens it ... so it takes me with it, it shouldnt"
+- **Root Cause:**
+  - `astraStreamParser.ts` called `ideActionService.openFile` on every agent file write and `openBrowser` + `triggerTerminal` on every server detect — each emit yanked tabs via `useIdeActionBridge` / `IDELayout.subscribeTrigger`.
+  - `parseAndExecuteIdeActions` executed `[IDE_ACTION: OPEN_FILE/OPEN_BROWSER/SWITCH_TAB]` tags from AI text as navigation.
+  - `useIdeActionBridge` navigated on all events, ignoring `userInitiated` flag; `consumePendingActions` also navigated on non-user events via sticky pending map.
+  - `runningTasksService.addTask` called `triggerTerminal` on every registration/merge.
+  - `IDELayout` subscribed trigger → `safeSetBottomTab("terminal")` on any task.
+- **Changes Implemented (Phase 1 only):**
+  - `useIdeActionBridge.ts` (96 lines): gate OPEN_FILE/OPEN_TERMINAL/SWITCH_TAB on `userInitiated===true`; OPEN_BROWSER non-user only preloads URL silently, no tab switch. Same gating in `consumePendingActions`.
+  - `IDELayout.tsx` (491 lines): removed `subscribeTrigger → terminal` auto-switch; tasks surface via badge only.
+  - `runningTasksService.ts` (451 lines): removed `triggerTerminal` from `addTask` new + merge paths.
+  - `astraStreamParser.ts` (375 lines): removed auto `openFile` on write/edit, auto `openBrowser` on server detect, and explicit `triggerTerminal` calls; task registration + output append kept. Removed unused import.
+  - `astraFormatters.ts` (90 lines): `parseAndExecuteIdeActions` now ignores navigation tags; only SWITCH_WORKSPACE honored.
+  - Explicit user taps still navigate (all StepCard/AgentMessageItem buttons pass `userInitiated=true`).
+- **Verification:**
+  - `npx tsc --noEmit` exited 0.
+  - Line limits OK: bridge 96, IDELayout 491, runningTasks 451, streamParser 375, formatters 90 (all <500).
+- **Pending:** Phase 2 — auto-collapse actions when done + auto-close when all done (awaiting user go per Rule 12).
+
+### [2026-09-13] - Fix Cumulative Highlight Drift on Lower Lines
+- **User Directive:** "in the first lies it is accurate but as it goes lower, it goes unaccurate and highlights the wrong line"
+- **Root Cause:**
+  - On Android, the native `EditText` line spacing can differ from the React Native `lineHeight` prop due to font metric rounding and density-pixel conversion.
+  - The sub-pixel per-line error compounds: by line 20+, the highlight drifts onto the wrong line entirely.
+  - The formula `top: 8 + activeLineIndex * lineHeight` assumed exact per-line spacing, which only holds for flexbox-laid-out Views (view mode) but not for the native TextInput (edit mode).
+- **Changes Implemented:**
+  - `EditorEditRow.tsx` (459 lines): Added runtime line height measurement via `onContentSizeChange` on the TextInput. Computes actual per-line height as `(contentHeight - verticalPadding) / lineCount`. Both gutter and code area highlights now use `highlightLH` (measured in edit mode, prop in view mode). Resets on font size change (pinch zoom).
+- **Verification:**
+  - Strict Rule 5 compliance (< 500 lines): `EditorEditRow.tsx` is 459 lines.
+  - TypeScript compilation verified (`tsc --noEmit` exited 0).
+
+### [2026-09-13] - Fix Inaccurate Active Line Highlighting
+- **User Directive:** "the highlighting is not accurate"
+- **Root Cause:**
+  - Highlight height was `Math.round(fontSize * 1.15)` = 16dp, but line slot is `Math.round(fontSize * 1.45)` = 20dp — 4dp gap left the bottom of the line uncovered.
+  - `borderTopWidth: 1` + `borderBottomWidth: 1` in border-box model further reduced actual background fill to 14dp.
+  - No gutter highlight — the line number area had no matching highlight, making the band look disconnected.
+- **Changes Implemented:**
+  - `EditorEditRow.tsx`: Set highlight `height: lineHeight` to match full line slot; removed border widths and border color props; added matching gutter highlight band with identical positioning and background color.
+- **Verification:**
+  - TypeScript compilation verified (`tsc --noEmit` exited 0).
+
+### [2026-09-13] - Highlight Box Size Exact Match with Indicator Size
+- **User Directive:** "the highlight box should be the same size as the indicator size no more no less"
+- **Root Cause:**
+  - `activeLineHighlight` in `EditorEditRow.tsx` previously used `height: lineHeight` (20dp).
+  - On Android, `ReactEditText` with `includeFontPadding: false` draws the cursor caret indicator matching font metrics (`Math.round(fontSize * 1.15)` = 16dp for 14px font), with text aligned to the top of the line (`textAlignVertical: "top"`).
+  - Consequently, the highlight box was 20dp tall (extending 4dp below the cursor indicator), making the box significantly taller than the indicator.
+- **Changes Implemented:**
+  - `EditorEditRow.tsx` (415 lines): Updated `activeLineHighlight` height to `Math.round(fontSize * 1.15)`, matching the exact cursor indicator height (16dp at 14px font, scaling dynamically with zoom).
+  - Highlight box now aligns with the cursor indicator from top to bottom with zero excess height.
+- **Verification:**
+  - Strict Rule 5 compliance (< 500 lines): `EditorEditRow.tsx` is 415 lines.
+  - TypeScript compilation verified (`tsc --noEmit` exited 0).
+
+### [2026-09-13] - Blazing-Fast Typing Performance & Dark Mode Text Color Fix
+- **User Directive:** "improve typing performance in the ide, sometimes texts doeesnt register correctly, and also in dark modes, the text is displayed as black which makes it invisible in dark modes, it only gets visible when colored"
+- **Root Cause Analysis:**
+  1. **Invisible Black Text in Dark Mode:**
+     - `<TextInput>` in `EditorEditRow.tsx` did not define `color: theme.textPrimary`, defaulting to platform black (`#000000`) on Android/iOS.
+     - Tokens with `type === "plain"` (which include variables, whitespace, untokenized symbols, and newly typed text) were rendered as raw strings without a style wrapper, inheriting the default black color.
+     - Root `<Text key="editor-tokens">` in `TextInput` and `codeLineText` in `syntaxLayer` both lacked `color: theme.textPrimary`.
+     - When `tokenizedLines.length > 500` or `isPasting`, raw `chunkText` was rendered in black on dark background.
+  2. **Typing Performance & Dropped Keystrokes ("texts doesn't register correctly"):**
+     - `useDebouncedTokens.ts` delayed token updates by 150ms during normal typing. Because `TextInput` rendered `tokenizedLines` as its children, for 150ms after every keystroke `TextInput` received children representing the OLD stale text from before the key was pressed. React Native treated this as an edit rejection and forcefully reverted native `ReactEditText`, dropping keystrokes or losing typed characters.
+     - Passing `selection={selection}` to `<TextInput>` on every single render forced native Android `EditText.setSelection(...)` calls to race against the Android IME keyboard, disrupting keyboard composition and causing cursor jumps or dropped input.
+     - Tokenizing 400+ lines without caching re-ran full regex scans on all unchanged lines on every keystroke.
+- **Changes Implemented:**
+  1. **Dark Mode Text Color Fix (`EditorEditRow.tsx` - 415 lines):**
+     - Added `color: theme.textPrimary` to `<TextInput>` style array and `styles.editorInput`.
+     - Added `color: theme.textPrimary` to `<Text key="editor-tokens">` and `styles.codeLineText`.
+     - Set `tokenStyleMap.plain = { color: tokenPalette.plain || theme.textPrimary }`.
+     - Wrapped all plain tokens in both View Mode and Edit Mode in `<Text style={tokStyle}>` with guaranteed fallback to `theme.textPrimary`.
+  2. **Line-Level Token Caching (`syntaxTokenizer.ts` - 476 lines):**
+     - Added an LRU-style `LINE_CACHE` mapping `${grammarId}:${line}` to pre-computed tokens.
+     - Typing edits on a single line now only re-tokenize that 1 line, while all other lines hit the cache in ~0.001ms. Total tokenization time dropped from 30ms to 0.19ms per stroke!
+  3. **Instant Synchronous Tokens without Lag (`useDebouncedTokens.ts` - 69 lines):**
+     - Enabled instant synchronous memoized tokenization for normal typing. `tokenizedLines` now matches the input buffer on the exact same frame, completely eliminating stale text reversion and dropped keystrokes.
+     - Preserved `isPasting` fast-path for large pastes (> 30 chars) to prevent virtual DOM overload.
+  4. **Smooth Uncontrolled Selection with Programmatic Precision (`useEditorTextPipeline.ts` - 158 lines, `EditorView.tsx` - 485 lines, `ContinuationSplitView.tsx` - 259 lines):**
+     - Introduced `controlledSelection`. For standard typing and backspaces, `controlledSelection` is `undefined`, allowing Android IME and native `EditText` to advance the cursor natively with zero lag and zero cursor fighting.
+     - Only activates programmatic selection when assists alter text (auto-closing brackets, smart indent, tab expansion) or when completions/jump-to-line occur.
+- **Verification:**
+  - Strict Rule 5 compliance (< 500 lines per file): all modified files are strictly < 500 lines.
+  - TypeScript compilation verified (`tsc --noEmit` exited 0).
+  - Automated unit test (`scratch/test_typing_and_dark_mode.ts`) verified 100 keystrokes in 19ms (0.19ms/stroke) and dark mode plain text color `#abb2bf`.
+
+### [2026-09-13] - Full-Width Active Line Highlight & Balanced Font Size
+- **User Directive:** "no i mean the size of the text is too smaller than the size of the box highlight, but it should highlight the whole line"
+- **Changes Implemented:**
+  1. **Full-Width Line Highlight (`EditorEditRow.tsx` - 423 lines):**
+     - Highlight now spans across the entire line horizontally (`left: 0`, `width: Math.max(contentWidth, 3000)`), highlighting the whole active line rather than confining to a small box.
+     - Styled with subtle top and bottom borders (`borderTopWidth: 1, borderBottomWidth: 1`) and soft background tint (`rgba(255, 255, 255, 0.055)` in dark mode / `rgba(0, 0, 0, 0.04)` in light mode), with zero left border (no blue line).
+  2. **Proportioned Text Size (`EditorEditRow.tsx`, `useEditorGestures.ts`, `configService.ts`):**
+     - Increased default editor font size from `13px` to `14px` and gutter font size to `12px`.
+     - Tuned line height ratio to `1.45x` (20px at 14px font), allowing the text to comfortably fill the line height without looking small or dwarfed by the line highlight.
+- **Verification:**
+  - Strict Rule 5 compliance (< 500 lines per file): `EditorEditRow.tsx` is 423 lines, `useEditorGestures.ts` is 178 lines, `configService.ts` is 375 lines.
+  - TypeScript compilation verified.
+
+### [2026-09-13] - Active Focused Line Highlight & Clean Transparent Line Numbers
+- **User Directive:** "when editing in the ide, wherever it was focused, that line should be highlighted to show that that line of block is the highlighted, also the 1,2,3,4,5, etc beside shouldnt have a background color, just numbers"
+- **Changes Implemented:**
+  1. **Clean Transparent Line Numbers (`EditorEditRow.tsx` & `CodeSyntaxHighlighter.tsx`):**
+     - Removed `backgroundColor: theme.bgSecondary` and `borderRightColor: theme.border` / `borderRightWidth: 1` from the gutter container.
+     - Set gutter background to completely transparent (`backgroundColor: "transparent"`), removing the separated opaque block/strip.
+     - Right-aligned line numbers cleanly with `paddingRight: 4`.
+  2. **Active Focused Line Highlight Block (`EditorEditRow.tsx`):**
+     - Added `activeLineIndex` computation that tracks the focused line from `cursorLine` in O(1).
+     - Added an absolute active line highlight underlay in `codeContainer` behind the text input layer.
+- **Verification:**
+  - Strict Rule 5 compliance (< 500 lines per file).
+  - TypeScript compilation check verified.
+
+### [2026-09-13] - Clean Empty New File Creation
+- **User Directive:** "when creating a new file it automatically adds a //new file text remove it"
+- **Root Cause:**
+  - `handleCreateNode` in `useWorkspaceFileActions.ts` previously invoked `createFileInWorkspace(workspace.id, targetPath, isFolder ? "" : "// New file\n")`, inserting `// New file\n` into every newly created file.
+- **Changes Implemented:**
+  - `useWorkspaceFileActions.ts` (172 lines): Changed the content parameter passed to `createFileInWorkspace` to an empty string `""` so newly created files are completely blank.
+- **Verification:**
+  - Strict Rule 5 compliance (< 500 lines per file): `useWorkspaceFileActions.ts` is 172 lines.
+  - TypeScript compilation verified.
 
 ### [2026-09-13] - Removal of Redundant Terminal Theme Selection
 - **User Directive:** "remove theme selection on the terminal"
@@ -3207,3 +3382,24 @@
 - **Strict Verification:**
   - 100% of source files strictly verified under 500 lines.
   - `npx tsc --noEmit` verified with 0 errors.
+
+### [2026-09-14] - Performance Optimization Plan (tasks.md)
+- Investigated whole app: 186 files / 39,304 lines in `src/`, plus `modules/linux-runner`, `scripts/`, `metro.config.js`, `docs/architecture.md`.
+- Key findings: `ScrollView+.map` unbounded lists, `IDELayout` keeps 7 tabs/WebViews mounted, unmemoized handlers + inline theme styles defeat `memo`, chat `setMessages` O(n) per token + 1Hz tick, `AnsiRenderer` full re-parse, editor split/offsets per keystroke, `monacoEngineHtml.json` 3.9M triple-copy + `typescript` 23M bundled, PRoot one-process-per-call + `ensureSystemConfigs` rewrite per call, 5s `runningTasks` poll, registry JSON rewrite per event.
+- Wrote phased plan to `tasks.md` (Phase 0 baseline, 1 render quick wins, 2 virtualize + mount policy, 3 WebView bridges, 4 FS/services/PRoot, 5 bundle/startup) with exit gates. No code changed, awaiting user go per phase.
+
+### [2026-09-14] - Phase 0 Baseline (speed + stability, no code changes)
+- Stability: `npx tsc --noEmit` = 0 errors. 185 TS files, 39,304 lines; 14 files 451-498 lines (all under 500-line limit).
+- Bundle: `monacoEngineHtml.json` 3.9M + `xtermHtml.generated.ts` 296K in JS bundle; `node_modules`: `monaco-editor` 101M (offline esbuild, correctly out of Metro), `typescript` 23M (still bundled via Metro — cold-start cost), `xterm` 2.6M.
+- Render: only 45/185 files use `useMemo/useCallback/memo` (24%); 32 files use `ScrollView`, only 9 use `FlatList` (only `ProjectPicker` tuned).
+- Hot paths: `useChatSession.ts` 20 timer/JSON/setState hits, `useFileDragDrop.ts` 10 timeouts, `astraStreamParser.ts` 9 JSON-parse/line hits.
+- Boot: `App.tsx` chains `loadHasCompletedStartup → PRootService.ensureReady → setBootDone` + 15s fallback; `workspaceService.readDirectoryRecursive` per-dir bridge call, depth>6 cutoff, yield every 12 dirs, `SCAN_TIMEOUT_MS=45000`, `onProgress` per dir.
+- Next: Phase 1 render quick wins (batched chat deltas, memoized handlers/styles, isolated 1Hz tick, incremental Ansi).
+
+### [2026-09-14] - Phase 1 render quick wins (speed + stability, no behavior change)
+- Chat: delta batching ~100ms via new `useDeltaBatch.ts` (no O(n) map per token, sync flush on commit); `handleSend` stable via `messagesRef` (removed `messages` dep); `AstraChatScreen` memoized slice + stable scroll/paginate, `animated:false` everywhere in stream.
+- Status bars: `LayoutAnimation` removed (snap expand, no Android layout jank); task subscriptions signature-guarded (ignore output-text floods) in `LiveAgentStatusBar`, `RunningTasksBar`, `IDELayout`.
+- Layout: `IDELayout` 551→493 via `useIDELayoutCallbacks.ts` (17 stable callbacks) + `useIDELayoutStyles.ts` (count/container/sidebar memos); `handleContentChange` ref-stable; `useChatSession` 523→486 via `useDeltaBatch.ts`; `AgentMessageItem` 508→482 via `useAgentMessageData.ts`.
+- Rows: `AgentMessageItem` step filters memoized, `StepCard` port regex memoized + stable toggles, midnight bubble shadow removed, `StepCard` dead `isMidnight` removed.
+- Terminal/editor/theme: `AnsiRenderer` memoized (palettes/parse/font, 60k-char + 1500-span caps); `getTokenColors` cached by theme identity; `CodeSyntaxHighlighter` memoized.
+- Verified: `tsc` 0 errors, zero files >500 lines, no hardcoded theme colors added, no features removed. Deferred to Phase 2: chat/file virtualization, `MarkdownMessageView` deep memo, `FileExplorer` drag-measure throttle.

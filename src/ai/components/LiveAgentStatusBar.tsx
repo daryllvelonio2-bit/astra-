@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  LayoutAnimation,
-  Platform,
-  UIManager,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -35,10 +32,19 @@ export function LiveAgentStatusBar({
   const [tasks, setTasks] = useState<RunningTask[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [killingId, setKillingId] = useState<string | null>(null);
+  // Speed: status bar only shows id/command/url/pid — ignore output-text
+  // notifies so terminal floods don't re-render this bar.
+  const tasksSigRef = useRef("");
+  const sigFor = (list: RunningTask[]) =>
+    list.map((t) => `${t.id}|${t.command}|${t.url || ""}|${t.pid || ""}|${t.status}`).join(";");
 
   useEffect(() => {
     const unsub = runningTasksService.subscribe((currentTasks) => {
-      setTasks(currentTasks);
+      const sig = sigFor(currentTasks);
+      if (sig !== tasksSigRef.current) {
+        tasksSigRef.current = sig;
+        setTasks(currentTasks);
+      }
     });
     return unsub;
   }, []);
@@ -53,7 +59,6 @@ export function LiveAgentStatusBar({
   }
 
   const toggleExpand = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded(!expanded);
   };
 

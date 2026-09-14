@@ -279,6 +279,9 @@ object EnvironmentManager {
             val bashrcFile = File(rootDir, ".bashrc")
             val profileText = """
 export TERM=xterm-256color
+export COLORTERM=truecolor
+export TERM_PROGRAM=AstraIDE
+export COLORFGBG="15;default;0"
 export HOME=/root
 export USER=root
 export SHELL=/bin/bash

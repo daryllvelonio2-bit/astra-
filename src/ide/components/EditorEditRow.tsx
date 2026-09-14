@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState, useCallback } from "react";
 import { View, Text, TextInput, ScrollView, StyleSheet, Platform, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent } from "react-native";
 import { CodeToken, getTokenColors } from "../services/syntaxTokenizer";
 import { detectIndentStep, computeLineGuides } from "./editor/indentGuideUtils";
@@ -27,8 +27,8 @@ interface EditorEditRowProps {
 }
 
 const LINE_HEIGHT = 20;
-const FONT_SIZE = 13;
-const GUTTER_FONT_SIZE = 11;
+const FONT_SIZE = 14;
+const GUTTER_FONT_SIZE = 12;
 const FONT_FAMILY = Platform.OS === "ios" ? "Menlo" : "monospace";
 // Monospace advance at 13px is ~7.8px; deliberately overestimated so the
 // input is always at least as wide as its longest line -> never soft-wraps.
@@ -73,6 +73,7 @@ export const EditorEditRow = React.memo(function EditorEditRow({
     for (const [type, color] of Object.entries(tokenPalette)) {
       map[type] = { color: color || theme.textPrimary };
     }
+    map.plain = { color: tokenPalette.plain || theme.textPrimary };
     map.comment = { color: tokenPalette.comment || theme.textMuted, fontStyle: "italic" };
     return map;
   }, [tokenPalette, theme]);
@@ -141,17 +142,81 @@ export const EditorEditRow = React.memo(function EditorEditRow({
     hScrollXRef.current = e.nativeEvent.contentOffset.x;
   };
 
+  // Measure the native TextInput's actual per-line height at runtime.
+  // On Android, EditText's internal line spacing can differ from the RN lineHeight
+  // prop due to font metric rounding and density conversion. The error compounds
+  // per-line, causing the highlight to drift onto the wrong line for lower lines.
+  const [measuredLH, setMeasuredLH] = useState(lineHeight);
+  const measuredLHRef = useRef(lineHeight);
+
+  // Reset when lineHeight prop changes (pinch-zoom / font size change)
+  const prevLineHeightRef = useRef(lineHeight);
+  if (prevLineHeightRef.current !== lineHeight) {
+    prevLineHeightRef.current = lineHeight;
+    measuredLHRef.current = lineHeight;
+    setMeasuredLH(lineHeight);
+  }
+
+  const handleContentSizeChange = useCallback(
+    (e: { nativeEvent: { contentSize: { height: number; width: number } } }) => {
+      const h = e.nativeEvent.contentSize.height;
+      const n = tokenizedLines.length;
+      if (n > 2) {
+        // 16 = paddingTop(8) + paddingBottom(8) from editorInput style
+        const measured = (h - 16) / n;
+        if (Math.abs(measured - measuredLHRef.current) > 0.05) {
+          measuredLHRef.current = measured;
+          setMeasuredLH(measured);
+        }
+      }
+    },
+    [tokenizedLines.length]
+  );
+
+  // In edit mode, use the measured native line height; in view mode use the prop
+  // (view mode uses flexbox layout which is pixel-exact).
+  const highlightLH = isEditing ? measuredLH : lineHeight;
+
+  const activeLineIndex = useMemo(() => {
+    if (!cursorLine || tokenizedLines.length === 0) return -1;
+    const firstLine = tokenizedLines[0].lineNumber;
+    const approxIdx = cursorLine - firstLine;
+    if (approxIdx >= 0 && approxIdx < tokenizedLines.length && tokenizedLines[approxIdx]?.lineNumber === cursorLine) {
+      return approxIdx;
+    }
+    return tokenizedLines.findIndex((l) => l.lineNumber === cursorLine);
+  }, [cursorLine, tokenizedLines]);
+
   return (
     <View style={[styles.editorRow, { backgroundColor: theme.bgPrimary }]}>
-      {/* Pinned Gutter on the left */}
+      {/* Pinned Gutter on the left (transparent background, numbers only) */}
       <View
         style={[
           styles.gutterContainer,
-          { width: gutterWidth, backgroundColor: theme.bgSecondary, borderRightColor: theme.border },
+          { width: gutterWidth, backgroundColor: "transparent" },
         ]}
       >
+        {activeLineIndex >= 0 && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 8 + activeLineIndex * highlightLH,
+              left: 0,
+              right: 0,
+              height: highlightLH,
+              backgroundColor: theme.isDark
+                ? "rgba(255, 255, 255, 0.055)"
+                : "rgba(0, 0, 0, 0.04)",
+              zIndex: 0,
+            }}
+          />
+        )}
         {tokenizedLines.map((line) => {
-          const color = editGutterColor(line.lineNumber);
+          const isCurrentLine = cursorLine === line.lineNumber;
+          const color = isCurrentLine
+            ? theme.textPrimary
+            : editGutterColor(line.lineNumber);
           const isError = color === theme.accentRed;
           return (
             <Text
@@ -159,7 +224,7 @@ export const EditorEditRow = React.memo(function EditorEditRow({
               style={[
                 styles.gutterText,
                 { color, fontSize: gutterFontSize, height: lineHeight, lineHeight },
-                isError && styles.gutterTextBold,
+                (isError || isCurrentLine) && styles.gutterTextBold,
               ]}
               numberOfLines={1}
             >
@@ -180,7 +245,24 @@ export const EditorEditRow = React.memo(function EditorEditRow({
         onScroll={handleHScroll}
         scrollEventThrottle={16}
       >
-        <View style={[styles.codeContainer, { width: contentWidth }]}>
+        <View style={[styles.codeContainer, { width: contentWidth, minWidth: "100%" }]}>
+          {/* Active Focused Line Highlight (covers the whole line) */}
+          {activeLineIndex >= 0 && (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.activeLineHighlight,
+                {
+                  top: 8 + activeLineIndex * highlightLH,
+                  height: highlightLH,
+                  width: Math.max(contentWidth, 3000),
+                  backgroundColor: theme.isDark
+                    ? "rgba(255, 255, 255, 0.055)"
+                    : "rgba(0, 0, 0, 0.04)",
+                },
+              ]}
+            />
+          )}
           {/* Indent Guide Background Underlay (renders in View Mode without blocking touches) */}
           {showIndentGuides && !isEditing && (
             <View style={[StyleSheet.absoluteFill, styles.guideUnderlay]} pointerEvents="none">
@@ -208,18 +290,14 @@ export const EditorEditRow = React.memo(function EditorEditRow({
             <View style={styles.syntaxLayer}>
               {tokenizedLines.map((line) => (
                 <View key={`line-${line.lineNumber}`} style={[styles.codeLineBox, { height: lineHeight }]}>
-                  <Text style={[styles.codeLineText, { fontSize, lineHeight }]} numberOfLines={1}>
+                  <Text style={[styles.codeLineText, { fontSize, lineHeight, color: theme.textPrimary }]} numberOfLines={1}>
                     {line.tokens.length === 0
                       ? " "
-                      : line.tokens.map((tok, tIdx) =>
-                          tok.type === "plain" || !tokenStyleMap[tok.type] ? (
-                            tok.text
-                          ) : (
-                            <Text key={`tok-${tIdx}`} style={tokenStyleMap[tok.type]}>
-                              {tok.text}
-                            </Text>
-                          )
-                        )}
+                      : line.tokens.map((tok, tIdx) => (
+                          <Text key={`tok-${tIdx}`} style={tokenStyleMap[tok.type] || { color: theme.textPrimary }}>
+                            {tok.text}
+                          </Text>
+                        ))}
                   </Text>
                 </View>
               ))}
@@ -234,6 +312,7 @@ export const EditorEditRow = React.memo(function EditorEditRow({
                   width: contentWidth,
                   fontSize,
                   lineHeight,
+                  color: theme.textPrimary,
                 },
               ]}
               multiline
@@ -250,25 +329,21 @@ export const EditorEditRow = React.memo(function EditorEditRow({
               onBlur={onBlur}
               cursorColor={theme.accent}
               selectionColor={Platform.OS === "android" ? `${theme.accent}45` : undefined}
+              underlineColorAndroid="transparent"
+              onContentSizeChange={handleContentSizeChange}
             >
               {tokenizedLines.length > 500 || isPasting ? (
                 chunkText
               ) : (
-                <Text key="editor-tokens">
+                <Text key="editor-tokens" style={{ color: theme.textPrimary }}>
                   {tokenizedLines.map((line, lIdx) => (
                     <React.Fragment key={`l-${line.lineNumber}`}>
-                      {line.tokens.length === 0 ? null : line.tokens.length === 1 && (line.tokens[0].type === "plain" || !tokenStyleMap[line.tokens[0].type]) ? (
-                        line.tokens[0].text
-                      ) : (
-                        line.tokens.map((tok, tIdx) =>
-                          tok.type === "plain" || !tokenStyleMap[tok.type] ? (
-                            tok.text
-                          ) : (
-                            <Text key={`tok-${tIdx}`} style={tokenStyleMap[tok.type]}>
-                              {tok.text}
-                            </Text>
-                          )
-                        )
+                      {line.tokens.length === 0 ? null : (
+                        line.tokens.map((tok, tIdx) => (
+                          <Text key={`tok-${tIdx}`} style={tokenStyleMap[tok.type] || { color: theme.textPrimary }}>
+                            {tok.text}
+                          </Text>
+                        ))
                       )}
                       {lIdx < tokenizedLines.length - 1 ? "\n" : ""}
                     </React.Fragment>
@@ -289,11 +364,10 @@ const styles = StyleSheet.create({
     minHeight: "100%",
   },
   gutterContainer: {
-    borderRightWidth: 1,
     paddingTop: 8,
     paddingBottom: 8,
-    paddingRight: 2,
-    alignItems: "center",
+    paddingRight: 4,
+    alignItems: "flex-end",
   },
   gutterLineBox: {
     height: LINE_HEIGHT,
@@ -305,11 +379,17 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY,
     fontSize: GUTTER_FONT_SIZE,
     lineHeight: LINE_HEIGHT,
-    textAlign: "center",
+    textAlign: "right",
+    width: "100%",
     includeFontPadding: false,
   },
   gutterTextBold: {
     fontWeight: "700",
+  },
+  activeLineHighlight: {
+    position: "absolute",
+    left: 0,
+    zIndex: 0,
   },
   horizontalScroll: {
     flex: 1,

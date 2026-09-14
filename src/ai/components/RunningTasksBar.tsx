@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  LayoutAnimation,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,10 +20,17 @@ export function RunningTasksBar({ onOpenUrl }: RunningTasksBarProps) {
   const [tasks, setTasks] = useState<RunningTask[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [killingId, setKillingId] = useState<string | null>(null);
+  const tasksSigRef = useRef("");
+  const sigFor = (list: RunningTask[]) =>
+    list.map((t) => `${t.id}|${t.command}|${t.url || ""}|${t.pid || ""}|${t.status}`).join(";");
 
   useEffect(() => {
     const unsub = runningTasksService.subscribe((currentTasks) => {
-      setTasks(currentTasks);
+      const sig = sigFor(currentTasks);
+      if (sig !== tasksSigRef.current) {
+        tasksSigRef.current = sig;
+        setTasks(currentTasks);
+      }
     });
     return unsub;
   }, []);
@@ -32,7 +38,6 @@ export function RunningTasksBar({ onOpenUrl }: RunningTasksBarProps) {
   if (tasks.length === 0) return null;
 
   const toggleExpand = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded(!expanded);
   };
 

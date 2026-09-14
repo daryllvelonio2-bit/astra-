@@ -8,6 +8,7 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
@@ -89,6 +90,11 @@ export function GitBranchModal({
             <FlatList
               data={filtered}
               keyExtractor={(item) => item.name}
+              initialNumToRender={12}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === "android"}
+              keyboardShouldPersistTaps="handled"
               style={styles.branchList}
               renderItem={({ item }) => {
                 const isSelected = item.name === currentBranch;

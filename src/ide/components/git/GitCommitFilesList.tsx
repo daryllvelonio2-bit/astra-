@@ -6,6 +6,7 @@ import {
   FlatList,
   ActivityIndicator,
   StyleSheet,
+  Platform,
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { useTheme } from "../../../theme/themeContext";
@@ -139,6 +140,10 @@ export function GitCommitFilesList({
         <FlatList
           data={files}
           keyExtractor={(item) => item.path}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === "android"}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const isSelected = selectedFile?.path === item.path;

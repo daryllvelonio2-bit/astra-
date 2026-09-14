@@ -100,7 +100,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   enableCompletions: true,
   formatOnSave: true,
   showIndentGuides: true,
-  fontSize: 13,
+  fontSize: 14,
 };
 
 

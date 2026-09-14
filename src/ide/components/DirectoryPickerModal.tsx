@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/themeContext';
@@ -208,6 +209,10 @@ export function DirectoryPickerModal({
           <FlatList
             data={entries}
             keyExtractor={(item) => item.path}
+            initialNumToRender={12}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={Platform.OS === "android"}
             style={styles.list}
             renderItem={({ item }) => (
               <TouchableOpacity

@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemeColors } from "../../../theme/themeContext";
 
@@ -25,6 +25,10 @@ export function ExtensionThemesTab({
     <FlatList
       data={themes}
       keyExtractor={(item) => item.id}
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews={Platform.OS === "android"}
       contentContainerStyle={styles.listContent}
       ListEmptyComponent={
         <View style={styles.emptyView}>

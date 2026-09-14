@@ -167,6 +167,10 @@ export function GitChangesList({
       {/* Changed Files List (Working Directory) */}
       <FlatList
         ref={fileListRef}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === "android"}
         data={files}
         keyExtractor={fileKeyExtractor}
         style={styles.fileList}
