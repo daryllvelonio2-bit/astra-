@@ -23,7 +23,7 @@ interface FileExplorerProps {
   isDraggingSidebar?: boolean;
 }
 
-export function FileExplorer({
+function FileExplorerInner({
   projectName,
   files,
   onSelectFile,
@@ -385,3 +385,4 @@ export function FileExplorer({
   );
 }
 
+export const FileExplorer = React.memo(FileExplorerInner);

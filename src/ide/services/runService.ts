@@ -52,6 +52,7 @@ export interface RunPlan {
 export interface RunCallbacks {
   onOpenTerminal: () => void;
   onOpenBrowser: (url: string) => void;
+  onLog?: (line: string) => void;
 }
 
 /** POSIX single-quote a path for the guest shell. */
@@ -399,10 +400,18 @@ export async function executeRunPlan(
 
     try {
       await startTerminalSession(RUN_SESSION_ID, workspaceId);
-    } catch (_) {}
+    } catch (err) {
+      console.error("Failed to start run session:", err);
+      cb.onLog?.(`Error: Failed to start terminal session: ${err}`);
+      return;
+    }
     try {
       writeTerminalInput(RUN_SESSION_ID, `${runCmd}\n`);
-    } catch (_) {}
+    } catch (err) {
+      console.error("Failed to write run command:", err);
+      cb.onLog?.(`Error: Failed to send command: ${err}`);
+      return;
+    }
     try {
       runningTasksService.addTask({
         command: plan.command,

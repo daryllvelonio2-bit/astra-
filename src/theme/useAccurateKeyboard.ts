@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Keyboard, Platform, KeyboardEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -54,9 +54,9 @@ export function useAccurateKeyboard(extraPadding = 0) {
     ? rawKeyboardHeight + navBarOffset + extraPadding
     : Math.max(insets.bottom, 0);
 
-  return {
-    rawKeyboardHeight,
-    isKeyboardVisible,
-    keyboardOffset,
-  };
+  return useMemo(
+    () => ({ rawKeyboardHeight, isKeyboardVisible, keyboardOffset }),
+    [rawKeyboardHeight, isKeyboardVisible, keyboardOffset]
+  );
 }
+

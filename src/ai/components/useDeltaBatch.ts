@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { AgentChatMessage } from "../agent/agentTypes";
 
 type SetMessages = React.Dispatch<React.SetStateAction<AgentChatMessage[]>>;
@@ -65,6 +65,12 @@ export function useDeltaBatch(
     }
     deltaBufferRef.current = "";
     deltaTargetIdRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (deltaFlushTimerRef.current) clearTimeout(deltaFlushTimerRef.current);
+    };
   }, []);
 
   return { queueDelta, flushDeltaBuffer, consumePending, clearDelta };

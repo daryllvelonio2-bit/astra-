@@ -19,7 +19,7 @@ interface IDEBottomBarProps {
   onShowNavbar?: () => void;
 }
 
-export function IDEBottomBar({
+function IDEBottomBarInner({
   bottomTab,
   onChangeTab,
   runningTaskCount = 0,
@@ -33,7 +33,12 @@ export function IDEBottomBar({
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
-  if (compact && isLandscapeNavbarHidden) {
+  // Collapsed restore chevron is landscape-editor-only: on other tabs the
+  // floating button would overlap tab content (e.g. terminal ExtraKeysBar),
+  // so those tabs fall through to the full bar (no dead end, no overlap).
+  // Portrait never collapses — the hide affordance isn't offered there.
+  const canOfferHide = compact && !!onHideNavbar;
+  if (canOfferHide && isLandscapeNavbarHidden && bottomTab === "editor") {
     return (
       <View style={styles.collapsedBarContainer} pointerEvents="box-none">
         <TouchableOpacity
@@ -90,7 +95,7 @@ export function IDEBottomBar({
             Editor
           </Text>
         </TouchableOpacity>
-        {onHideNavbar && (
+        {canOfferHide && (
           <TouchableOpacity
             style={styles.hideNavbarBtn}
             onPress={onHideNavbar}
@@ -252,6 +257,8 @@ function VscodeTabButton({ active, compact, onPress }: { active: boolean; compac
     </TouchableOpacity>
   );
 }
+
+export const IDEBottomBar = React.memo(IDEBottomBarInner);
 
 const styles = StyleSheet.create({
   bottomBarContainer: {

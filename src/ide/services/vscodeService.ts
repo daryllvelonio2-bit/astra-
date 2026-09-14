@@ -250,19 +250,8 @@ export async function startVSCodeServer(
       } catch (_) {}
       resolve(ok);
     };
-    const sub = addTerminalDataListener(SVC_ID, (data: string) => {
-      for (const line of data.split(/\r?\n/)) {
-        const t = line.trim();
-        if (!t) continue;
-        if (t.startsWith("export PATH") || t.startsWith("if [ ! -f") || t.startsWith("[ -n \"$CS_PID\" ]")) continue;
-        onLog(t.length > 300 ? t.slice(0, 300) : t);
-      }
-      if (data.includes("VSCODE_RUNNING")) finish(true);
-      else if (data.includes("VSCODE_START_FAILED")) finish(false);
-    });
-
     // Dead-man switch: reconcile against reality if events are lost.
-    setTimeout(async () => {
+    const deadManTimer = setTimeout(async () => {
       if (done) return;
       onLog("Start timed out waiting for the ready signal — reconciling…");
       try {
@@ -272,6 +261,22 @@ export async function startVSCodeServer(
         finish(false);
       }
     }, 90000);
+
+    const finishWithClear = (ok: boolean) => {
+      clearTimeout(deadManTimer);
+      finish(ok);
+    };
+
+    const sub = addTerminalDataListener(SVC_ID, (data: string) => {
+      for (const line of data.split(/\\r?\\n/)) {
+        const t = line.trim();
+        if (!t) continue;
+        if (t.startsWith("export PATH") || t.startsWith("if [ ! -f") || t.startsWith("[ -n \"$CS_PID\" ]")) continue;
+        onLog(t.length > 300 ? t.slice(0, 300) : t);
+      }
+      if (data.includes("VSCODE_RUNNING")) finishWithClear(true);
+      else if (data.includes("VSCODE_START_FAILED")) finishWithClear(false);
+    });
 
     (async () => {
       try {

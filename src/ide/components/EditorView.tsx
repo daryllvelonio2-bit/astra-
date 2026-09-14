@@ -53,7 +53,7 @@ interface EditorViewProps {
 const LINE_HEIGHT = 20;
 const SCROLL_THRESHOLD = 10;
 
-export function EditorView({
+function EditorViewInner({
   fileName,
   activeFilePath,
   content,
@@ -308,6 +308,28 @@ export function EditorView({
     [assists.errorLines, assists.match, assists.matchLines, cursorFullLine, theme.accentRed, theme.accent, theme.textPrimary, theme.textMuted]
   );
 
+  // Stable callbacks to prevent child re-renders from inline arrow functions
+  const handleToggleEdit = useCallback(() => {
+    if (isEditing) {
+      handleDoneEditing();
+    } else {
+      const approxLine = Math.max(0, Math.min(Math.floor(scrollYRef.current / LINE_HEIGHT), totalLines - 1));
+      const charOffset = computeCursorOffset(visibleCodeChunk, approxLine, startIndexRef.current);
+      enterEditModeAtOffset(charOffset);
+    }
+  }, [isEditing, handleDoneEditing, totalLines, visibleCodeChunk, enterEditModeAtOffset]);
+
+  const handleRunFileStable = useMemo(() =>
+    onRunFile
+      ? () => { onRunFile(contentRef.current, fileName || ""); }
+      : undefined,
+    [onRunFile, fileName]
+  );
+
+  const handleCloseSplit = useCallback(() => gestures.setIsSplitScreen(false), [gestures]);
+
+  const handleCloseProblems = useCallback(() => setShowProblems(false), []);
+
   if (!fileName) {
     return (
       <EditorEmptyState
@@ -335,23 +357,9 @@ export function EditorView({
         onSelectRecentFile={onSelectRecentFile}
         onCloseRecentFile={onCloseRecentFile}
         isEditing={isEditing}
-        onToggleEdit={() => {
-          if (isEditing) {
-            handleDoneEditing();
-          } else {
-            const approxLine = Math.max(0, Math.min(Math.floor(scrollYRef.current / LINE_HEIGHT), totalLines - 1));
-            const charOffset = computeCursorOffset(visibleCodeChunk, approxLine, startIndexRef.current);
-            enterEditModeAtOffset(charOffset);
-          }
-        }}
+        onToggleEdit={handleToggleEdit}
         onDoneEdit={handleDoneEditing}
-        onRunFile={
-          onRunFile
-            ? () => {
-                onRunFile(contentRef.current, fileName || "");
-              }
-            : undefined
-        }
+        onRunFile={handleRunFileStable}
         onExitProject={onExitProject}
         onToggleSidebar={onToggleSidebar}
         onOpenSettings={onOpenSettings}
@@ -392,7 +400,7 @@ export function EditorView({
           cursorLine={cursorFullLine}
           showIndentGuides={editorSettings.showIndentGuides !== false}
           tabSize={editorSettings.tabSize}
-          onCloseSplit={() => gestures.setIsSplitScreen(false)}
+          onCloseSplit={handleCloseSplit}
           onEnterEditMode={enterEditModeAtOffset}
           tokenizedLines={displayLines}
           maxLineLength={maxLineLen}
@@ -471,12 +479,14 @@ export function EditorView({
         <ProblemsPanel
           diagnostics={assists.diagnostics}
           onJumpToLine={jumpToLine}
-          onClose={() => setShowProblems(false)}
+          onClose={handleCloseProblems}
         />
       )}
     </View>
   );
 }
+
+export const EditorView = React.memo(EditorViewInner);
 
 const styles = StyleSheet.create({
   container: { flex: 1, position: "relative" },

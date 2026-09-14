@@ -7,7 +7,9 @@ try {
   VoiceInputModule = null;
 }
 
-const emitter: any = new EventEmitter(VoiceInputModule ?? {});
+const emitter: any = VoiceInputModule
+  ? new EventEmitter(VoiceInputModule)
+  : ({ addListener: () => ({ remove: () => {} }) } as any);
 
 export type VoiceEventName =
   | 'onVoicePartial'

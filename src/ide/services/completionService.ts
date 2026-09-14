@@ -43,8 +43,13 @@ const EXTRA_TYPES: Record<string, string[]> = {
 /**
  * Harvest local identifier tokens declared or used in the active code buffer.
  */
-function harvestLocalSymbols(text: string, currentWord: string): string[] {
-  const matches = text.match(/[a-zA-Z_$][a-zA-Z0-9_$]{2,}/g) || [];
+function harvestLocalSymbols(text: string, currentWord: string, cursorOffset?: number): string[] {
+  // Restrict scan to ~4KB window around cursor to avoid freezing on large files
+  const scanRadius = 2000;
+  const scanText = cursorOffset !== undefined
+    ? text.slice(Math.max(0, cursorOffset - scanRadius), cursorOffset + scanRadius)
+    : text.length > scanRadius * 2 ? text.slice(0, scanRadius * 2) : text;
+  const matches = scanText.match(/[a-zA-Z_$][a-zA-Z0-9_$]{2,}/g) || [];
   const set = new Set<string>();
   const currLower = currentWord.toLowerCase();
 
@@ -166,7 +171,7 @@ export function getCompletions(
     }
 
     // 2. Local harvested symbols from buffer
-    const localSymbols = harvestLocalSymbols(code, prefix);
+    const localSymbols = harvestLocalSymbols(code, prefix, cursorOffset);
     for (const sym of localSymbols) {
       if (seenLabels.has(sym)) continue;
       seenLabels.add(sym);

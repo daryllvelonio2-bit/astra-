@@ -2,9 +2,44 @@
 
 ## Status
 - **Current Phase:** Debug Server (RUNNING — Metro in dedicated Foot terminal per Rule 10)
-- **Last Updated:** September 14, 2026
+- **Last Updated:** September 15, 2026
 
-### [2026-09-14] - Debug Server Running
+### [2026-09-15] - Terminal Leaked Text Fix (Quiet Environment Synchronization)
+- **User Directive:** "fix terminal showing leaked texts, export colorfgbg=\"0;default;15\" Colorterm truecolor term _program=AstraIDE"
+- **Root Cause:**
+  - `useTerminalSession.ts` previously attempted to set theme environment hints by typing `writeTerminalInput(sessionId, "export COLORFGBG=\"...\" COLORTERM=truecolor TERM_PROGRAM=AstraIDE\n")` directly into the interactive terminal's stdin on every session init, restart, and tab switch. The interactive shell echoed these keystrokes directly onto the terminal screen, displaying leaked text.
+- **Changes Implemented:**
+  - `useTerminalSession.ts` (454 lines): Replaced `writeTerminalInput` injection with `syncThemeEnv`, which quietly updates `/root/.theme_env` in the background via detached `executeCommand` without touching interactive stdin.
+  - `terminalBuffer.ts` (124 lines): Added `stripLeakedTerminalText()` helper that cleans any leaked internal exports or `/bin/sh` tty warnings from buffer history and live streams.
+  - `XtermView.tsx` (354 lines): Applied `stripLeakedTerminalText` to `replaySession` and `addTerminalDataListener` chunks so no leaked commands are ever rendered on the xterm grid.
+  - `ProotSessionConfig.kt` (148 lines): Dynamically sets `"COLORFGBG"` in the initial PTY environment by inspecting `/root/.theme_env` or `config.json` (`0;default;15` for light theme, `15;default;0` for dark theme) alongside `COLORTERM=truecolor` and `TERM_PROGRAM=AstraIDE`.
+  - `EnvironmentManager.kt` (389 lines): Configured `/root/.profile` to automatically source `/root/.theme_env` and aliased `opencode` to source it on launch.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - All files strictly under 500 line limit (Rule 5).
+  - Terminal no longer receives or displays leaked export commands.
+
+### [2026-09-15] - Added Rule 13: Stability & Speed First
+- **User Directive:** "add a rule if not implemented, to always make sure that everything we code should focus on stability, and speed of the application"
+- **Changes Implemented:**
+  - Added Rule 13 to `agents.md` (`agent.md`):
+    - **Rock-Solid Stability:** Mandatory error boundary coverage, zero unhandled rejections, leak-free subscriptions/intervals/timers with cleanup, strict React Rules of Hooks compliance, and serialized write safety.
+    - **Maximized Speed & Smoothness:** Prevent main-thread blockage, eliminate re-render cascades (`React.memo`, `useCallback`, `useMemo`), avoid heavy synchronous loops or unconstrained regex traversals on keystroke/render paths, virtualize large lists, and keep I/O and process execution off the UI thread.
+
+### [2026-09-15] - React Hook Order & Stability Fixes
+- **User Directive:** "fix errors" (`Rendered more hooks than during the previous render` in `EditorView.tsx`)
+- **Root Cause:**
+  - `EditorView.tsx` placed newly added `useCallback` and `useMemo` hooks (`handleToggleEdit`, `handleRunFileStable`, `handleCloseSplit`, `handleCloseProblems`) after the early return condition `if (!fileName) return <EditorEmptyState ... />`. When opening a file or switching files, the number of hooks called changed between renders, violating React's Rules of Hooks.
+  - `formatService.ts` called `writeFileText(tmpIn, code)` for `/tmp/...`, which failed on Android host where `/tmp` does not exist outside the Alpine PRoot container.
+  - `AppBootScreen.tsx` animated callback did not guard for `finished` boolean, risking premature animation end.
+- **Changes Implemented:**
+  - `EditorView.tsx` (495 lines): Moved all callbacks (`handleToggleEdit`, `handleRunFileStable`, etc.) to before `if (!fileName)` so hook calls are completely unconditional on every render.
+  - `formatService.ts` (370 lines): Added `writeProotTempFile` to pipe base64 in 32KB chunks (multiples of 4) into Alpine PRoot via `base64 -d`, safely avoiding shell `ARG_MAX` while staying entirely inside PRoot.
+  - `AppBootScreen.tsx` (184 lines): Guarded `anim.start(({ finished }) => { if (finished) onAnimationEnd(); })`.
+- **Verification:**
+  - `npx tsc --noEmit` exited 0 (clean).
+  - All files strictly under 500 line limit (Rule 5).
+  - Metro bundler confirmed active (`curl 127.0.0.1:8081/status` -> `packager-status:running`).
 - **User Directive:** "run the debug severr"
 - **Note:** Launched via `start-debug.sh` → `foot -H -T "Astra Metro Bundler" metro.sh` (`npx expo start --dev-client --clear`) per Rule 10.
 - **Verification:**
@@ -3432,3 +3467,39 @@
 - Boot: concurrent settings/config/sandbox; splash waits on local reads only; fallback 15s→10s; unmount-safe.
 - Deps: audit-only (jszip used; ngrok tunnel-only; editor libs node-build-only; Hermes default; no font trims).
 - Verified: `tsc` 0 errors, zero files >500 lines, no features removed. Full plan (Phases 0-5) done.
+
+### [2026-09-15] - Debug build to Downloads (all perf phases included)
+- `build-debug-apk.sh`: `assembleDebug` BUILD SUCCESSFUL (3m, 27 tasks executed) — confirms Phase 4d Kotlin TTL edit + all JS phases compile.
+- Output 124M `app-debug.apk` copied to `/home/janelle/Downloads/app-debug.apk` + `astra-debug.apk`.
+- Device `AUDUT20616012479`: streamed install Success, launch intent sent; Metro bundler up in dedicated Foot terminal (`/status` 200, adb reverse 8081 active).
+
+### [2026-09-15] - Navbar hide scoped to landscape-editor (bugfix)
+- Portrait: hide chevron no longer offered (`onHideNavbar` only passed in landscape) — full bar always shows in portrait.
+- Landscape: collapsed floating restore chevron now renders on the editor tab only; other tabs (terminal etc.) fall through to the full bar — fixes overlap with terminal ExtraKeysBar, no navigation dead end.
+- Drive-by repairs (parallel-session breakage blocking `tsc`): `vscodeService` over-escaped quote, `formatService` missing `writeFileText` import, `runService` missing `onLog` interface field.
+- Verified: `tsc` 0 errors, all touched files <500 lines.
+
+### [2026-09-15] - Explorer no longer auto-closes on file open (bugfix)
+- `IDELayout.handleSelectFile` no longer force-closes the sidebar in portrait on every file open; explorer now closes only on edit-mode start (`handleEditModeChange`), rotate-to-landscape parking, or manual collapse.
+- Verified: `tsc` 0 errors, `IDELayout.tsx` 497 lines.
+
+### [2026-09-15] - Portrait recent-files strip below header (feature)
+- New `RecentFilesStrip.tsx` (132 lines, memoized): 28px strip — clock icon + horizontal chips (icon, name, edited dot, close) — mounted below the header in portrait only.
+- `EditorTabBar`: in-header recents now landscape-only; portrait renders the strip as a sibling below the tab bar, reusing the same filtered list (no duplicated filter logic).
+- Verified: `tsc` 0 errors, all touched files <500 lines (`EditorView` untouched at 495).
+
+### [2026-09-15] - Recents keep open file, capped at 5 (fix)
+- `EditorTabBar`: dropped the active-file exclusion — opening a file no longer removes it from recents; display capped at 5 newest (`slice(0, 5)`); open file gets an accent-border highlight in both header chips and portrait strip.
+- Verified: `tsc` 0 errors, `EditorTabBar.tsx` 429 / `RecentFilesStrip.tsx` 135 lines.
+
+### [2026-09-15] - Recents ranked by open time, edits don't reshuffle (fix)
+- `useRecentFiles.recordRecentFile`: opens move the file to front (stays first until another open); edits now update the edited marker in place and preserve `lastOpened`, so typing no longer reshuffles the strip.
+- Verified: `tsc` 0 errors, `useRecentFiles.ts` 75 lines.
+
+### [2026-09-15] - Recents order fully frozen except new files (fix)
+- `useRecentFiles.recordRecentFile`: only brand-new files prepend at position 1; re-opening or editing an already-listed file updates its markers in place with zero reordering.
+- Verified: `tsc` 0 errors, `useRecentFiles.ts` 75 lines.
+
+### [2026-09-15] - Keyboard reveal scrolls minimally instead of centering (fix)
+- `useEditorCursorScroll.ensureCursorVisible`: removed the center-on-cursor jump (`cursorY - visibleH / 2`); now nudges just enough to reveal the cursor with an 8px margin above the keyboard edge, and leaves the scroll untouched while the cursor is on screen. Old 48px trigger band gone with it.
+- Verified: `tsc` 0 errors, `useEditorCursorScroll.ts` 77 lines.

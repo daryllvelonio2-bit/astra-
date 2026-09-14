@@ -209,7 +209,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     refreshCustomThemes();
 
     const unsubscribe = subscribeConfigChanges((cfg) => {
-      if (cfg.selectedTheme && cfg.selectedTheme !== themeMode) {
+      if (cfg.selectedTheme) {
         setThemeModeState(cfg.selectedTheme);
       }
     });
@@ -234,7 +234,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const theme = customThemes[themeMode] || THEMES[themeMode] || THEMES.dark;
+  const theme = useMemo(
+    () => customThemes[themeMode] || THEMES[themeMode] || THEMES.dark,
+    [customThemes, themeMode]
+  );
+
 
   const value = useMemo(
     () => ({

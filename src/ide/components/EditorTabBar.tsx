@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from "
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/themeContext";
 import { getFileIcon } from "./fileExplorerUtils";
+import { RecentFilesStrip } from "./RecentFilesStrip";
 import { subscribeIconTheme } from "../services/extensions/iconThemeService";
 import { RecentFileItem } from "./editor/useRecentFiles";
 
@@ -31,7 +32,7 @@ interface EditorTabBarProps {
   onCloseRecentFile?: (filePath: string) => void;
 }
 
-export function EditorTabBar({
+function EditorTabBarInner({
   fileName,
   activeFilePath,
   isEditing,
@@ -57,13 +58,13 @@ export function EditorTabBar({
   const [showDropdown, setShowDropdown] = useState(false);
   const [barWidth, setBarWidth] = useState(0);
 
-  // Filter out the active file so recents show files you can switch TO
+  // 5 most recent files, active file included — opening a file must not
+  // remove it from the list. Newest first (hook prepends on open/edit).
   const recentFilesToDisplay = useMemo(() => {
     if (!recentFiles || recentFiles.length === 0) return [];
-    return recentFiles.filter(
-      (f) => f.name !== fileName && (activeFilePath ? f.path !== activeFilePath : true)
-    );
-  }, [recentFiles, fileName, activeFilePath]);
+    return recentFiles.slice(0, 5);
+  }, [recentFiles]);
+  const activeKey = activeFilePath || fileName;
 
   // Narrow editor (sidebar open / small screen): collapse secondary actions
   // into the overflow menu so buttons never squeeze or overlap.
@@ -79,6 +80,7 @@ export function EditorTabBar({
   }, []);
 
   return (
+    <>
     <View
       style={[styles.tabBar, { backgroundColor: theme.bgSecondary, borderBottomColor: theme.border }]}
       onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
@@ -133,8 +135,9 @@ export function EditorTabBar({
         )}
       </View>
 
-      {/* Recently Edited Files in the generous header space */}
-      {recentFilesToDisplay.length > 0 && (
+      {/* Recently Edited Files live in the header on landscape only —
+          portrait renders them in the compact strip below the header. */}
+      {isLandscape && recentFilesToDisplay.length > 0 && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -148,6 +151,7 @@ export function EditorTabBar({
               style={[
                 styles.recentChip,
                 { backgroundColor: theme.bgTertiary, borderColor: theme.border },
+                (file.path || file.name) === activeKey && { borderColor: theme.accent },
               ]}
               onPress={() => onSelectRecentFile?.(file)}
               activeOpacity={0.7}
@@ -257,8 +261,21 @@ export function EditorTabBar({
         </View>
       )}
     </View>
+
+    {/* Portrait only: compact recents strip directly below the header. */}
+    {!isLandscape && (
+      <RecentFilesStrip
+        files={recentFilesToDisplay}
+        activeKey={activeKey}
+        onSelectRecentFile={onSelectRecentFile}
+        onCloseRecentFile={onCloseRecentFile}
+      />
+    )}
+    </>
   );
 }
+
+export const EditorTabBar = React.memo(EditorTabBarInner);
 
 const styles = StyleSheet.create({
   tabBar: {

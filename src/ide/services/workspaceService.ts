@@ -71,12 +71,17 @@ export async function loadWorkspaceRegistry(): Promise<Record<string, WorkspaceM
   return {};
 }
 
+let _wsWriteQueue = Promise.resolve();
+
 export async function saveWorkspaceMeta(meta: WorkspaceMeta): Promise<void> {
-  try {
-    const registry = await loadWorkspaceRegistry();
-    registry[meta.id] = meta;
-    await writeFileText(REGISTRY_FILE, JSON.stringify(registry, null, 2));
-  } catch (_) {}
+  _wsWriteQueue = _wsWriteQueue.then(async () => {
+    try {
+      const registry = await loadWorkspaceRegistry();
+      registry[meta.id] = meta;
+      await writeFileText(REGISTRY_FILE, JSON.stringify(registry, null, 2));
+    } catch (_) {}
+  });
+  return _wsWriteQueue;
 }
 
 export async function getWorkspaceDirPath(workspaceId: string): Promise<string> {
@@ -207,7 +212,7 @@ async function readDirectoryRecursive(
   try {
     const entries = await readDirEntries(cleanDirPath);
     const fileChildren: FileNode[] = [];
-    const dirPromises: Promise<FileNode>[] = [];
+    const subFolders: FileNode[] = [];
 
     for (const entry of entries) {
       if (IGNORED_FOLDERS.has(entry.name)) continue;
@@ -221,12 +226,9 @@ async function readDirectoryRecursive(
       const id = `${workspaceId}::${relativePath}`;
 
       if (entry.isDirectory) {
-        dirPromises.push(
-          readDirectoryRecursive(`${cleanFullPath}/`, id, workspaceId, cleanBaseDir, depth + 1, shared, onProgress).then((cf) => {
-            cf.path = relativePath;
-            return cf;
-          })
-        );
+        const cf = await readDirectoryRecursive(`${cleanFullPath}/`, id, workspaceId, cleanBaseDir, depth + 1, shared, onProgress);
+        cf.path = relativePath;
+        subFolders.push(cf);
       } else {
         fileChildren.push({
           id,
@@ -238,7 +240,6 @@ async function readDirectoryRecursive(
       }
     }
 
-    const subFolders = await Promise.all(dirPromises);
     const children: FileNode[] = [...subFolders, ...fileChildren];
 
     const folderName = cleanDirPath.split("/").filter(Boolean).pop() || workspaceId;

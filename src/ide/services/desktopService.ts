@@ -114,20 +114,8 @@ export async function startDesktop(
       } catch (_) {}
       resolve(ok);
     };
-    const sub = addTerminalDataListener(SVC_ID, (data: string) => {
-      for (const line of data.split(/\r?\n/)) {
-        const t = line.trim();
-        if (!t) continue;
-        // Skip echoing our own script lines back (they contain no markers).
-        if (t.startsWith("export DISPLAY") || t.startsWith("if [ ! -f") || t.startsWith("for p in") || t.startsWith("pkill -f '[x]")) continue;
-        onLog(t.length > 300 ? t.slice(0, 300) : t);
-      }
-      if (data.includes("DESKTOP_RUNNING")) finish(true);
-      else if (data.includes("DESKTOP_START_FAILED")) finish(false);
-    });
-
     // Dead-man switch: even if events are lost, reconcile against reality.
-    setTimeout(async () => {
+    const deadManTimer = setTimeout(async () => {
       if (done) return;
       onLog("Start timed out waiting for the ready signal — reconciling…");
       try {
@@ -137,6 +125,23 @@ export async function startDesktop(
         finish(false);
       }
     }, 60000);
+
+    const finishWithClear = (ok: boolean) => {
+      clearTimeout(deadManTimer);
+      finish(ok);
+    };
+
+    const sub = addTerminalDataListener(SVC_ID, (data: string) => {
+      for (const line of data.split(/\\r?\\n/)) {
+        const t = line.trim();
+        if (!t) continue;
+        // Skip echoing our own script lines back (they contain no markers).
+        if (t.startsWith("export DISPLAY") || t.startsWith("if [ ! -f") || t.startsWith("for p in") || t.startsWith("pkill -f '[x]")) continue;
+        onLog(t.length > 300 ? t.slice(0, 300) : t);
+      }
+      if (data.includes("DESKTOP_RUNNING")) finishWithClear(true);
+      else if (data.includes("DESKTOP_START_FAILED")) finishWithClear(false);
+    });
 
     (async () => {
       try {

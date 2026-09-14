@@ -96,6 +96,28 @@ object ProotSessionConfig {
         // (astra:<cwd>#) after every command instead of going silent.
         argv.add("-i")
 
+        val themeEnvFile = File(alpineDir, "root/.theme_env")
+        var colorFgBg = "15;default;0"
+        if (themeEnvFile.exists()) {
+            try {
+                val content = themeEnvFile.readText()
+                val match = Regex("""COLORFGBG=["']?([^"'\s]+)["']?""").find(content)
+                if (match != null) {
+                    colorFgBg = match.groupValues[1]
+                }
+            } catch (_: Exception) {}
+        } else {
+            val configFile = File(filesDir, "config.json")
+            if (configFile.exists()) {
+                try {
+                    val configText = configFile.readText()
+                    if (configText.contains(""""selectedTheme":\s*"light"""".toRegex())) {
+                        colorFgBg = "0;default;15"
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
         val env = linkedMapOf(
             "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin:/root/.npm-global/bin",
             "NODE_PATH" to "/usr/local/share/astra-cli/node_modules:/usr/local/lib/node_modules:/usr/lib/node_modules",
@@ -108,9 +130,7 @@ object ProotSessionConfig {
             "TERM" to "xterm-256color",
             "COLORTERM" to "truecolor",
             "TERM_PROGRAM" to "AstraIDE",
-            // Dark default; JS live-exports the light value on theme switch
-            // so lipgloss/bubbletea TUIs (opencode) pick readable colors.
-            "COLORFGBG" to "15;default;0",
+            "COLORFGBG" to colorFgBg,
             "LANG" to "C.UTF-8",
             "LC_ALL" to "C.UTF-8",
             "ENV" to "/root/.profile",

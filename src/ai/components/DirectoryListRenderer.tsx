@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, ThemeColors, THEMES } from '../../theme/themeContext';
@@ -142,7 +142,7 @@ interface DirectoryListRendererProps {
 export function DirectoryListRenderer({ rawOutput, title = 'Directory Contents' }: DirectoryListRendererProps) {
   const { theme } = useTheme();
   const [showAll, setShowAll] = useState(false);
-  const items = parseDirectoryListing(rawOutput, theme);
+  const items = useMemo(() => parseDirectoryListing(rawOutput, theme), [rawOutput, theme]);
 
   if (items.length === 0) {
     return (

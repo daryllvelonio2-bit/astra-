@@ -16,5 +16,8 @@
 10. **Launch Debug Mode in Dedicated Terminal:** Always launch the Metro bundler development server in a separate, external terminal window (e.g. `foot`, `kitty`, or `xterm` via `start-debug.sh` / `metro.sh`) so live hot-reloading, bundling logs, and developer sessions run persistently in an independent window.
 11. **Strict Global Theme Adherence:** All UI components, editors, terminals, and modals must strictly consume the global theme (`useTheme()`) and dynamic theme tokens. Never use hardcoded static colors that violate the user's active theme selection.
 12. **Phase-by-Phase Execution, Never Rush:** Execute multi-phase work strictly one phase at a time. Think thoroughly before every phase, complete it fully, verify its exit gate (typecheck, line limits, behavior), report back, and wait for the user's go before starting the next phase. Never jump ahead, batch phases, or skip verification.
+13. **Stability & Speed First:** All code implemented or refactored must strictly prioritize application stability and peak execution speed:
+    - **Rock-Solid Stability:** Guarantee zero unhandled promise rejections, comprehensive error boundaries, leak-free subscriptions/intervals/timers with mandatory cleanup on unmount, strict adherence to React Rules of Hooks (never call hooks conditionally or after early returns), and safe serialization of concurrent storage operations.
+    - **Maximized Speed & Smoothness:** Prevent main-thread blockage; eliminate re-render cascades using `React.memo`, `useCallback`, and `useMemo`; avoid heavy synchronous computations or unconstrained regex scans on keystroke/render paths; virtualize large lists; and ensure I/O and process execution run asynchronously off the critical UI thread.
 
 

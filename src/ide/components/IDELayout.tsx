@@ -274,13 +274,14 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
     setActiveFile(selected);
     recordRecentFile(selected, false);
     safeSetBottomTab("editor");
-    if (!isLandscape) setIsSidebarOpen(false);
+    // Explorer stays open on file select — it closes only when edit mode
+    // starts (handleEditModeChange) or the user collapses it manually.
     try {
       await flushPendingSave();
       const content = await readFileContent(workspace.id, targetPath);
       setActiveFile((prev) => (prev && prev.id === selected.id ? { ...prev, content: content ?? "" } : prev));
     } catch (_) {}
-  }, [workspace, isLandscape, safeSetBottomTab, flushPendingSave, recordRecentFile]);
+  }, [workspace, safeSetBottomTab, flushPendingSave, recordRecentFile]);
 
   const handleContentChange = useCallback((newContent: string) => {
     const current = activeFileRef.current;
@@ -444,7 +445,7 @@ export function IDELayout({ workspaceId, onBackToPicker }: IDELayoutProps) {
           compact={isLandscape}
           visibleTabs={visibleTabs}
           isLandscapeNavbarHidden={isLandscapeNavbarHidden}
-          onHideNavbar={handleHideNavbar}
+          onHideNavbar={isLandscape ? handleHideNavbar : undefined}
           onShowNavbar={handleShowNavbar}
         />
       )}

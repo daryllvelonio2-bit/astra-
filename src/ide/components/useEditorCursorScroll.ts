@@ -36,14 +36,10 @@ export function useEditorCursorScroll({
     return Math.max(160, winH - keyboardHeightRef.current);
   }, [keyboardHeightRef, scrollViewHeightRef]);
 
-  const centerCursorLine = useCallback(
-    (fullLineIdx: number) => {
-      const cursorY = fullLineIdx * lineHeight + 8;
-      const visibleH = getVisibleHeight();
-      scrollRef.current?.scrollTo({ y: Math.max(0, cursorY - visibleH / 2), animated: true });
-    },
-    [lineHeight, getVisibleHeight, scrollRef]
-  );
+  // (Removed the old center-on-cursor jump: it yanked the code to the
+  // middle of the screen. Minimal edge-reveal above is enough.)
+
+  const REVEAL_MARGIN = 8;
 
   const ensureCursorVisible = useCallback(
     (fullLineIdx: number) => {
@@ -52,11 +48,16 @@ export function useEditorCursorScroll({
       const cursorY = fullLineIdx * lineHeight + 8;
       const visibleH = getVisibleHeight();
       const top = scrollYRef.current;
-      if (cursorY < top + 48 || cursorY + lineHeight > top + visibleH - 48) {
-        centerCursorLine(fullLineIdx);
+      if (cursorY < top + REVEAL_MARGIN) {
+        // Cursor above the viewport: nudge up just enough to reveal it.
+        scrollRef.current?.scrollTo({ y: Math.max(0, cursorY - REVEAL_MARGIN), animated: true });
+      } else if (cursorY + lineHeight > top + visibleH - REVEAL_MARGIN) {
+        // Cursor hidden behind the keyboard: lift just enough to show it.
+        scrollRef.current?.scrollTo({ y: cursorY + lineHeight + REVEAL_MARGIN - visibleH, animated: true });
       }
+      // Otherwise the cursor is already on screen: don't touch the scroll.
     },
-    [centerCursorLine, lineHeight, keyboardHeightRef, getVisibleHeight, scrollYRef]
+    [lineHeight, keyboardHeightRef, getVisibleHeight, scrollYRef, scrollRef]
   );
 
   // When the keyboard opens, lift the cursor line into view only if hidden.
@@ -72,5 +73,5 @@ export function useEditorCursorScroll({
     ensureCursorVisible(selectionLineIdx);
   }, [selectionLineIdx, isEditing, keyboardHeight, ensureCursorVisible]);
 
-  return { centerCursorLine, ensureCursorVisible };
+  return { ensureCursorVisible };
 }

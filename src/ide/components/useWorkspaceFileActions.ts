@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Alert } from "react-native";
 import { FileNode } from "../types";
 import { moveNodeInTree } from "./fileExplorerUtils";
@@ -37,28 +37,41 @@ export function useWorkspaceFileActions({
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 50, y: 150 });
   const [isRunning, setIsRunning] = useState(false);
 
-  const handleLongPressNode = (node: FileNode, coords: { x: number; y: number }) => {
+  // Refs for rapidly-changing values to keep callbacks stable
+  const activeFileRef = useRef(activeFile);
+  activeFileRef.current = activeFile;
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
+  const selectedNodeRef = useRef(selectedNode);
+  selectedNodeRef.current = selectedNode;
+  const modalInputRef = useRef(modalInput);
+  modalInputRef.current = modalInput;
+
+  const handleLongPressNode = useCallback((node: FileNode, coords: { x: number; y: number }) => {
     setSelectedNode(node);
     setMenuPosition({
       x: Math.min(Math.max(coords.x, 10), 180),
       y: Math.min(coords.y, 450),
     });
     setModalMode("options");
-  };
+  }, []);
 
-  const confirmAndDeleteNode = () => {
-    if (!workspace || !selectedNode) return;
-    const targetPath = selectedNode.path || selectedNode.name;
-    Alert.alert("Confirm Delete", `Delete "${selectedNode.name}"?`, [
+  const confirmAndDeleteNode = useCallback(() => {
+    const ws = workspaceRef.current;
+    const sel = selectedNodeRef.current;
+    if (!ws || !sel) return;
+    const targetPath = sel.path || sel.name;
+    Alert.alert("Confirm Delete", `Delete "${sel.name}"?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteNodeInWorkspace(workspace.id, targetPath);
+            await deleteNodeInWorkspace(ws.id, targetPath);
             await refreshWorkspace();
-            if (activeFile && (activeFile.id === selectedNode.id || activeFile.path === selectedNode.path)) {
+            const af = activeFileRef.current;
+            if (af && (af.id === sel.id || af.path === sel.path)) {
               setActiveFile(null);
             }
             setModalMode("none");
@@ -68,45 +81,51 @@ export function useWorkspaceFileActions({
         },
       },
     ]);
-  };
+  }, [refreshWorkspace, setActiveFile]);
 
-  const handleRenameSubmit = async () => {
-    if (!workspace || !selectedNode || !modalInput.trim()) return;
-    const targetPath = selectedNode.path || selectedNode.name;
+  const handleRenameSubmit = useCallback(async () => {
+    const ws = workspaceRef.current;
+    const sel = selectedNodeRef.current;
+    const input = modalInputRef.current;
+    if (!ws || !sel || !input.trim()) return;
+    const targetPath = sel.path || sel.name;
     try {
-      await renameNodeInWorkspace(workspace.id, targetPath, modalInput.trim());
+      await renameNodeInWorkspace(ws.id, targetPath, input.trim());
       await refreshWorkspace();
       setModalMode("none");
       setModalInput("");
     } catch (e) {
       Alert.alert("Error", "Failed to rename item");
     }
-  };
+  }, [refreshWorkspace]);
 
-  const handleCreateNode = async (inputName: string) => {
-    if (!workspace || !inputName.trim()) return;
+  const handleCreateNode = useCallback(async (inputName: string) => {
+    const ws = workspaceRef.current;
+    const sel = selectedNodeRef.current;
+    if (!ws || !inputName.trim()) return;
     const fileName = inputName.trim();
     const isFolder = fileName.endsWith("/");
     const cleanName = isFolder ? fileName.slice(0, -1) : fileName;
 
     let targetPath = cleanName;
-    if (selectedNode && selectedNode.type === "folder") {
-      const parentFolder = selectedNode.path || selectedNode.name;
+    if (sel && sel.type === "folder") {
+      const parentFolder = sel.path || sel.name;
       targetPath = `${parentFolder}/${cleanName}`;
     }
 
     try {
-      const newNode = await createFileInWorkspace(workspace.id, targetPath, "");
+      const newNode = await createFileInWorkspace(ws.id, targetPath, "");
       if (!isFolder) setActiveFile(newNode);
       await refreshWorkspace();
     } catch (_) {}
-  };
+  }, [refreshWorkspace, setActiveFile]);
 
-  const handleMoveNode = async (source: FileNode, targetFolder: FileNode | null) => {
-    if (!workspace) return;
+  const handleMoveNode = useCallback(async (source: FileNode, targetFolder: FileNode | null) => {
+    const ws = workspaceRef.current;
+    if (!ws) return;
     try {
       const targetFolderId = targetFolder ? targetFolder.id : null;
-      const updatedRoot = moveNodeInTree(workspace.root, source.id, targetFolderId, workspace.id);
+      const updatedRoot = moveNodeInTree(ws.root, source.id, targetFolderId, ws.id);
 
       const sourcePath = source.path || source.name;
       const targetPath = targetFolder ? targetFolder.path || targetFolder.name : null;
@@ -114,34 +133,37 @@ export function useWorkspaceFileActions({
       const newPath = targetPath ? `${targetPath}/${fileName}` : fileName;
 
       setWorkspace({
-        ...workspace,
+        ...ws,
         root: updatedRoot,
       });
 
-      if (activeFile && (activeFile.id === source.id || activeFile.path === sourcePath)) {
-        const newId = `${workspace.id}-${newPath.replace(/\//g, "-")}`;
+      const af = activeFileRef.current;
+      if (af && (af.id === source.id || af.path === sourcePath)) {
+        const newId = `${ws.id}-${newPath.replace(/\//g, "-")}`;
         setActiveFile((prev) => (prev ? { ...prev, path: newPath, id: newId } : null));
       }
 
-      await moveNodeInWorkspace(workspace.id, sourcePath, targetPath);
+      await moveNodeInWorkspace(ws.id, sourcePath, targetPath);
     } catch (e: any) {
       console.error("Move Error:", e);
       Alert.alert("Move Error", e.message || "Failed to move file");
     }
-  };
+  }, [setWorkspace, setActiveFile]);
 
-  const handleRunActiveFile = async (code: string, fileName: string) => {
-    if (!workspace || !activeFile || isRunning) return;
-    const filePath = activeFile.path || activeFile.name;
+  const handleRunActiveFile = useCallback(async (code: string, fileName: string) => {
+    const ws = workspaceRef.current;
+    const af = activeFileRef.current;
+    if (!ws || !af || isRunning) return;
+    const filePath = af.path || af.name;
     setIsRunning(true);
     try {
       // Persist first so the guest executes exactly what's on screen.
       try {
-        await saveFileContent(workspace.id, filePath, code);
+        await saveFileContent(ws.id, filePath, code);
       } catch (_) {}
-      const rootNames = (workspace.root.children || []).map((n) => n.name);
-      const plan = await resolveRunPlan(workspace.id, filePath, rootNames);
-      await executeRunPlan(workspace.id, plan, {
+      const rootNames = (ws.root.children || []).map((n) => n.name);
+      const plan = await resolveRunPlan(ws.id, filePath, rootNames);
+      await executeRunPlan(ws.id, plan, {
         onOpenTerminal: () => onOpenTerminal?.(),
         onOpenBrowser: (url) => onOpenPreview?.(url),
       });
@@ -150,7 +172,7 @@ export function useWorkspaceFileActions({
     } finally {
       setIsRunning(false);
     }
-  };
+  }, [isRunning, onOpenTerminal, onOpenPreview]);
 
   return {
     selectedNode,

@@ -294,9 +294,9 @@ export const INJECTED_KEYBOARD_GUARD = `
       window.dispatchEvent(new Event('resize'));
     } catch(e) {}
   }
-  setTimeout(triggerTerminalFit, 500);
-  setTimeout(triggerTerminalFit, 1500);
-  setTimeout(triggerTerminalFit, 3000);
+  var fitTimer1 = setTimeout(triggerTerminalFit, 500);
+  var fitTimer2 = setTimeout(triggerTerminalFit, 1500);
+  var fitTimer3 = setTimeout(triggerTerminalFit, 3000);
 
   /* ── 6. DOM MutationObserver: Debounced & Filtered for High-Speed Typing ─ */
   var observer = null;
@@ -340,6 +340,9 @@ export const INJECTED_KEYBOARD_GUARD = `
   configureAllTextareas(document, false);
 
   window.__astra_guard_cleanup = function() {
+    clearTimeout(fitTimer1);
+    clearTimeout(fitTimer2);
+    clearTimeout(fitTimer3);
     document.removeEventListener('touchstart', handleTouchStart, true);
     document.removeEventListener('touchmove', handleTouchMove, true);
     document.removeEventListener('touchend', handleTouchEnd, true);

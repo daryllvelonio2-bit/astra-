@@ -89,6 +89,15 @@ export function useChatSession({ workspaceId: initialWorkspaceId,
     isAgentWorkingRef.current = agentStatus !== "idle";
   }, [agentStatus]);
 
+  // Cleanup on unmount: cancel timers and abort active streams
+  useEffect(() => {
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (scrollThrottleTimerRef.current) clearTimeout(scrollThrottleTimerRef.current);
+      if (activeAbortControllerRef.current) activeAbortControllerRef.current.abort();
+    };
+  }, []);
+
   // 1. Initial Load
   useEffect(() => {
     let isMounted = true;

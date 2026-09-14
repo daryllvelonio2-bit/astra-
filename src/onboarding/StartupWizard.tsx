@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -68,8 +68,8 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
       if (cfg.defaultEditorUi) {
         setSelectedEditor(cfg.defaultEditorUi);
       }
-    });
-  }, []);
+    }).catch(console.error);
+  }, [setTheme]);
 
   const currentStep = STEPS[currentStepIndex];
 
@@ -122,32 +122,32 @@ export function StartupWizard({ onComplete }: StartupWizardProps) {
     return () => loop.stop();
   }, []);
 
-  const handleSelectTheme = (mode: AppTheme) => {
+  const handleSelectTheme = useCallback((mode: AppTheme) => {
     setSelectedTheme(mode);
     setTheme(mode); // Live preview updates UI immediately
-  };
+  }, [setTheme]);
 
-  const handleFinish = async () => {
+  const handleFinish = useCallback(async () => {
     await saveTheme(selectedTheme);
     await saveAstraEnabled(astraEnabled);
     await saveDefaultEditorUi(selectedEditor);
     await saveHasCompletedStartup(true);
     onComplete();
-  };
+  }, [selectedTheme, astraEnabled, selectedEditor, onComplete]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (currentStepIndex < STEPS.length - 1) {
       setCurrentStepIndex((prev) => prev + 1);
     } else {
       handleFinish();
     }
-  };
+  }, [currentStepIndex, handleFinish]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (currentStepIndex > 0) {
       setCurrentStepIndex((prev) => prev - 1);
     }
-  };
+  }, [currentStepIndex]);
 
   return (
     <View

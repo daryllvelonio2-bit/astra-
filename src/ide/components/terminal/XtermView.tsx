@@ -18,6 +18,7 @@ import {
 import { buildXtermHtml } from "./xtermHtml.generated";
 import { utf8ToB64 } from "./terminalEncoding";
 import { TerminalTheme, getXtermTheme } from "./terminalThemes";
+import { stripLeakedTerminalText } from "./terminalBuffer";
 
 export interface XtermViewHandle {
   focusTerminal: () => void;
@@ -171,7 +172,8 @@ export const XtermView = memo(
       if (sessionRef.current !== id) return; // switched away mid-flight
       // Banner first: native history never contains it (legacy renderer kept
       // its own copy), and reset wiped the grid so it paints exactly once.
-      injectWrite(utf8ToB64(bannerRef.current + (hist || "")));
+      const cleanHist = stripLeakedTerminalText(hist || "");
+      injectWrite(utf8ToB64(bannerRef.current + cleanHist));
       paintFitRef.current = lastFitRef.current ? { ...lastFitRef.current } : null;
       webRef.current?.injectJavaScript("window.__astraFit&&window.__astraFit();true;");
     } catch (_) {}
@@ -190,7 +192,9 @@ export const XtermView = memo(
 
     const dataSub = addTerminalDataListener(sessionId, (chunk: string) => {
       if (!readyRef.current) return;
-      enqueue(utf8ToB64(chunk));
+      const cleanChunk = stripLeakedTerminalText(chunk);
+      if (!cleanChunk) return;
+      enqueue(utf8ToB64(cleanChunk));
       if (!visibleRef.current) return;
       // Adaptive flush: interactive typing (short queue) paints immediately;
       // floods batch into the 80ms safety net instead of one bridge call

@@ -9,6 +9,7 @@ import {
   getSessionHistory,
   addTerminalDataListener,
   initializeEnvironment,
+  executeCommand,
 } from "../../../../modules/linux-runner/src";
 import { PTY_XTERM_ENABLED } from "./ptyConfig";
 import { themeToTerminalTheme, TerminalTheme } from "./terminalThemes";
@@ -19,6 +20,7 @@ import {
   getBannerTitle,
   appendCapped,
   mergeNativeHistory,
+  stripLeakedTerminalText,
 } from "./terminalBuffer";
 
 export interface TerminalTab {
@@ -85,18 +87,17 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
   // Last COLORFGBG pushed per shell session; avoids re-export spam.
   const exportedFgBgRef = useRef<Record<string, string>>({});
 
-  const pushThemeEnv = useCallback((sessionId: string, isDark: boolean) => {
-    if (sessionId.startsWith("task-")) return;
+  const syncThemeEnv = useCallback((isDark: boolean) => {
     const want = colorFgBgForTheme(isDark);
-    if (exportedFgBgRef.current[sessionId] === want) return;
-    exportedFgBgRef.current[sessionId] = want;
-    try {
-      writeTerminalInput(sessionId, `export COLORFGBG="${want}" COLORTERM=truecolor TERM_PROGRAM=AstraIDE\n`);
-    } catch (_) {}
+    if (exportedFgBgRef.current["__global"] === want) return;
+    exportedFgBgRef.current["__global"] = want;
+    executeCommand(
+      `printf 'export COLORFGBG="%s"\\nexport COLORTERM=truecolor\\nexport TERM_PROGRAM=AstraIDE\\n' "${want}" > /root/.theme_env 2>/dev/null`
+    ).catch(() => {});
   }, []);
 
   const foldNativeHistory = useCallback((sessionId: string, hist: string) => {
-    const cleanHist = hist.replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "");
+    const cleanHist = stripLeakedTerminalText(hist);
     if (!cleanHist) return;
     setSessionOutputs((prev) => {
       const current = prev[sessionId] || "";
@@ -128,7 +129,7 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
       if (!mounted) return;
       setIsReady(true);
       await startShellSession("session-1", workspaceId);
-      pushThemeEnv("session-1", appTheme.isDark);
+      syncThemeEnv(appTheme.isDark);
       const hist = await getSessionHistory("session-1");
       if (hist && mounted) {
         foldNativeHistory("session-1", hist);
@@ -147,12 +148,12 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
-  // Live global theme → shell hint: when user flips Light/Dark, push the new
-  // COLORFGBG to the active shell so the next `opencode` launch adapts.
+  // Live global theme → shell hint: when user flips Light/Dark, sync to /root/.theme_env
+  // silently so current and future shell sessions pick it up without leaking text.
   useEffect(() => {
     if (!isReady) return;
-    pushThemeEnv(activeSessionId, appTheme.isDark);
-  }, [appTheme.isDark, activeSessionId, isReady, pushThemeEnv]);
+    syncThemeEnv(appTheme.isDark);
+  }, [appTheme.isDark, isReady, syncThemeEnv]);
 
   // Subscribe to native terminal streaming events for the active session.
   // Skipped for shell tabs in PTY mode: XtermView owns that stream (this
@@ -172,7 +173,8 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
 
       const subscription = addTerminalDataListener(activeSessionId, (chunk: string) => {
         if (!isSubscribed) return;
-        const cleanChunk = chunk.replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "");
+        const cleanChunk = stripLeakedTerminalText(chunk);
+        if (!cleanChunk) return;
         // Live stream bytes are new by definition: count them as seen so a
         // later history snapshot doesn't re-append them.
         seenNativeLen.current[activeSessionId] =
@@ -339,8 +341,8 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     setActiveSessionId(newId);
 
     await startShellSession(newId, workspaceId);
-    pushThemeEnv(newId, appTheme.isDark);
-  }, [sessions, workspaceId, appTheme.isDark, pushThemeEnv]);
+    syncThemeEnv(appTheme.isDark);
+  }, [sessions, workspaceId, appTheme.isDark, syncThemeEnv]);
 
   const closeSession = useCallback(
     async (idToClose: string) => {
@@ -396,9 +398,9 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
     seenNativeLen.current[activeSessionId] = 0;
     delete exportedFgBgRef.current[activeSessionId];
     await startShellSession(activeSessionId, workspaceId);
-    pushThemeEnv(activeSessionId, appTheme.isDark);
+    syncThemeEnv(appTheme.isDark);
     showToast("Session restarted");
-  }, [activeSessionId, workspaceId, appTheme.isDark, pushThemeEnv, showToast]);
+  }, [activeSessionId, workspaceId, appTheme.isDark, syncThemeEnv, showToast]);
 
   const clearActiveSession = useCallback(() => {
     if (activeSessionId.startsWith("task-")) {

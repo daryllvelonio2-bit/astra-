@@ -33,18 +33,24 @@ export function useRecentFiles(workspaceId?: string) {
       const fileName = file.name || filePath.split("/").pop() || "file";
 
       setRecentFiles((prev) => {
-        const existing = prev.find((f) => f.path === filePath || f.name === fileName);
-        const filtered = prev.filter((f) => f.path !== filePath && f.name !== fileName);
+        const match = (f: RecentFileItem) => f.path === filePath || f.name === fileName;
+        const existing = prev.find(match);
 
         const updated: RecentFileItem = {
           id: file.id || existing?.id,
           path: filePath,
           name: fileName,
           lastEdited: isEdit ? Date.now() : existing?.lastEdited,
-          lastOpened: Date.now(),
+          lastOpened: isEdit ? existing?.lastOpened : Date.now(),
         };
 
-        return [updated, ...filtered].slice(0, MAX_RECENTS);
+        // Only brand-new files join at the front. Anything already listed
+        // updates in place — opens and edits never reorder existing entries.
+        if (existing) {
+          return prev.map((f) => (match(f) ? updated : f));
+        }
+
+        return [updated, ...prev].slice(0, MAX_RECENTS);
       });
     },
     []

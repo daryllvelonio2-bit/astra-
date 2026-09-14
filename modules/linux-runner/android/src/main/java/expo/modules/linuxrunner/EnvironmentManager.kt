@@ -290,7 +290,8 @@ object EnvironmentManager {
 export TERM=xterm-256color
 export COLORTERM=truecolor
 export TERM_PROGRAM=AstraIDE
-export COLORFGBG="15;default;0"
+[ -f /root/.theme_env ] && . /root/.theme_env || export COLORFGBG="15;default;0"
+alias opencode='[ -f /root/.theme_env ] && . /root/.theme_env; opencode'
 export HOME=/root
 export USER=root
 export SHELL=/bin/bash

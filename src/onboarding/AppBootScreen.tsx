@@ -25,11 +25,13 @@ export function AppBootScreen({ isReady, onAnimationEnd, phase }: AppBootScreenP
   // Cross-fade the phase label each time the setup stage changes
   useEffect(() => {
     phaseOpacity.setValue(0);
-    Animated.timing(phaseOpacity, {
+    const anim = Animated.timing(phaseOpacity, {
       toValue: 1,
       duration: 300,
       useNativeDriver: true,
-    }).start();
+    });
+    anim.start();
+    return () => anim.stop();
   }, [phase]);
 
   // Soft shimmer for the loading bar only — no aura around the logo
@@ -64,15 +66,20 @@ export function AppBootScreen({ isReady, onAnimationEnd, phase }: AppBootScreenP
   // When both minimum display time has passed and real app init is ready, fade out smoothly
   useEffect(() => {
     if (isReady && minTimeElapsed) {
-      Animated.timing(fadeAnim, {
+      const anim = Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 250,
         useNativeDriver: true,
-      }).start(() => {
-        onAnimationEnd();
       });
+      anim.start(({ finished }) => {
+        if (finished) {
+          onAnimationEnd();
+        }
+      });
+      return () => anim.stop();
     }
   }, [isReady, minTimeElapsed]);
+
 
   return (
     <Animated.View

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { LogBox, View, StyleSheet } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { LogBox, View, StyleSheet, Text } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ProjectPicker } from "./src/ide/components/ProjectPicker";
@@ -10,6 +10,31 @@ import { ideActionService } from "./src/ide/services/ideActionService";
 import { StartupWizard } from "./src/onboarding/StartupWizard";
 import { AppBootScreen } from "./src/onboarding/AppBootScreen";
 import { loadAstraEnabled, loadHasCompletedStartup, subscribeConfigChanges } from "./src/ide/services/configService";
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  state = { hasError: false, error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("App ErrorBoundary:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#1a1a2e" }}>
+          <Text style={{ color: "#ff6b6b", fontSize: 16, textAlign: "center", padding: 20 }}>
+            Something went wrong. Please restart the app.
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<"picker" | "editor">("picker");
@@ -23,6 +48,7 @@ export default function App() {
   const [astraEnabled, setAstraEnabled] = useState(true);
   // Keep-alive: editor stays mounted once opened and is only hidden.
   const [visited, setVisited] = useState<Set<"editor">>(new Set());
+  const bootDoneRef = useRef(false);
 
   const showScreen = (screen: "picker" | "editor") => {
     if (screen === "editor") {
@@ -61,11 +87,14 @@ export default function App() {
     const sandboxReady = PRootService.ensureReady()
       .catch(() => {})
       .then(() => {
-        if (!cancelled) setBootPhase("Readying workspace…");
+        if (!cancelled && !bootDoneRef.current) setBootPhase("Readying workspace…");
       });
     void sandboxReady;
     Promise.allSettled([settingsReady, configReady]).then(() => {
-      if (!cancelled) setBootDone(true);
+      if (!cancelled) {
+        bootDoneRef.current = true;
+        setBootDone(true);
+      }
     });
     // Safety: never trap the user on the splash if init hangs
     const bootFallback = setTimeout(() => setBootDone(true), 10000);
@@ -94,35 +123,37 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        {bootVisible && (
-          <AppBootScreen
-            isReady={bootDone}
-            phase={bootPhase}
-            onAnimationEnd={() => setBootVisible(false)}
-          />
-        )}
-        {hasCompletedStartup === false ? (
-          <StartupWizard onComplete={() => setHasCompletedStartup(true)} />
-        ) : (
-          <>
-            {currentScreen === "picker" && (
-              <ProjectPicker
-                onOpenWorkspace={handleOpenWorkspace}
-                onRerunStartup={() => setHasCompletedStartup(false)}
-              />
-            )}
-            {visited.has("editor") && (
-              <View style={[styles.screen, currentScreen !== "editor" && styles.hidden]}>
-                <IDELayout
-                  workspaceId={activeWorkspaceId || undefined}
-                  onBackToPicker={() => showScreen("picker")}
+      <ErrorBoundary>
+        <ThemeProvider>
+          {bootVisible && (
+            <AppBootScreen
+              isReady={bootDone}
+              phase={bootPhase}
+              onAnimationEnd={() => setBootVisible(false)}
+            />
+          )}
+          {hasCompletedStartup === false ? (
+            <StartupWizard onComplete={() => setHasCompletedStartup(true)} />
+          ) : (
+            <>
+              {currentScreen === "picker" && (
+                <ProjectPicker
+                  onOpenWorkspace={handleOpenWorkspace}
+                  onRerunStartup={() => setHasCompletedStartup(false)}
                 />
-              </View>
-            )}
-          </>
-        )}
-      </ThemeProvider>
+              )}
+              {visited.has("editor") && (
+                <View style={[styles.screen, currentScreen !== "editor" && styles.hidden]}>
+                  <IDELayout
+                    workspaceId={activeWorkspaceId || undefined}
+                    onBackToPicker={() => showScreen("picker")}
+                  />
+                </View>
+              )}
+            </>
+          )}
+        </ThemeProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

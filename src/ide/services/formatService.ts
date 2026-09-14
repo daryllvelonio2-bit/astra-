@@ -146,6 +146,26 @@ function formatUniversal(code: string, fileName?: string, tabSize: number = 2): 
 }
 
 /**
+ * Safely writes text to a path inside Alpine PRoot without exceeding ARG_MAX.
+ * Uses 32KB base64 chunks (multiple of 4) piped to `base64 -d`.
+ */
+async function writeProotTempFile(tmpPath: string, content: string): Promise<boolean> {
+  const b64 = Buffer.from(content, "utf8").toString("base64");
+  const CHUNK_SIZE = 32768;
+  if (b64.length <= CHUNK_SIZE) {
+    const res = await executeCommand(`printf '%s' "${b64}" | base64 -d > "${tmpPath}"`);
+    return res.exitCode === 0;
+  }
+  await executeCommand(`: > "${tmpPath}"`);
+  for (let i = 0; i < b64.length; i += CHUNK_SIZE) {
+    const chunk = b64.slice(i, i + CHUNK_SIZE);
+    const res = await executeCommand(`printf '%s' "${chunk}" | base64 -d >> "${tmpPath}"`);
+    if (res.exitCode !== 0) return false;
+  }
+  return true;
+}
+
+/**
  * Runs Prettier inside Linux PRoot via Node.js using extension files.
  */
 async function runPrettierInPRoot(code: string, fileName: string, tabSize: number): Promise<string | null> {
@@ -156,8 +176,8 @@ async function runPrettierInPRoot(code: string, fileName: string, tabSize: numbe
   const tmpOut = `/tmp/fmt_out_${Date.now()}.tmp`;
 
   try {
-    const b64 = Buffer.from(code, "utf8").toString("base64");
-    await executeCommand(`echo "${b64}" | base64 -d > "${tmpIn}"`);
+    const written = await writeProotTempFile(tmpIn, code);
+    if (!written) return null;
 
     const nodeScript = `
       const fs = require('fs');
@@ -210,8 +230,8 @@ async function runPythonFormatterInPRoot(code: string): Promise<string | null> {
 
   const tmpIn = `/tmp/fmt_py_${Date.now()}.py`;
   try {
-    const b64 = Buffer.from(code, "utf8").toString("base64");
-    await executeCommand(`echo "${b64}" | base64 -d > "${tmpIn}"`);
+    const written = await writeProotTempFile(tmpIn, code);
+    if (!written) return null;
 
     const res = await executeCommand(
       `black -q "${tmpIn}" 2>/dev/null || autopep8 -i "${tmpIn}" 2>/dev/null || ruff format "${tmpIn}" 2>/dev/null`
@@ -239,8 +259,8 @@ async function runClangFormatInPRoot(code: string, fileName: string): Promise<st
   const ext = (fileName || "").split(".").pop() || "cpp";
   const tmpIn = `/tmp/fmt_clang_${Date.now()}.${ext}`;
   try {
-    const b64 = Buffer.from(code, "utf8").toString("base64");
-    await executeCommand(`echo "${b64}" | base64 -d > "${tmpIn}"`);
+    const written = await writeProotTempFile(tmpIn, code);
+    if (!written) return null;
 
     const res = await executeCommand(`clang-format -i "${tmpIn}" 2>/dev/null`);
     if (res.exitCode === 0) {

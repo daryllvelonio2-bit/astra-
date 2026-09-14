@@ -205,36 +205,41 @@ export function subscribeConfigChanges(listener: ConfigChangeListener): () => vo
   return () => configChangeListeners.delete(listener);
 }
 
-export async function saveConfig(config: Partial<AppConfig>): Promise<void> {
-  try {
-    const current = await loadConfig();
-    const updated = { ...current, ...config };
-    
-    // Synchronize apiKeys and apiKey
-    if (config.apiKeys !== undefined) {
-      updated.apiKeys = normalizeApiKeys(config.apiKeys);
-      updated.apiKey = updated.apiKeys[0] || "";
-    } else if (config.apiKey !== undefined) {
-      const trimmed = config.apiKey.trim();
-      updated.apiKey = trimmed;
-      if (trimmed) {
-        updated.apiKeys = normalizeApiKeys([trimmed, ...(current.apiKeys || [])]);
-      } else {
-        updated.apiKeys = [];
-      }
-    }
+let _configWriteQueue = Promise.resolve();
 
-    await writeFileText(CONFIG_FILE, JSON.stringify(updated, null, 2));
-    configChangeListeners.forEach((listener) => {
-      try {
-        listener(updated);
-      } catch (e) {
-        console.error("Config change listener error:", e);
+export async function saveConfig(config: Partial<AppConfig>): Promise<void> {
+  _configWriteQueue = _configWriteQueue.then(async () => {
+    try {
+      const current = await loadConfig();
+      const updated = { ...current, ...config };
+      
+      // Synchronize apiKeys and apiKey
+      if (config.apiKeys !== undefined) {
+        updated.apiKeys = normalizeApiKeys(config.apiKeys);
+        updated.apiKey = updated.apiKeys[0] || "";
+      } else if (config.apiKey !== undefined) {
+        const trimmed = config.apiKey.trim();
+        updated.apiKey = trimmed;
+        if (trimmed) {
+          updated.apiKeys = normalizeApiKeys([trimmed, ...(current.apiKeys || [])]);
+        } else {
+          updated.apiKeys = [];
+        }
       }
-    });
-  } catch (e) {
-    console.error("Failed to save config:", e);
-  }
+
+      await writeFileText(CONFIG_FILE, JSON.stringify(updated, null, 2));
+      configChangeListeners.forEach((listener) => {
+        try {
+          listener(updated);
+        } catch (e) {
+          console.error("Config change listener error:", e);
+        }
+      });
+    } catch (e) {
+      console.error("Failed to save config:", e);
+    }
+  });
+  return _configWriteQueue;
 }
 
 export async function saveApiKeys(keys: string[]): Promise<void> {

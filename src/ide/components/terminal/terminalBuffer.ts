@@ -108,3 +108,17 @@ export function diffNativeText(prev: string, text: string): { removed: number; a
   return { removed, added };
 }
 
+/**
+ * Strips leaked internal export commands (COLORFGBG, COLORTERM, TERM_PROGRAM)
+ * and non-tty warnings from terminal outputs and history replay.
+ */
+export function stripLeakedTerminalText(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\/bin\/sh:\s*can't access tty;\s*job control turned off\r?\n?/g, "")
+    .replace(/(?:^|\r?\n)(?:[^\r\n]*[#$]\s*)?export\s+COLORFGBG=[^\r\n]*(?:\r?\n|$)/gi, "\r\n")
+    .replace(/^export\s+COLORFGBG=[^\r\n]*(?:\r?\n|$)/gim, "")
+    .replace(/\r\n\r\n\r\n/g, "\r\n\r\n");
+}
+
+

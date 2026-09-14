@@ -7,7 +7,9 @@ try {
   LinuxRunnerModule = null;
 }
 
-const emitter: any = new EventEmitter(LinuxRunnerModule ?? {});
+const emitter: any = LinuxRunnerModule
+  ? new EventEmitter(LinuxRunnerModule)
+  : ({ addListener: () => ({ remove: () => {} }) } as any);
 
 export interface ExecutionResult {
   stdout: string;
