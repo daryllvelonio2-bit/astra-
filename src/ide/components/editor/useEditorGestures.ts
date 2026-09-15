@@ -18,14 +18,37 @@ export function useEditorGestures({
   const [zoomBadge, setZoomBadge] = useState<string | null>(null);
   const [splitToast, setSplitToast] = useState<string | null>(null);
 
+  const fontSizeRef = useRef<number>(initialFontSize);
+  fontSizeRef.current = fontSize;
+
+  const onSaveFontSizeRef = useRef(onSaveFontSize);
+  onSaveFontSizeRef.current = onSaveFontSize;
+
   const zoomTimerRef = useRef<NodeJS.Timeout | null>(null);
   const splitToastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const saveDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Multi-touch tracking refs
   const startDistRef = useRef<number>(0);
   const startAbsDxRef = useRef<number>(0);
   const startFontSizeRef = useRef<number>(initialFontSize);
   const gestureActionTriggeredRef = useRef<boolean>(false);
+
+  // Sync external initialFontSize changes (e.g. from async config load on app startup)
+  useEffect(() => {
+    if (initialFontSize && initialFontSize !== fontSizeRef.current && startDistRef.current === 0) {
+      fontSizeRef.current = initialFontSize;
+      startFontSizeRef.current = initialFontSize;
+      setFontSize(initialFontSize);
+    }
+  }, [initialFontSize]);
+
+  const queueSave = useCallback((size: number) => {
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      onSaveFontSizeRef.current?.(size);
+    }, 350);
+  }, []);
 
   // Close split-screen gracefully if rotated to portrait
   useEffect(() => {
@@ -65,10 +88,16 @@ export function useEditorGestures({
   }, [isLandscape, showSplitToast]);
 
   const resetZoom = useCallback(() => {
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = null;
+    }
+    fontSizeRef.current = 14;
+    startFontSizeRef.current = 14;
     setFontSize(14);
     showZoomBadge("Zoom: 100% (14px)");
-    onSaveFontSize?.(14);
-  }, [showZoomBadge, onSaveFontSize]);
+    onSaveFontSizeRef.current?.(14);
+  }, [showZoomBadge]);
 
   const handleTouchStart = useCallback(
     (e: GestureResponderEvent) => {
@@ -81,13 +110,13 @@ export function useEditorGestures({
 
         startDistRef.current = dist;
         startAbsDxRef.current = absDx;
-        startFontSizeRef.current = fontSize;
+        startFontSizeRef.current = fontSizeRef.current;
         gestureActionTriggeredRef.current = false;
       } else {
         startDistRef.current = 0;
       }
     },
-    [fontSize]
+    []
   );
 
   const handleTouchMove = useCallback(
@@ -135,26 +164,34 @@ export function useEditorGestures({
         const target = Math.round(startFontSizeRef.current * ratio);
         const clamped = Math.min(26, Math.max(9, target));
 
-        if (clamped !== fontSize) {
+        if (clamped !== fontSizeRef.current) {
+          fontSizeRef.current = clamped;
           setFontSize(clamped);
-          const percent = Math.round((clamped / 13) * 100);
+          const percent = Math.round((clamped / 14) * 100);
           showZoomBadge(`Zoom: ${percent}% (${clamped}px)`);
+          queueSave(clamped);
         }
       }
     },
-    [isLandscape, isSplitScreen, fontSize, showSplitToast, showZoomBadge]
+    [isLandscape, isSplitScreen, showSplitToast, showZoomBadge, queueSave]
   );
 
   const handleTouchEnd = useCallback(
     (e: GestureResponderEvent) => {
       if (startDistRef.current > 0) {
         startDistRef.current = 0;
-        if (fontSize !== startFontSizeRef.current) {
-          onSaveFontSize?.(fontSize);
+        if (saveDebounceRef.current) {
+          clearTimeout(saveDebounceRef.current);
+          saveDebounceRef.current = null;
+        }
+        const finalSize = fontSizeRef.current;
+        if (finalSize !== startFontSizeRef.current) {
+          startFontSizeRef.current = finalSize;
+          onSaveFontSizeRef.current?.(finalSize);
         }
       }
     },
-    [fontSize, onSaveFontSize]
+    []
   );
 
   const lineHeight = Math.round(fontSize * 1.45);
@@ -174,5 +211,6 @@ export function useEditorGestures({
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    handleTouchCancel: handleTouchEnd,
   };
 }

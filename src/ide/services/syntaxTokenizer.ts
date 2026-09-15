@@ -480,9 +480,13 @@ function tokenizeLineFragment(
   }
 
   if (LINE_CACHE.size >= MAX_LINE_CACHE_ENTRIES) {
-    // LRU eviction: delete oldest entry instead of wiping entire cache
-    const oldest = LINE_CACHE.keys().next().value;
-    if (oldest !== undefined) LINE_CACHE.delete(oldest);
+    // Batch LRU eviction: remove oldest 200 entries to amortize eviction cost
+    const it = LINE_CACHE.keys();
+    for (let k = 0; k < 200; k++) {
+      const key = it.next().value;
+      if (key === undefined) break;
+      LINE_CACHE.delete(key);
+    }
   }
   LINE_CACHE.set(cacheKey, tokens);
   return tokens;

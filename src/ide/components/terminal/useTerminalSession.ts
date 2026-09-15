@@ -22,6 +22,7 @@ import {
   mergeNativeHistory,
   stripLeakedTerminalText,
 } from "./terminalBuffer";
+import { loadTerminalFontSize, saveTerminalFontSize } from "../../services/configService";
 
 export interface TerminalTab {
   id: string;
@@ -73,6 +74,15 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
   const [isAltActive, setIsAltActive] = useState<boolean>(false);
   const [isReady, setIsReady] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<number>(14);
+
+  useEffect(() => {
+    loadTerminalFontSize().then((saved) => {
+      if (typeof saved === "number" && saved >= 10 && saved <= 24) {
+        setFontSize(saved);
+      }
+    }).catch(() => {});
+  }, []);
+
   const { recordCommand, navigateHistory } = useTerminalHistory();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -319,11 +329,19 @@ export function useTerminalSession({ workspaceId }: UseTerminalSessionProps) {
   );
 
   const zoomIn = useCallback(() => {
-    setFontSize((prev) => Math.min(24, prev + 1));
+    setFontSize((prev) => {
+      const next = Math.min(24, prev + 1);
+      saveTerminalFontSize(next).catch(() => {});
+      return next;
+    });
   }, []);
 
   const zoomOut = useCallback(() => {
-    setFontSize((prev) => Math.max(10, prev - 1));
+    setFontSize((prev) => {
+      const next = Math.max(10, prev - 1);
+      saveTerminalFontSize(next).catch(() => {});
+      return next;
+    });
   }, []);
 
   const addNewSession = useCallback(async () => {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { TextInput, DeviceEventEmitter } from "react-native";
+import { TextInput, DeviceEventEmitter, Keyboard } from "react-native";
 import { diffNativeText } from "./terminalBuffer";
 import { ideActionService } from "../../services/ideActionService";
 
@@ -13,6 +13,7 @@ interface UseTerminalInputOptions {
   setIsCtrlActive: (active: boolean | ((prev: boolean) => boolean)) => void;
   setIsAltActive: (active: boolean | ((prev: boolean) => boolean)) => void;
   activeSessionId: string;
+  keyboardMouseMode?: boolean;
 }
 
 const ASCII_SHORTCUTS: Record<string, string> = {
@@ -32,6 +33,7 @@ export function useTerminalInput({
   setIsCtrlActive,
   setIsAltActive,
   activeSessionId,
+  keyboardMouseMode = false,
 }: UseTerminalInputOptions) {
   const [currentInput, setCurrentInput] = useState<string>("");
   const [isFocused, setIsFocused] = useState<boolean>(true);
@@ -104,8 +106,22 @@ export function useTerminalInput({
       submitCurrentInput();
     }
     resetCatcher();
-    handleFocusTerminal();
-  }, [isXterm, sendInput, submitCurrentInput, resetCatcher, handleFocusTerminal]);
+    if (!keyboardMouseMode) {
+      handleFocusTerminal();
+    } else {
+      Keyboard.dismiss();
+    }
+  }, [isXterm, sendInput, submitCurrentInput, resetCatcher, handleFocusTerminal, keyboardMouseMode]);
+
+  useEffect(() => {
+    if (keyboardMouseMode) {
+      Keyboard.dismiss();
+      const sub = Keyboard.addListener("keyboardDidShow", () => {
+        Keyboard.dismiss();
+      });
+      return () => sub.remove();
+    }
+  }, [keyboardMouseMode]);
 
   const handlePipeInput = useCallback(
     (text: string) => {

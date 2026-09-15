@@ -13,6 +13,7 @@ interface UseEditorTextPipelineParams {
   textInputRef: React.RefObject<TextInput | null>;
   onChangeContent: (text: string) => void;
   setIsEditing: (editing: boolean) => void;
+  isWindowed?: boolean;
 }
 
 function countNewlinesFast(text: string): number {
@@ -33,22 +34,32 @@ export function useEditorTextPipeline({
   textInputRef,
   onChangeContent,
   setIsEditing,
+  isWindowed = false,
 }: UseEditorTextPipelineParams) {
   const contentRef = useRef(content);
   const chunkRef = useRef(visibleCodeChunk);
+  const lastEmittedContentRef = useRef<string>(content);
   const selectionMirrorRef = useRef(assists.selection);
   const lockSelectionUntilRef = useRef<number>(0);
   const [controlledSelection, setControlledSelection] = useState<
     { start: number; end: number } | undefined
   >(undefined);
 
+  // Synchronize from props only if content changed externally (e.g. file switch, format, disk reload)
+  // to avoid overwriting in-flight keystrokes with stale React render snapshots.
   useEffect(() => {
-    contentRef.current = content;
-    chunkRef.current = visibleCodeChunk;
+    if (content !== lastEmittedContentRef.current) {
+      lastEmittedContentRef.current = content;
+      contentRef.current = content;
+      chunkRef.current = visibleCodeChunk;
+    }
     selectionMirrorRef.current = assists.selection;
   }, [content, visibleCodeChunk, assists.selection]);
 
   useEffect(() => {
+    lastEmittedContentRef.current = content;
+    contentRef.current = content;
+    chunkRef.current = visibleCodeChunk;
     assists.setSelection({ start: 0, end: 0 });
     setControlledSelection(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,10 +81,12 @@ export function useEditorTextPipeline({
   const handleTextChangeInWindow = useCallback(
     (newChunkText: string) => {
       if (
-        startIndexRef.current === 0 &&
-        (!windowSize || windowSize >= countNewlinesFast(contentRef.current) + 1)
+        !isWindowed ||
+        (startIndexRef.current === 0 &&
+          (!windowSize || windowSize >= countNewlinesFast(contentRef.current) + 1))
       ) {
         contentRef.current = newChunkText;
+        lastEmittedContentRef.current = newChunkText;
         onChangeContent(newChunkText);
         return;
       }
@@ -84,9 +97,10 @@ export function useEditorTextPipeline({
         windowSize
       );
       contentRef.current = updated;
+      lastEmittedContentRef.current = updated;
       onChangeContent(updated);
     },
-    [onChangeContent, startIndexRef, windowSize]
+    [isWindowed, onChangeContent, startIndexRef, windowSize]
   );
 
   // Typing pipeline: diff -> auto-close / skip / smart-indent -> content + cursor.

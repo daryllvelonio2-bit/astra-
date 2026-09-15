@@ -99,6 +99,7 @@ export function TerminalView({ workspaceId, visible = true }: TerminalViewProps)
     setIsCtrlActive,
     setIsAltActive,
     activeSessionId,
+    keyboardMouseMode,
   });
 
   // Publish COLUMNS/LINES once the native session is ready and whenever the
@@ -232,13 +233,11 @@ export function TerminalView({ workspaceId, visible = true }: TerminalViewProps)
         style={styles.hiddenInput}
         defaultValue=" "
         showSoftInputOnFocus={!keyboardMouseMode}
+        inputMode={keyboardMouseMode ? "none" : undefined}
         onChangeText={handleDirectInput}
         onKeyPress={handleKeyPress}
         autoCapitalize="none"
         autoCorrect={false}
-        // visible-password forces third-party keyboards (SwiftKey/Gboard) to
-        // drop predictions + auto-capitalization, both of which corrupt shell
-        // input ("Vim" for "vim", mid-command rewrites).
         autoComplete="off"
         keyboardType="visible-password"
         spellCheck={false}
@@ -246,7 +245,8 @@ export function TerminalView({ workspaceId, visible = true }: TerminalViewProps)
         blurOnSubmit={false}
         disableFullscreenUI={true}
         caretHidden={true}
-        returnKeyType="send"
+        importantForAutofill="no"
+        returnKeyType={keyboardMouseMode ? "none" : "send"}
         onSubmitEditing={sendEnter}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}

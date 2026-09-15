@@ -4,6 +4,155 @@
 - **Current Phase:** Debug Server (RUNNING — Metro in dedicated Foot terminal per Rule 10)
 - **Last Updated:** September 15, 2026
 
+### [2026-09-15] - CodeMirror 6 Lock Mode & Keyboard/Mouse Mode Full Support
+- **User Directive:** "good, but the features like lock mode, keyboard and mouse mode dont work now fix it" -> "build the app in debug put the app in downloads folder"
+- **Problems Fixed:**
+  1. **Lock Mode (View Mode vs. Edit Mode):**
+     - CodeMirror previously only set `EditorState.readOnly.of(true)`, which rejected doc modifications but left DOM `contenteditable="true"`, allowing virtual keyboards to pop up and cursors to blink.
+     - Updated `scripts/codemirror-entry.js` with `editableCompartment` configuring `EditorView.editable.of(!isLocked)`. When locked, `contenteditable="false"` is applied, blur is called, and soft keyboard never appears.
+     - Wired double-tap detection in CodeMirror DOM event handlers to post `doubleTap` message to React Native, seamlessly entering Edit Mode upon double-tapping code.
+  2. **Keyboard & Mouse Mode:**
+     - Passed `keyboardMouseMode` prop from `useEditorConfig()` into `CodeMirrorEditorView`.
+     - In `scripts/codemirror-entry.js`, added `__cmSetKeyboardMouseMode(enabled)`. When active, sets `inputmode="none"` on `.cm-content`, instructing Android's Chromium engine to completely suppress Gboard/virtual keyboard while physical hardware keystrokes and shortcuts continue passing through directly.
+     - Updated `MainActivity.kt` focus change listener to squash soft keyboard across any focused view (including `android.webkit.WebView`) when KMM is active.
+- **Files Modified:**
+  - `scripts/codemirror-entry.js`
+  - `src/ide/components/editor/codemirrorHtml.generated.ts`
+  - `src/ide/components/editor/CodeMirrorEditorView.tsx` (189 lines, <= 500 lines per Rule 5)
+  - `src/ide/components/EditorView.tsx` (231 lines, <= 500 lines per Rule 5)
+  - `android/app/src/main/java/com/janelle/aicoder/MainActivity.kt` (181 lines, <= 500 lines per Rule 5)
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - `./gradlew assembleDebug` passed (`BUILD SUCCESSFUL in 50s`).
+  - Fresh debug APK exported to `/home/janelle/Downloads/app-debug.apk` and `astra-debug.apk` (124 MB).
+
+### [2026-09-15] - Editor Redo: Offline CodeMirror 6 Engine (Pixel-Perfect Alignment)
+- **User Directive:** "i have a problem with code blocks not perfectly alighned with the number lines, we gotta fix this, redo the ide if necessary to make things right. investigate and list all things that is to be fixed and improved. dont code" -> Follow-up: "yes do it option 2 with codemirror 6 engine"
+- **Problem Solved:**
+  - In the previous native React Native editor, the gutter was a flexbox column of `<Text>` views while code was a single Android `EditText`. Android's native padding (+16.5px at top), empty-line collapse in `DynamicLayout`, and font baseline disparity caused line numbers and code to drift out of alignment by 2–3 full lines.
+  - In CodeMirror 6, line numbers, code lines, active line highlight, and indentation guides are all laid out inside the **exact same unified DOM row**, making line misalignment physically and mathematically impossible under any font, zoom level, or empty line sequence.
+- **Actions Performed:**
+  - Installed core CodeMirror 6 modules: `codemirror`, `@codemirror/lang-python`, `@codemirror/lang-javascript`, `@codemirror/lang-html`, `@codemirror/lang-css`, `@codemirror/lang-json`, `@codemirror/theme-one-dark`.
+  - Created `scripts/codemirror-entry.js` and `scripts/build-codemirror-html.js` using `esbuild` to produce a standalone 100% offline bundle: `src/ide/components/editor/codemirrorHtml.generated.ts` (602 KB, 0 network requests).
+  - Built `src/ide/components/editor/CodeMirrorEditorView.tsx` (177 lines, <= 500 lines per Rule 5) with bidirectional React Native WebView bridge for real-time text sync, cursor location, dynamic font size/line-height scaling, dark/light theme toggle, and code folding.
+  - Integrated `CodeMirrorEditorView` into `src/ide/components/EditorView.tsx`, reducing `EditorView.tsx` from 473 lines down to 228 lines while preserving `EditorTabBar`, problem panel, format-on-save, and diagnostics.
+  - Added `"build:codemirror": "node scripts/build-codemirror-html.js"` to `package.json`.
+- **Verification:**
+  - `node scripts/build-codemirror-html.js` executed cleanly in <1s.
+  - `npx tsc --noEmit` passed with 0 errors across entire project.
+  - All modified files strictly comply with Rule 5 (< 500 lines):
+    - `EditorView.tsx`: 228 lines
+    - `CodeMirrorEditorView.tsx`: 177 lines
+  - `./gradlew assembleDebug` passed (`BUILD SUCCESSFUL in 24s`).
+  - Fresh debug APK exported to `/home/janelle/Downloads/app-debug.apk` and `astra-debug.apk` (124 MB).
+
+### [2026-09-15] - Editor Instability, Typing Stutter, and Data Corruption Fixes
+- **User Directive:** "im experiencing an unstable response in the ide, and bugs when i am typing, sometimes the code gets damaged or what, i can say its unstable and unreliable.specially when the file i am editing has a 100+ blocks, also when typing i can see a stutter 3 blocks above where im typing the 3 seems to be offor something. envistigate and list all upgrades and fixes i should do, dont code yet. ill do it" -> Follow-up: "execute it 1 by 1"
+- **Root Causes Identified & Fixed:**
+  1. **"3 blocks above where I'm typing stutter" (BUG 4 & 5):** `LINE_HEIGHT = 20` was hardcoded in `EditorView.tsx` for cursor scrolling (`useEditorCursorScroll`), scroll line estimation (`handleScroll`), line jumping (`jumpToLine`), and touch edit toggle (`handleToggleEdit`). When zoomed, actual `lineHeight` dynamically changed (e.g. 26px at 18px font), causing a 30% cumulative drift (~3 lines offset at line 10) between measured text height and scroll/cursor offsets. Fixed by removing static constant and wiring dynamic `lineHeight` everywhere.
+  2. **Code Corruption / Data Loss During Typing (BUG 1 & 2):**
+     - When `windowSize` (set to old line count) was exceeded after pressing Enter, `useEditorTextPipeline` fell through to `spliceWindowChunk`, duplicating or dropping trailing lines. Fixed by strictly bypassing `spliceWindowChunk` when not in windowed view mode.
+     - Asynchronous React state updates from keystrokes caused `useEffect` in `useEditorTextPipeline` to overwrite `chunkRef.current` backwards with stale render snapshots. Fixed by tracking `lastEmittedContentRef` so only external content changes sync props to refs.
+  3. **Typing Jank on 100+ Block Files (PERF 3):** `EditorEditRow.tsx` was rendering up to 500 lines of `<Text>` spans inside Android `<TextInput>` (generating 1,200+ `Spannable` spans per keystroke). Optimized to render token spans only in cursor vicinity (±30 lines, covering visible viewport) while off-screen lines render as single text spans, with direct fast-path raw text for > 250 lines or pasting.
+  4. **Diff Anchoring & Multi-Pass Overhead (BUG 3, PERF 1/4):** Improved `assistEdit` diff anchoring using cursor position; consolidated `rawLines`, `lineStartOffsets`, and `maxLineLen` in `EditorView.tsx` from 3 separate full-string passes into a single O(N) pass.
+  5. **Background Timer Churn (PERF 5 & 6):** Increased bracket matching debounce from 25ms to 150ms/250ms and diagnostic debounce to 750ms so active typing bursts are not interrupted by full-file parser scans.
+  6. **Token Cache Eviction (IMPROVE 4):** Switched `syntaxTokenizer.ts` from 1-by-1 eviction to batch LRU eviction (200 entries at a time).
+- **Files Modified:**
+  - `src/ide/components/EditorView.tsx` (472 lines, <= 500 lines per Rule 5)
+  - `src/ide/components/EditorEditRow.tsx` (480 lines, <= 500 lines per Rule 5)
+  - `src/ide/components/editor/useEditorTextPipeline.ts` (172 lines, <= 500 lines per Rule 5)
+  - `src/ide/components/editorCursorUtils.ts` (127 lines, <= 500 lines per Rule 5)
+  - `src/ide/components/useEditorAssists.ts` (279 lines, <= 500 lines per Rule 5)
+  - `src/ide/services/syntaxTokenizer.ts` (493 lines, <= 500 lines per Rule 5)
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors across entire project.
+  - All touched source files strictly comply with Rule 5 (< 500 lines).
+  - `./gradlew assembleDebug` passed (`BUILD SUCCESSFUL in 26s`).
+  - Fresh debug APK exported to `/home/janelle/Downloads/app-debug.apk` and `astra-debug.apk` (124 MB).
+
+### [2026-09-15] - In-App Editor Suggestion Strip Removal
+- **User Directive:** "there is a suggestion strip inside the app, remove it."
+- **Actions Performed:**
+  - Removed `CompletionBar` component rendering and its imports from `EditorView.tsx`.
+  - Removed `useEditorCompletions` hook call and completion items subscription from `EditorView.tsx`.
+  - Removed unused `handleApplyCompletionChunk` from `useEditorTextPipeline`.
+  - Rebuilt debug APK (`assembleDebug`) successfully in 42s.
+  - Exported fresh APK binaries to `/home/janelle/Downloads/app-debug.apk` and `astra-debug.apk`.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - `./gradlew assembleDebug` passed with code 0.
+  - Output verified in `~/Downloads/` (124 MB each).
+  - File size strictly observed: `EditorView.tsx` reduced to 474 lines (<= 500 lines per Rule 5).
+
+### [2026-09-15] - Keyboard & Mouse Mode: Deep Native IME Suppression & Enter Popup Squashing
+- **User Directive:** "it still triggers, and clicking enter triggers virtual keyboard"
+- **Root Causes:**
+  - In React Native's `ReactTextInputManager.kt`, `keyboardType="visible-password"` unsets `InputType.TYPE_MASK_CLASS` without setting `InputType.TYPE_CLASS_TEXT`, creating an invalid combination (`TYPE_NULL` with flags) that Android and Gboard fallback to normal text, continuing to display candidate suggestions (`And`, `I`, `The`).
+  - `imm.hideSoftInputFromWindow` on Android 11+ (API 30+) is deprecated and fails to dismiss soft input when the system is processing enter key events or composing candidates.
+  - When Enter was pressed on a physical keyboard, `super.dispatchKeyEvent` triggered Android's default `showSoftInput` request during or after key handling, which bypassed a single synchronous dismiss.
+- **Changes Implemented:**
+  - `android/app/src/main/java/com/janelle/aicoder/MainActivity.kt` (175 lines):
+    - Added `addOnGlobalFocusChangeListener` on `window.decorView.viewTreeObserver` to intercept all `EditText` views dynamically:
+      - Forces `showSoftInputOnFocus = false`.
+      - Sets `privateImeOptions = "nm"` (No Microphone / No Media toolbar items in Gboard).
+      - Forces true native `inputType = TYPE_CLASS_TEXT | TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | TYPE_TEXT_FLAG_NO_SUGGESTIONS | TYPE_TEXT_FLAG_MULTI_LINE`, preventing word prediction candidate strips.
+      - Sets `imeOptions` (`IME_FLAG_NO_EXTRACT_UI | IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_PERSONALIZED_LEARNING`).
+    - Added `WindowInsets` listener (`setOnApplyWindowInsetsListener`) on Android 11+ to proactively squash the IME window if the system attempts to make it visible while keyboard & mouse mode is active.
+    - Updated `hideSoftKeyboard()` to use `window.insetsController?.hide(WindowInsets.Type.ime())` alongside `InputMethodManager`.
+    - Enhanced `dispatchKeyEvent` on `KEYCODE_ENTER` to squash soft keyboard asynchronously across multiple ticks (0ms, 40ms, 100ms, 200ms).
+    - Added physical keyboard detection (`isPhysicalKeyboardPresent()`) querying `InputDevice` APIs directly in addition to `config.json`.
+  - `src/ide/components/EditorEditRow.tsx` (466 lines):
+    - Added `blurOnSubmit={false}` to multiline `TextInput` to prevent any focus loss on Enter.
+  - Rebuilt debug APK and copied fresh binaries to `/home/janelle/Downloads/app-debug.apk` and `astra-debug.apk`.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - `./gradlew assembleDebug` passed (`BUILD SUCCESSFUL in 38s`).
+  - Output verified in `~/Downloads/app-debug.apk` and `astra-debug.apk`.
+  - All modified files strictly comply with Rule 5 (< 500 lines).
+
+### [2026-09-15] - Android Debug APK Build & Export to Downloads
+- **User Directive:** "build the app in debug and put it in downloads folder"
+- **Actions Performed:**
+  - Configured environment variables for native Android Gradle build:
+    - `JAVA_HOME=/home/janelle/.jdk17`
+    - `ANDROID_HOME=/home/janelle/Android/sdk`
+    - `ANDROID_NDK_HOME=/home/janelle/Android/sdk/ndk/27.1.12297006`
+  - Fixed `dispatchKeyEvent` override signature in `MainActivity.kt` (`fun dispatchKeyEvent(event: KeyEvent): Boolean`).
+  - Executed `./gradlew assembleDebug` successfully (371 tasks: 26 executed, 345 up-to-date in 1m).
+  - Copied the generated APK (`app-debug.apk`, 124MB) directly to `/home/janelle/Downloads/` as `app-debug.apk` and `astra-debug.apk`.
+- **Verification:**
+  - Build finished with code 0 (`BUILD SUCCESSFUL in 1m`).
+  - Output verified: `/home/janelle/Downloads/app-debug.apk` (124M) and `/home/janelle/Downloads/astra-debug.apk` (124M).
+
+### [2026-09-15] - Zoom Preference Persistence Across App Restarts
+- **User Directive:** "for zoom preference, however the user set its zoom it should be saved as it is even if the app is restarted"
+- **Root Causes:**
+  - In `useEditorGestures.ts`, `fontSize` state was initialized from `initialFontSize` on mount and lacked an effect to sync when `loadEditorSettings` asynchronously resolved from disk, causing the editor to stay stuck at the hardcoded default (14px) on startup. Moreover, `handleTouchEnd` did not handle touch cancellations or debounced auto-saves during pinch gestures.
+  - In `useTerminalSession.ts`, terminal `fontSize` (which drives both Xterm and ANSI terminal rendering) was only held in local React component state, never persisted to disk, and had no storage mechanism or API in `configService.ts`, resetting to 14px on every app restart.
+- **Changes Implemented:**
+  - `configService.ts` (390 lines):
+    - Added `terminalFontSize?: number` to `AppConfig` and `DEFAULT_CONFIG` (default 14px).
+    - Exported `loadTerminalFontSize(): Promise<number>` and `saveTerminalFontSize(fontSize: number): Promise<void>`.
+  - `useTerminalSession.ts` (472 lines):
+    - Added `useEffect` on mount to load persisted terminal font size via `loadTerminalFontSize()`.
+    - Updated `zoomIn` and `zoomOut` to immediately persist the new font size via `saveTerminalFontSize(next)`.
+  - `useEditorGestures.ts` (216 lines):
+    - Added reactive `useEffect` to sync external `initialFontSize` changes (e.g. from async config load upon startup).
+    - Synchronized `fontSizeRef.current` and `onSaveFontSizeRef.current` across all touch and zoom cycles to eliminate stale closure bugs.
+    - Added `queueSave` debounced persistence (350ms) during active pinch-zooming so that zoom level is preserved even if touch completion is abrupt or interrupted.
+    - Exported `handleTouchCancel` matching `handleTouchEnd` to guarantee persistence on gesture cancellations.
+    - Calibrated zoom percentage display to match 14px base (`Math.round((clamped / 14) * 100)`).
+  - `EditorView.tsx` (491 lines):
+    - Normalized default fallback font size to 14px (`editorSettings.fontSize || 14`).
+    - Added `onTouchCancel={handleTouchEnd}` to the editor scroll container.
+- **Verification:**
+  - `npx tsc --noEmit` passed with 0 errors.
+  - File size limits strictly observed (Rule 5):
+    - `configService.ts`: 390 lines (<= 500)
+    - `useTerminalSession.ts`: 472 lines (<= 500)
+    - `useEditorGestures.ts`: 216 lines (<= 500)
+    - `EditorView.tsx`: 491 lines (<= 500)
+
 ### [2026-09-15] - Keyboard & Mouse Mode: Default Navigation Hidden & Tab Shortcuts (Ctrl+E/T/B/G)
 - **User Directive:** "when in keyboard and mouse mode, the navigation should be hidden by default in all parts, include the terminal strip (esc,enter,tab,ztrl etc etc) should be hidden, it can be open by combinations, for editor tab, open with ctrl+e, for terminal open with ctrl+t,browser, ctrl+b,github for ctrl+g"
 - **Changes Implemented:**
@@ -3641,3 +3790,7 @@
 - New `useSystemBackHandler.ts` (48 lines): back in edit mode bumps an exit signal (edit mode off, app stays open); otherwise shows a "Close project?" confirm (Stay / Close project) instead of killing the app. Gated by `ideVisible` since the IDE stays mounted behind the picker.
 - `IDELayout`: wires the hook, passes `exitEditSignal` + tracked `onEditModeChange` to the editor. `EditorView`: watches the signal and runs its normal done-editing path. `App`: passes `isActive={currentScreen === "editor"}`.
 - Verified: `tsc` 0 errors, files ≤500 lines (`IDELayout` 500, `EditorView` 499).
+
+### [2026-09-15] - Explorer reload button removed
+- `FileExplorer`: manual refresh button deleted from the header actions; dead `onRefreshFiles` prop removed from the component and its `IDELayout` pass-through. Auto-refresh (`refreshWorkspace` via file actions/sync) untouched.
+- Verified: `tsc` 0 errors, `FileExplorer.tsx` 397 / `IDELayout.tsx` 491 lines.

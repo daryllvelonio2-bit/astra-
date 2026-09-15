@@ -118,6 +118,7 @@ export interface AppConfig {
   hasCompletedStartup?: boolean;
   defaultEditorUi?: EditorUiType;
   keyboardMouseMode?: boolean;
+  terminalFontSize?: number;
   editorSettings: EditorSettings;
 }
 
@@ -135,6 +136,7 @@ const DEFAULT_CONFIG: AppConfig = {
   hasCompletedStartup: false,
   defaultEditorUi: "native",
   keyboardMouseMode: false,
+  terminalFontSize: 14,
   editorSettings: { ...DEFAULT_EDITOR_SETTINGS },
 };
 
@@ -378,3 +380,11 @@ export async function saveEditorSettings(settings: Partial<EditorSettings>): Pro
   await saveConfig({ editorSettings: { ...current, ...settings } });
 }
 
+export async function loadTerminalFontSize(): Promise<number> {
+  const config = await loadConfig();
+  return typeof config.terminalFontSize === "number" ? config.terminalFontSize : 14;
+}
+
+export async function saveTerminalFontSize(fontSize: number): Promise<void> {
+  await saveConfig({ terminalFontSize: fontSize });
+}

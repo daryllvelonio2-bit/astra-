@@ -59,9 +59,11 @@ export function spliceWindowChunk(
   windowSize: number
 ): string {
   const fullLines = fullText.split("\n");
-  if (fullLines.length <= windowSize) return newChunk;
+  if (startIndex === 0 && fullLines.length <= windowSize) return newChunk;
   const ei = Math.min(startIndex + windowSize, fullLines.length);
-  return [...fullLines.slice(0, startIndex), ...newChunk.split("\n"), ...fullLines.slice(ei)].join("\n");
+  const before = startIndex > 0 ? fullLines.slice(0, startIndex) : [];
+  const after = ei < fullLines.length ? fullLines.slice(ei) : [];
+  return [...before, ...newChunk.split("\n"), ...after].join("\n");
 }
 
 export function computeChunkStartOffset(rawLines: string[], startIndex: number): number {

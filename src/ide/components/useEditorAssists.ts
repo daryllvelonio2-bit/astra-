@@ -18,7 +18,7 @@ interface AssistEditResult {
   cursor: number;
 }
 
-const DIAGNOSTIC_DEBOUNCE_MS = 500;
+const DIAGNOSTIC_DEBOUNCE_MS = 750;
 const CLOSE_FOR: Record<string, string> = {
   "(": ")",
   "[": "]",
@@ -104,8 +104,8 @@ export function useEditorAssists(
 
   useEffect(() => {
     let cancelled = false;
-    // For large documents (>3000 chars), debounce bracket scan so rapid typing/pasting is never blocked
-    const delayMs = content.length > 3000 ? 100 : 25;
+    // Debounce bracket scan so rapid typing is never interrupted
+    const delayMs = content.length > 3000 ? 250 : 150;
     const t = setTimeout(() => {
       try {
         const cursorFull = chunkStartOffset + selection.start;
@@ -172,8 +172,12 @@ export function useEditorAssists(
       const pos = Math.max(0, Math.min(sel.start, oldChunk.length));
       if (d.removed === "" && oldChunk.slice(0, pos) + d.inserted + oldChunk.slice(pos) === newChunk) {
         at = pos;
-      } else if (d.inserted === "" && pos > 0 && oldChunk.slice(0, pos - 1) + oldChunk.slice(pos) === newChunk) {
-        at = pos - 1;
+      } else if (
+        d.inserted === "" &&
+        pos >= d.removed.length &&
+        oldChunk.slice(0, pos - d.removed.length) + oldChunk.slice(pos) === newChunk
+      ) {
+        at = pos - d.removed.length;
       }
     }
 

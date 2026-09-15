@@ -18,7 +18,6 @@ interface FileExplorerProps {
   onLongPressNode?: (node: FileNode, coords: { x: number; y: number }) => void;
   onQuickAddFile?: () => void;
   onCreateFile?: (name: string) => void;
-  onRefreshFiles?: () => void;
   onMoveNode?: (source: FileNode, targetFolder: FileNode | null) => void;
   resizerPanHandlers?: any;
   isDraggingSidebar?: boolean;
@@ -33,7 +32,6 @@ function FileExplorerInner({
   onLongPressNode,
   onQuickAddFile,
   onCreateFile,
-  onRefreshFiles,
   onMoveNode,
   resizerPanHandlers,
   isDraggingSidebar,

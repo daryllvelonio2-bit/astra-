@@ -160,17 +160,23 @@ export const EditorEditRow = React.memo(function EditorEditRow({
   const handleContentSizeChange = useCallback(
     (e: { nativeEvent: { contentSize: { height: number; width: number } } }) => {
       const h = e.nativeEvent.contentSize.height;
-      const n = tokenizedLines.length;
+      let n = 1;
+      for (let i = 0; i < chunkText.length; i++) {
+        if (chunkText.charCodeAt(i) === 10) n++;
+      }
       if (n > 2) {
         // 16 = paddingTop(8) + paddingBottom(8) from editorInput style
         const measured = (h - 16) / n;
-        if (Math.abs(measured - measuredLHRef.current) > 0.05) {
+        if (
+          Math.abs(measured - lineHeight) <= lineHeight * 0.35 &&
+          Math.abs(measured - measuredLHRef.current) > 0.05
+        ) {
           measuredLHRef.current = measured;
           setMeasuredLH(measured);
         }
       }
     },
-    [tokenizedLines.length]
+    [chunkText, lineHeight]
   );
 
   // In edit mode, use the measured native line height; in view mode use the prop
@@ -318,12 +324,19 @@ export const EditorEditRow = React.memo(function EditorEditRow({
               multiline
               scrollEnabled={false}
               editable={true}
+              blurOnSubmit={false}
               showSoftInputOnFocus={!keyboardMouseMode}
+              inputMode={keyboardMouseMode ? "none" : undefined}
+              keyboardType={keyboardMouseMode ? "visible-password" : "default"}
               onChangeText={onEditChange}
               selection={selection}
               onSelectionChange={(e) => handleSelChange(e.nativeEvent.selection)}
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="off"
+              spellCheck={false}
+              importantForAutofill="no"
+              disableFullscreenUI={true}
               textAlignVertical="top"
               onFocus={onFocus}
               onBlur={onBlur}
@@ -332,22 +345,30 @@ export const EditorEditRow = React.memo(function EditorEditRow({
               underlineColorAndroid="transparent"
               onContentSizeChange={handleContentSizeChange}
             >
-              {tokenizedLines.length > 500 || isPasting ? (
+              {tokenizedLines.length > 250 || isPasting ? (
                 chunkText
               ) : (
                 <Text key="editor-tokens" style={{ color: theme.textPrimary }}>
-                  {tokenizedLines.map((line, lIdx) => (
-                    <React.Fragment key={`l-${line.lineNumber}`}>
-                      {line.tokens.length === 0 ? null : (
-                        line.tokens.map((tok, tIdx) => (
-                          <Text key={`tok-${tIdx}`} style={tokenStyleMap[tok.type] || { color: theme.textPrimary }}>
-                            {tok.text}
-                          </Text>
-                        ))
-                      )}
-                      {lIdx < tokenizedLines.length - 1 ? "\n" : ""}
-                    </React.Fragment>
-                  ))}
+                  {tokenizedLines.map((line, lIdx) => {
+                    const isNearCursor =
+                      tokenizedLines.length <= 60 ||
+                      !cursorLine ||
+                      Math.abs(line.lineNumber - cursorLine) <= 30;
+                    return (
+                      <React.Fragment key={`l-${line.lineNumber}`}>
+                        {line.tokens.length === 0 ? null : isNearCursor ? (
+                          line.tokens.map((tok, tIdx) => (
+                            <Text key={`tok-${tIdx}`} style={tokenStyleMap[tok.type] || { color: theme.textPrimary }}>
+                              {tok.text}
+                            </Text>
+                          ))
+                        ) : (
+                          <Text>{line.tokens.map((t) => t.text).join("")}</Text>
+                        )}
+                        {lIdx < tokenizedLines.length - 1 ? "\n" : ""}
+                      </React.Fragment>
+                    );
+                  })}
                 </Text>
               )}
             </TextInput>

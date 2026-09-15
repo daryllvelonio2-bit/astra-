@@ -367,7 +367,6 @@ export function IDELayout({ workspaceId, onBackToPicker, isActive = true }: IDEL
               onSelectFile={handleSelectFile}
               activeFileId={activeFile?.id}
               onToggleCollapse={handleToggleCollapse}
-              onRefreshFiles={refreshWorkspace}
               onLongPressNode={handleLongPressNode}
               onCreateFile={handleCreateNode}
               onQuickAddFile={handleQuickAddFile}
